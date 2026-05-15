@@ -10,7 +10,6 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
-  const applicationId = parseInt(id)
-  approvalRepo.unapprove(applicationId)
+  await approvalRepo.unapprove(parseInt(id))
   return NextResponse.json({ ok: true })
 }

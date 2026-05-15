@@ -4,8 +4,6 @@ import { shiftRepo } from '@/lib/db'
 import { weekInfoFromNumbers, currentWeekInfo } from '@/lib/weeks'
 import { getHolidayInfo } from '@/lib/holidays'
 
-// GET /api/weeks?year=2026&week=22
-// Returns shift rows for a week, auto-creating them if missing
 export async function GET(req: NextRequest) {
   const session = await requireUser()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (!weekNumber) weekNumber = current.weekNumber
 
   const info = weekInfoFromNumbers(weekYear, weekNumber)
-  const shifts = shiftRepo.ensureWeek(weekYear, weekNumber, info.days)
+  const shifts = await shiftRepo.ensureWeek(weekYear, weekNumber, info.days)
 
   const days = info.days.map(d => ({
     ...d,

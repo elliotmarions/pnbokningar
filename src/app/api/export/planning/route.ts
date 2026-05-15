@@ -4,8 +4,6 @@ import { getDb } from '@/lib/db'
 import { weekInfoFromNumbers } from '@/lib/weeks'
 import ExcelJS from 'exceljs'
 
-// GET /api/export/planning?year=2026&week=22
-// Generates a planning xlsx: one sheet per day, names as "Efternamn, Förnamn", alphabetical
 export async function GET(req: NextRequest) {
   const session = await requireAdmin()
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -17,20 +15,18 @@ export async function GET(req: NextRequest) {
   if (!weekYear || !weekNumber) return NextResponse.json({ error: 'year and week required' }, { status: 400 })
 
   const info = weekInfoFromNumbers(weekYear, weekNumber)
-  const db = getDb()
+  const sql = getDb()
 
-  // Get all approvals for this week, grouped by day
-  const rows = db.prepare(`
+  const rows = await sql<{ day_index: number; name: string }[]>`
     SELECT s.day_index, u.name
     FROM approvals ap
     JOIN applications a ON a.id = ap.application_id
     JOIN shifts s ON s.id = a.shift_id
     JOIN users u ON u.id = a.user_id
-    WHERE s.week_year = ? AND s.week_number = ?
+    WHERE s.week_year = ${weekYear} AND s.week_number = ${weekNumber}
     ORDER BY s.day_index, u.name
-  `).all(weekYear, weekNumber) as { day_index: number; name: string }[]
+  `
 
-  // Group by day
   const byDay = new Map<number, string[]>()
   for (const r of rows) {
     if (!byDay.has(r.day_index)) byDay.set(r.day_index, [])
@@ -47,11 +43,9 @@ export async function GET(req: NextRequest) {
     const names = byDay.get(day.dayIndex)
     if (!names || names.length === 0) continue
 
-    // Format date: "19 maj"
     const d = new Date(day.date + 'T12:00:00')
     const sheetName = `${day.label} ${d.getDate()} ${swedishMonths[d.getMonth()]}`
 
-    // Convert "Förnamn Efternamn" → "Efternamn, Förnamn" and sort
     const formatted = names.map(n => {
       const parts = n.trim().split(/\s+/)
       if (parts.length < 2) return n

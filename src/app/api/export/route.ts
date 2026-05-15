@@ -3,7 +3,6 @@ import { requireAdmin } from '@/lib/auth'
 import { getDb } from '@/lib/db'
 import ExcelJS from 'exceljs'
 
-// GET /api/export?from=2026-01-01&to=2026-12-31&group=driver|week
 export async function GET(req: NextRequest) {
   const session = await requireAdmin()
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -12,24 +11,22 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from') ?? '2020-01-01'
   const to = searchParams.get('to') ?? '2099-12-31'
   const group = searchParams.get('group') ?? 'driver'
-
-  const db = getDb()
+  const sql = getDb()
 
   const wb = new ExcelJS.Workbook()
   wb.creator = 'PostNord Passbokning'
 
   if (group === 'driver') {
-    const rows = db.prepare(`
-      SELECT u.name, COUNT(ap.id) AS shifts,
-             MAX(s.date) AS last_shift
+    const rows = await sql<{ name: string; shifts: number; last_shift: string }[]>`
+      SELECT u.name, COUNT(ap.id)::int AS shifts, MAX(s.date) AS last_shift
       FROM approvals ap
       JOIN applications a ON a.id = ap.application_id
       JOIN shifts s ON s.id = a.shift_id
       JOIN users u ON u.id = a.user_id
-      WHERE s.date BETWEEN ? AND ?
+      WHERE s.date BETWEEN ${from} AND ${to}
       GROUP BY u.id, u.name
       ORDER BY u.name
-    `).all(from, to) as { name: string; shifts: number; last_shift: string }[]
+    `
 
     const ws = wb.addWorksheet('Per chaufför')
     ws.columns = [
@@ -40,16 +37,15 @@ export async function GET(req: NextRequest) {
     styleHeaderRow(ws)
     rows.forEach(r => ws.addRow(r))
 
-    // Per-driver detail sheet
-    const detail = db.prepare(`
-      SELECT u.name, s.date, s.day_index, ap.approved_at
+    const detail = await sql<{ name: string; date: string; day_index: number; approved_at: string }[]>`
+      SELECT u.name, s.date, s.day_index, ap.approved_at::text AS approved_at
       FROM approvals ap
       JOIN applications a ON a.id = ap.application_id
       JOIN shifts s ON s.id = a.shift_id
       JOIN users u ON u.id = a.user_id
-      WHERE s.date BETWEEN ? AND ?
+      WHERE s.date BETWEEN ${from} AND ${to}
       ORDER BY u.name, s.date
-    `).all(from, to) as { name: string; date: string; day_index: number; approved_at: string }[]
+    `
 
     const ws2 = wb.addWorksheet('Detaljerade pass')
     ws2.columns = [
@@ -67,19 +63,18 @@ export async function GET(req: NextRequest) {
       hours: r.day_index === 5 ? '09:45–16:30' : '16:00–22:00',
     }))
   } else {
-    // Per week
-    const rows = db.prepare(`
+    const rows = await sql<{ week_year: number; week_number: number; shifts: number; drivers: number; last_date: string }[]>`
       SELECT s.week_year, s.week_number,
-             COUNT(ap.id) AS shifts,
-             COUNT(DISTINCT a.user_id) AS drivers,
+             COUNT(ap.id)::int AS shifts,
+             COUNT(DISTINCT a.user_id)::int AS drivers,
              MAX(s.date) AS last_date
       FROM approvals ap
       JOIN applications a ON a.id = ap.application_id
       JOIN shifts s ON s.id = a.shift_id
-      WHERE s.date BETWEEN ? AND ?
+      WHERE s.date BETWEEN ${from} AND ${to}
       GROUP BY s.week_year, s.week_number
       ORDER BY s.week_year, s.week_number
-    `).all(from, to) as { week_year: number; week_number: number; shifts: number; drivers: number; last_date: string }[]
+    `
 
     const ws = wb.addWorksheet('Per vecka')
     ws.columns = [

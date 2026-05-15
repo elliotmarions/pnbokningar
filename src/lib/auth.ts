@@ -17,7 +17,6 @@ if (process.env.AZURE_AD_CLIENT_ID && process.env.AZURE_AD_TENANT_ID) {
 }
 
 // Dev credentials provider — only enabled when NEXTAUTH_DEV_LOGIN=true
-// Lets you log in as any seeded user by typing their ID
 if (process.env.NEXTAUTH_DEV_LOGIN === 'true') {
   providers.push(
     CredentialsProvider({
@@ -26,7 +25,7 @@ if (process.env.NEXTAUTH_DEV_LOGIN === 'true') {
       async authorize(credentials) {
         if (!credentials?.userId) return null
         try {
-          const user = userRepo.getById(credentials.userId)
+          const user = await userRepo.getById(credentials.userId)
           if (!user) return null
           return { id: user.id, name: user.name, email: user.email ?? undefined }
         } catch {
@@ -41,12 +40,10 @@ export const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
     async jwt({ token, account, profile, user }) {
-      // Azure AD: profile.oid is the stable Object ID
       if (account?.provider === 'azure-ad' && profile) {
         const oid = (profile as Record<string, unknown>).oid as string | undefined
         if (oid) token.oid = oid
       }
-      // Dev credentials: user.id is the seeded user ID
       if (account?.provider === 'credentials' && user?.id) {
         token.oid = user.id
       }
@@ -56,7 +53,7 @@ export const authOptions: NextAuthOptions = {
       if (token.oid && session.user) {
         ;(session.user as Record<string, unknown>).id = token.oid
         try {
-          const dbUser = userRepo.getById(token.oid as string)
+          const dbUser = await userRepo.getById(token.oid as string)
           if (dbUser) {
             ;(session.user as Record<string, unknown>).role = dbUser.role
             ;(session.user as Record<string, unknown>).phone = dbUser.phone
@@ -72,7 +69,7 @@ export const authOptions: NextAuthOptions = {
         const oid = (profile as Record<string, unknown>)?.oid as string | undefined
         if (!oid) return true
         try {
-          userRepo.upsert({ id: oid, name: user.name ?? 'Okänd', email: user.email })
+          await userRepo.upsert({ id: oid, name: user.name ?? 'Okänd', email: user.email })
         } catch { /* best effort */ }
       }
       return true

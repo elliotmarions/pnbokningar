@@ -11,15 +11,16 @@ export async function GET(
 
   const { id } = await params
   const shiftId = parseInt(id)
-  const db = getDb()
-  const row = db.prepare(`
+  const sql = getDb()
+
+  const [row] = await sql<{ approved: number; pending: number }[]>`
     SELECT
-      COUNT(DISTINCT ap.id) AS approved,
-      COUNT(DISTINCT a.id) - COUNT(DISTINCT ap.id) AS pending
+      COUNT(DISTINCT ap.id)::int AS approved,
+      (COUNT(DISTINCT a.id) - COUNT(DISTINCT ap.id))::int AS pending
     FROM applications a
     LEFT JOIN approvals ap ON ap.application_id = a.id
-    WHERE a.shift_id = ?
-  `).get(shiftId) as { approved: number; pending: number }
+    WHERE a.shift_id = ${shiftId}
+  `
 
-  return NextResponse.json(row)
+  return NextResponse.json(row ?? { approved: 0, pending: 0 })
 }

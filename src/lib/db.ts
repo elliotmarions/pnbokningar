@@ -1,87 +1,70 @@
-import Database from 'better-sqlite3'
-import path from 'path'
-import fs from 'fs'
+import postgres from 'postgres'
 import { isHolidayOrEve } from './holidays'
 
-// Use DATABASE_PATH env if set (absolute path preferred), otherwise resolve
-// relative to project root using __dirname (works regardless of CWD)
-const PROJECT_ROOT = path.join(__dirname, '..', '..', '..')
-const DB_PATH = process.env.DATABASE_PATH
-  ? path.resolve(process.env.DATABASE_PATH)
-  : path.join(PROJECT_ROOT, 'data', 'passbokning.db')
+const sql = postgres(process.env.DATABASE_URL!, {
+  ssl: 'require',
+  max: 3,
+  idle_timeout: 20,
+  connect_timeout: 10,
+})
 
-let _db: Database.Database | null = null
-
-export function getDb(): Database.Database {
-  if (_db) return _db
-  const dir = path.dirname(DB_PATH)
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-  _db = new Database(DB_PATH)
-  _db.pragma('journal_mode = WAL')
-  _db.pragma('foreign_keys = ON')
-  migrate(_db)
-  return _db
+export function getDb() {
+  return sql
 }
 
-function migrate(db: Database.Database) {
-  db.exec(`
+let _migrationPromise: Promise<void> | null = null
+export function ensureMigrated(): Promise<void> {
+  if (!_migrationPromise) _migrationPromise = migrate()
+  return _migrationPromise
+}
+
+async function migrate() {
+  await sql`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)`
+
+  await sql`
     CREATE TABLE IF NOT EXISTS users (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       email       TEXT,
       phone       TEXT,
       role        TEXT NOT NULL DEFAULT 'driver',
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS shifts (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      id           SERIAL PRIMARY KEY,
       week_year    INTEGER NOT NULL,
       week_number  INTEGER NOT NULL,
       day_index    INTEGER NOT NULL,
       date         TEXT NOT NULL,
       is_open      INTEGER NOT NULL DEFAULT 1,
       slots        INTEGER NOT NULL DEFAULT 5,
-      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(week_year, week_number, day_index)
-    );
-
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (week_year, week_number, day_index)
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS applications (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      shift_id    INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
-      user_id     TEXT    NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
-      applied_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(shift_id, user_id)
-    );
-
+      id               SERIAL PRIMARY KEY,
+      shift_id         INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+      user_id          TEXT    NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+      applied_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      rejected         INTEGER NOT NULL DEFAULT 0,
+      rejection_reason TEXT,
+      UNIQUE (shift_id, user_id)
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS approvals (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      id              SERIAL PRIMARY KEY,
       application_id  INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE UNIQUE,
       approved_by     TEXT    NOT NULL REFERENCES users(id),
-      approved_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+      approved_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       sms_sent        INTEGER NOT NULL DEFAULT 0,
       reminder_sent   INTEGER NOT NULL DEFAULT 0
-    );
-  `)
-
-  // Versioned one-time migrations using SQLite user_version pragma
-  const version = (db.pragma('user_version', { simple: true }) as number) ?? 0
-
-  if (version < 1) {
-    const today = new Date()
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    db.prepare('UPDATE shifts SET is_open = 0 WHERE date >= ?').run(todayStr)
-    db.pragma('user_version = 1')
-  }
-
-  if (version < 2) {
-    // Migration 2: add rejection columns to applications
-    db.exec(`
-      ALTER TABLE applications ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE applications ADD COLUMN rejection_reason TEXT;
-    `)
-    db.pragma('user_version = 2')
-  }
+    )
+  `
 }
 
 // --------------- Users ---------------
@@ -96,33 +79,37 @@ export interface DbUser {
 }
 
 export const userRepo = {
-  upsert(u: { id: string; name: string; email?: string | null }) {
-    const db = getDb()
-    const existing = db.prepare('SELECT role FROM users WHERE id = ?').get(u.id) as { role: string } | undefined
+  async upsert(u: { id: string; name: string; email?: string | null }): Promise<DbUser> {
+    await ensureMigrated()
+    const [existing] = await sql<{ role: string }[]>`SELECT role FROM users WHERE id = ${u.id}`
     if (existing) {
-      db.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?').run(u.name, u.email ?? null, u.id)
+      await sql`UPDATE users SET name = ${u.name}, email = ${u.email ?? null} WHERE id = ${u.id}`
     } else {
       const adminIds = (process.env.ADMIN_USER_IDS ?? '').split(',').map(s => s.trim()).filter(Boolean)
       const role = adminIds.includes(u.id) ? 'admin' : 'driver'
-      db.prepare('INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)').run(u.id, u.name, u.email ?? null, role)
+      await sql`INSERT INTO users (id, name, email, role) VALUES (${u.id}, ${u.name}, ${u.email ?? null}, ${role})`
     }
-    return db.prepare('SELECT * FROM users WHERE id = ?').get(u.id) as DbUser
+    const [user] = await sql<DbUser[]>`SELECT * FROM users WHERE id = ${u.id}`
+    return user
   },
 
-  getById(id: string): DbUser | undefined {
-    return getDb().prepare('SELECT * FROM users WHERE id = ?').get(id) as DbUser | undefined
+  async getById(id: string): Promise<DbUser | undefined> {
+    await ensureMigrated()
+    const [user] = await sql<DbUser[]>`SELECT * FROM users WHERE id = ${id}`
+    return user
   },
 
-  all(): DbUser[] {
-    return getDb().prepare('SELECT * FROM users ORDER BY name').all() as DbUser[]
+  async all(): Promise<DbUser[]> {
+    await ensureMigrated()
+    return sql<DbUser[]>`SELECT * FROM users ORDER BY name`
   },
 
-  updatePhone(id: string, phone: string) {
-    getDb().prepare('UPDATE users SET phone = ? WHERE id = ?').run(phone, id)
+  async updatePhone(id: string, phone: string): Promise<void> {
+    await sql`UPDATE users SET phone = ${phone} WHERE id = ${id}`
   },
 
-  setRole(id: string, role: 'driver' | 'admin') {
-    getDb().prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id)
+  async setRole(id: string, role: 'driver' | 'admin'): Promise<void> {
+    await sql`UPDATE users SET role = ${role} WHERE id = ${id}`
   },
 }
 
@@ -140,49 +127,60 @@ export interface DbShift {
 }
 
 export const shiftRepo = {
-  getById(id: number): DbShift | null {
-    return (getDb().prepare('SELECT * FROM shifts WHERE id = ?').get(id) as DbShift | undefined) ?? null
+  async getById(id: number): Promise<DbShift | null> {
+    await ensureMigrated()
+    const [shift] = await sql<DbShift[]>`SELECT * FROM shifts WHERE id = ${id}`
+    return shift ?? null
   },
 
-  getWeek(weekYear: number, weekNumber: number): DbShift[] {
-    return getDb()
-      .prepare('SELECT * FROM shifts WHERE week_year = ? AND week_number = ? ORDER BY day_index')
-      .all(weekYear, weekNumber) as DbShift[]
+  async getWeek(weekYear: number, weekNumber: number): Promise<DbShift[]> {
+    await ensureMigrated()
+    return sql<DbShift[]>`
+      SELECT * FROM shifts
+      WHERE week_year = ${weekYear} AND week_number = ${weekNumber}
+      ORDER BY day_index
+    `
   },
 
-  ensureWeek(weekYear: number, weekNumber: number, days: { dayIndex: number; date: string }[]) {
-    const db = getDb()
-    const insert = db.prepare(
-      'INSERT OR IGNORE INTO shifts (week_year, week_number, day_index, date, is_open) VALUES (?, ?, ?, ?, ?)'
-    )
-    // Close shifts that fall on a holiday/eve
-    const closeHoliday = db.prepare(
-      'UPDATE shifts SET is_open = 0 WHERE week_year = ? AND week_number = ? AND day_index = ?'
-    )
-    // Close shifts whose date has already passed (date < today in YYYY-MM-DD)
-    const closePast = db.prepare(
-      'UPDATE shifts SET is_open = 0 WHERE week_year = ? AND week_number = ? AND date < ?'
-    )
+  async ensureWeek(
+    weekYear: number,
+    weekNumber: number,
+    days: { dayIndex: number; date: string }[]
+  ): Promise<DbShift[]> {
+    await ensureMigrated()
     const today = new Date()
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    const insertMany = db.transaction((rows: typeof days) => {
-      for (const d of rows) {
-        // New shifts always start closed — admin opens them when ready
-        insert.run(weekYear, weekNumber, d.dayIndex, d.date, 0)
-        // Also force-close holidays/eves even if previously created as open
-        if (isHolidayOrEve(d.date)) closeHoliday.run(weekYear, weekNumber, d.dayIndex)
+
+    await sql.begin(async tx => {
+      for (const d of days) {
+        await tx`
+          INSERT INTO shifts (week_year, week_number, day_index, date, is_open)
+          VALUES (${weekYear}, ${weekNumber}, ${d.dayIndex}, ${d.date}, ${0})
+          ON CONFLICT (week_year, week_number, day_index) DO NOTHING
+        `
+        if (isHolidayOrEve(d.date)) {
+          await tx`
+            UPDATE shifts SET is_open = 0
+            WHERE week_year = ${weekYear} AND week_number = ${weekNumber} AND day_index = ${d.dayIndex}
+          `
+        }
       }
-      // Auto-close all past days in this week
-      closePast.run(weekYear, weekNumber, todayStr)
+      await tx`
+        UPDATE shifts SET is_open = 0
+        WHERE week_year = ${weekYear} AND week_number = ${weekNumber} AND date < ${todayStr}
+      `
     })
-    insertMany(days)
+
     return shiftRepo.getWeek(weekYear, weekNumber)
   },
 
-  update(id: number, fields: { is_open?: number; slots?: number }) {
-    const db = getDb()
-    if (fields.is_open !== undefined) db.prepare('UPDATE shifts SET is_open = ? WHERE id = ?').run(fields.is_open, id)
-    if (fields.slots !== undefined) db.prepare('UPDATE shifts SET slots = ? WHERE id = ?').run(fields.slots, id)
+  async update(id: number, fields: { is_open?: number; slots?: number }): Promise<void> {
+    if (fields.is_open !== undefined) {
+      await sql`UPDATE shifts SET is_open = ${fields.is_open} WHERE id = ${id}`
+    }
+    if (fields.slots !== undefined) {
+      await sql`UPDATE shifts SET slots = ${fields.slots} WHERE id = ${id}`
+    }
   },
 }
 
@@ -196,78 +194,96 @@ export interface DbApplication {
 }
 
 export const applicationRepo = {
-  apply(shiftId: number, userId: string): DbApplication {
-    const db = getDb()
-    db.prepare('INSERT INTO applications (shift_id, user_id) VALUES (?, ?)').run(shiftId, userId)
-    return db.prepare('SELECT * FROM applications WHERE shift_id = ? AND user_id = ?').get(shiftId, userId) as DbApplication
+  async apply(shiftId: number, userId: string): Promise<DbApplication> {
+    await sql`INSERT INTO applications (shift_id, user_id) VALUES (${shiftId}, ${userId})`
+    const [app] = await sql<DbApplication[]>`
+      SELECT id, shift_id, user_id, applied_at::text AS applied_at
+      FROM applications WHERE shift_id = ${shiftId} AND user_id = ${userId}
+    `
+    return app
   },
 
-  withdraw(shiftId: number, userId: string) {
-    const db = getDb()
-    const app = db.prepare('SELECT id FROM applications WHERE shift_id = ? AND user_id = ?').get(shiftId, userId) as { id: number } | undefined
+  async withdraw(shiftId: number, userId: string): Promise<void> {
+    const [app] = await sql<{ id: number }[]>`
+      SELECT id FROM applications WHERE shift_id = ${shiftId} AND user_id = ${userId}
+    `
     if (!app) return
-    const approval = db.prepare('SELECT id FROM approvals WHERE application_id = ?').get(app.id)
+    const [approval] = await sql`SELECT id FROM approvals WHERE application_id = ${app.id}`
     if (approval) throw new Error('ALREADY_APPROVED')
-    db.prepare('DELETE FROM applications WHERE id = ?').run(app.id)
+    await sql`DELETE FROM applications WHERE id = ${app.id}`
   },
 
-  forShift(shiftId: number): (DbApplication & { user_name: string; user_phone: string | null; approved: boolean; rejected: number; rejection_reason: string | null })[] {
-    return getDb().prepare(`
-      SELECT a.*, u.name AS user_name, u.phone AS user_phone,
+  async forShift(shiftId: number) {
+    type Row = DbApplication & {
+      user_name: string
+      user_phone: string | null
+      approved: boolean
+      rejected: number
+      rejection_reason: string | null
+    }
+    return sql<Row[]>`
+      SELECT a.id, a.shift_id, a.user_id, a.applied_at::text AS applied_at,
+             a.rejected, a.rejection_reason,
+             u.name AS user_name, u.phone AS user_phone,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
       FROM applications a
       JOIN users u ON u.id = a.user_id
       LEFT JOIN approvals ap ON ap.application_id = a.id
-      WHERE a.shift_id = ?
+      WHERE a.shift_id = ${shiftId}
       ORDER BY a.applied_at ASC
-    `).all(shiftId) as (DbApplication & { user_name: string; user_phone: string | null; approved: boolean; rejected: number; rejection_reason: string | null })[]
+    `
   },
 
-  reject(appId: number, reason?: string) {
-    getDb().prepare('UPDATE applications SET rejected = 1, rejection_reason = ? WHERE id = ?').run(reason ?? null, appId)
+  async reject(appId: number, reason?: string): Promise<void> {
+    await sql`UPDATE applications SET rejected = 1, rejection_reason = ${reason ?? null} WHERE id = ${appId}`
   },
 
-  unreject(appId: number) {
-    getDb().prepare('UPDATE applications SET rejected = 0, rejection_reason = NULL WHERE id = ?').run(appId)
+  async unreject(appId: number): Promise<void> {
+    await sql`UPDATE applications SET rejected = 0, rejection_reason = NULL WHERE id = ${appId}`
   },
 
-  forUser(userId: string): (DbApplication & { shift_date: string; shift_day_index: number; shift_week_year: number; shift_week_number: number; approved: boolean; rejected: number; rejection_reason: string | null })[] {
-    return getDb().prepare(`
-      SELECT a.*, s.date AS shift_date, s.day_index AS shift_day_index,
+  async forUser(userId: string) {
+    type Row = DbApplication & {
+      shift_date: string
+      shift_day_index: number
+      shift_week_year: number
+      shift_week_number: number
+      approved: boolean
+      rejected: number
+      rejection_reason: string | null
+    }
+    return sql<Row[]>`
+      SELECT a.id, a.shift_id, a.user_id, a.applied_at::text AS applied_at,
+             a.rejected, a.rejection_reason,
+             s.date AS shift_date, s.day_index AS shift_day_index,
              s.week_year AS shift_week_year, s.week_number AS shift_week_number,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
       FROM applications a
       JOIN shifts s ON s.id = a.shift_id
       LEFT JOIN approvals ap ON ap.application_id = a.id
-      WHERE a.user_id = ?
+      WHERE a.user_id = ${userId}
       ORDER BY s.date DESC
-    `).all(userId) as (DbApplication & { shift_date: string; shift_day_index: number; shift_week_year: number; shift_week_number: number; approved: boolean; rejected: number; rejection_reason: string | null })[]
+    `
   },
 
-  // Returns the length of the consecutive-day streak that would include targetDate
-  // if it were added to the user's approved shifts.
-  consecutiveCount(userId: string, targetDate: string): number {
-    const rows = getDb().prepare(`
+  async consecutiveCount(userId: string, targetDate: string): Promise<number> {
+    const rows = await sql<{ date: string }[]>`
       SELECT s.date FROM applications a
       JOIN shifts s ON s.id = a.shift_id
       JOIN approvals ap ON ap.application_id = a.id
-      WHERE a.user_id = ?
+      WHERE a.user_id = ${userId}
       ORDER BY s.date ASC
-    `).all(userId) as { date: string }[]
-
+    `
     const dateSet = new Set(rows.map(r => r.date))
     dateSet.add(targetDate)
 
-    // Walk consecutive days outward from targetDate
     const d = new Date(targetDate + 'T12:00:00')
     let count = 1
-    // backward
     for (let i = 1; i <= 365; i++) {
       const prev = new Date(d); prev.setDate(prev.getDate() - i)
       const s = `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}-${String(prev.getDate()).padStart(2,'0')}`
       if (dateSet.has(s)) count++; else break
     }
-    // forward
     for (let i = 1; i <= 365; i++) {
       const next = new Date(d); next.setDate(next.getDate() + i)
       const s = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`
@@ -289,34 +305,42 @@ export interface DbApproval {
 }
 
 export const approvalRepo = {
-  approve(applicationId: number, approvedBy: string): DbApproval {
-    const db = getDb()
-    db.prepare('INSERT OR IGNORE INTO approvals (application_id, approved_by) VALUES (?, ?)').run(applicationId, approvedBy)
-    return db.prepare('SELECT * FROM approvals WHERE application_id = ?').get(applicationId) as DbApproval
+  async approve(applicationId: number, approvedBy: string): Promise<DbApproval> {
+    await sql`
+      INSERT INTO approvals (application_id, approved_by)
+      VALUES (${applicationId}, ${approvedBy})
+      ON CONFLICT (application_id) DO NOTHING
+    `
+    const [approval] = await sql<DbApproval[]>`
+      SELECT id, application_id, approved_by, approved_at::text AS approved_at, sms_sent, reminder_sent
+      FROM approvals WHERE application_id = ${applicationId}
+    `
+    return approval
   },
 
-  unapprove(applicationId: number) {
-    getDb().prepare('DELETE FROM approvals WHERE application_id = ?').run(applicationId)
+  async unapprove(applicationId: number): Promise<void> {
+    await sql`DELETE FROM approvals WHERE application_id = ${applicationId}`
   },
 
-  markSmsSent(applicationId: number) {
-    getDb().prepare('UPDATE approvals SET sms_sent = 1 WHERE application_id = ?').run(applicationId)
+  async markSmsSent(applicationId: number): Promise<void> {
+    await sql`UPDATE approvals SET sms_sent = 1 WHERE application_id = ${applicationId}`
   },
 
-  markReminderSent(applicationId: number) {
-    getDb().prepare('UPDATE approvals SET reminder_sent = 1 WHERE application_id = ?').run(applicationId)
+  async markReminderSent(applicationId: number): Promise<void> {
+    await sql`UPDATE approvals SET reminder_sent = 1 WHERE application_id = ${applicationId}`
   },
 
-  pendingReminders(): {
-    application_id: number
-    user_name: string
-    user_phone: string | null
-    shift_date: string
-    shift_day_index: number
-    start_time: string
-    end_time: string
-  }[] {
-    return getDb().prepare(`
+  async pendingReminders() {
+    type Row = {
+      application_id: number
+      user_name: string
+      user_phone: string | null
+      shift_date: string
+      shift_day_index: number
+      start_time: string
+      end_time: string
+    }
+    return sql<Row[]>`
       SELECT ap.application_id, u.name AS user_name, u.phone AS user_phone,
              s.date AS shift_date, s.day_index AS shift_day_index,
              CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END AS start_time,
@@ -327,8 +351,10 @@ export const approvalRepo = {
       JOIN users u ON u.id = a.user_id
       WHERE ap.reminder_sent = 0
         AND u.phone IS NOT NULL
-        AND datetime(s.date || ' ' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END) <= datetime('now', '+2 hours', 'localtime')
-        AND datetime(s.date || ' ' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END) > datetime('now', 'localtime')
-    `).all() as ReturnType<typeof approvalRepo.pendingReminders>
+        AND (s.date || 'T' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END || ':00')::timestamptz
+            <= NOW() + INTERVAL '2 hours'
+        AND (s.date || 'T' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END || ':00')::timestamptz
+            > NOW()
+    `
   },
 }
