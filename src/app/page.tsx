@@ -8,6 +8,6 @@ export default async function RootPage() {
     const role = (session.user as Record<string, unknown>).role
     redirect(role === 'admin' ? '/admin' : '/driver')
   }
-  const devLogin = process.env.NEXTAUTH_DEV_LOGIN === 'true'
-  return <Login devLogin={devLogin} />
+  const azureEnabled = !!(process.env.AZURE_AD_CLIENT_ID && process.env.AZURE_AD_TENANT_ID)
+  return <Login azureEnabled={azureEnabled} />
 }

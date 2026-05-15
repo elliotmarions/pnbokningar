@@ -65,6 +65,10 @@ async function migrate() {
       reminder_sent   INTEGER NOT NULL DEFAULT 0
     )
   `
+  // Add password_hash column if it doesn't exist
+  await sql`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
+  `
 }
 
 // --------------- Users ---------------
@@ -102,6 +106,18 @@ export const userRepo = {
   async all(): Promise<DbUser[]> {
     await ensureMigrated()
     return sql<DbUser[]>`SELECT * FROM users ORDER BY name`
+  },
+
+  async getByEmail(email: string): Promise<DbUser & { password_hash: string | null } | undefined> {
+    await ensureMigrated()
+    const [user] = await sql<(DbUser & { password_hash: string | null })[]>`
+      SELECT * FROM users WHERE email = ${email}
+    `
+    return user
+  },
+
+  async setPasswordHash(id: string, hash: string): Promise<void> {
+    await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${id}`
   },
 
   async updatePhone(id: string, phone: string): Promise<void> {

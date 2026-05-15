@@ -1,6 +1,7 @@
 import { NextAuthOptions, getServerSession } from 'next-auth'
 import AzureADProvider from 'next-auth/providers/azure-ad'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import bcrypt from 'bcryptjs'
 import { userRepo } from './db'
 
 const providers: NextAuthOptions['providers'] = []
@@ -16,25 +17,28 @@ if (process.env.AZURE_AD_CLIENT_ID && process.env.AZURE_AD_TENANT_ID) {
   )
 }
 
-// Dev credentials provider — only enabled when NEXTAUTH_DEV_LOGIN=true
-if (process.env.NEXTAUTH_DEV_LOGIN === 'true') {
-  providers.push(
-    CredentialsProvider({
-      name: 'Dev Login',
-      credentials: { userId: { label: 'User ID', type: 'text' } },
-      async authorize(credentials) {
-        if (!credentials?.userId) return null
-        try {
-          const user = await userRepo.getById(credentials.userId)
-          if (!user) return null
-          return { id: user.id, name: user.name, email: user.email ?? undefined }
-        } catch {
-          return null
-        }
-      },
-    })
-  )
-}
+// Email + password login (always enabled)
+providers.push(
+  CredentialsProvider({
+    name: 'Credentials',
+    credentials: {
+      email: { label: 'E-post', type: 'email' },
+      password: { label: 'Lösenord', type: 'password' },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email || !credentials?.password) return null
+      try {
+        const user = await userRepo.getByEmail(credentials.email)
+        if (!user || !user.password_hash) return null
+        const valid = await bcrypt.compare(credentials.password, user.password_hash)
+        if (!valid) return null
+        return { id: user.id, name: user.name, email: user.email ?? undefined }
+      } catch {
+        return null
+      }
+    },
+  })
+)
 
 export const authOptions: NextAuthOptions = {
   providers,

@@ -19,6 +19,8 @@ export function DriversTable() {
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [editId, setEditId] = useState<string | null>(null)
   const [editPhone, setEditPhone] = useState('')
+  const [pwUserId, setPwUserId] = useState<string | null>(null)
+  const [pwValue, setPwValue] = useState('')
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   useEffect(() => {
@@ -35,6 +37,20 @@ export function DriversTable() {
       setDrivers(prev => prev.map(d => d.id === id ? { ...d, phone: editPhone } : d))
       setEditId(null)
       showToast('Telefonnummer uppdaterat')
+    }
+  }
+
+  const savePassword = async (userId: string) => {
+    if (pwValue.length < 8) { showToast('Lösenordet måste vara minst 8 tecken.'); return }
+    const res = await fetch('/api/users/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, password: pwValue }),
+    })
+    if (res.ok) {
+      setPwUserId(null)
+      setPwValue('')
+      showToast('Lösenord uppdaterat')
     }
   }
 
@@ -94,9 +110,30 @@ export function DriversTable() {
         </span>
       </td>
       <td>
-        <button className="btn btn-sm" onClick={() => toggleRole(d)}>
-          {d.role === 'admin' ? 'Ta bort admin' : 'Gör till admin'}
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
+          <button className="btn btn-sm" onClick={() => toggleRole(d)}>
+            {d.role === 'admin' ? 'Ta bort admin' : 'Gör till admin'}
+          </button>
+          {pwUserId === d.id ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="password"
+                placeholder="Nytt lösenord"
+                value={pwValue}
+                onChange={e => setPwValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') savePassword(d.id); if (e.key === 'Escape') setPwUserId(null) }}
+                autoFocus
+                style={{ background: 'var(--bg-deep)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '5px 8px', borderRadius: 5, fontSize: 13, outline: 'none', width: 140 }}
+              />
+              <button className="btn btn-sm btn-primary" onClick={() => savePassword(d.id)}>Spara</button>
+              <button className="btn btn-sm" onClick={() => setPwUserId(null)}>✕</button>
+            </div>
+          ) : (
+            <button className="btn btn-sm" onClick={() => { setPwUserId(d.id); setPwValue('') }}>
+              Sätt lösenord
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   ))
