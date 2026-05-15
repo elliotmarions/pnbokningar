@@ -1,0 +1,415 @@
+'use client'
+import { useEffect, useState, useCallback } from 'react'
+import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
+import { Toast, useToast } from './Toast'
+
+interface ShiftDay {
+  shift: { id: number; is_open: number; slots: number; day_index: number; date: string } | null
+  dayIndex: number
+  date: string
+  label: string
+  shortLabel: string
+  startTime: string
+  endTime: string
+  holiday: { name: string; type: 'holiday' | 'eve' } | null
+}
+interface Application {
+  id: number
+  shift_id: number
+  approved: boolean
+  rejected: boolean
+  rejection_reason: string | null
+  applied_at: string
+}
+interface WeekData {
+  weekYear: number
+  weekNumber: number
+  shifts: { id: number; day_index: number; date: string; is_open: number; slots: number }[]
+  days: { dayIndex: number; date: string; label: string; shortLabel: string; startTime: string; endTime: string; holiday: { name: string; type: 'holiday' | 'eve' } | null }[]
+}
+
+function fmt(dateStr: string) {
+  const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
+  const d = new Date(dateStr + 'T12:00:00')
+  return `${d.getDate()} ${months[d.getMonth()]}`
+}
+
+function initials(name?: string | null) {
+  if (!name) return '?'
+  return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
+}
+
+type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'full' | 'open'
+
+function statusFor(shift: ShiftDay['shift'], app?: Application, approvedCount = 0): DayStatus {
+  if (!shift || !shift.is_open) return 'closed'
+  if (app?.approved) return 'confirmed'
+  if (app?.rejected) return 'rejected'
+  if (app) return 'pending'
+  if (approvedCount >= shift.slots) return 'full'
+  return 'open'
+}
+
+export function DriverHome() {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [isDesktop, setIsDesktop] = useState(false)
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [weekData, setWeekData] = useState<WeekData | null>(null)
+  const [applications, setApplications] = useState<Application[]>([])
+  const [allApprovedCounts, setAllApprovedCounts] = useState<Record<number, number>>({})
+  const [consecutiveWarning, setConsecutiveWarning] = useState<{ shiftId: number; count: number } | null>(null)
+  const { toast, show: showToast, clear: clearToast } = useToast()
+  const user = session?.user
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 900px)')
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  const loadWeek = useCallback(async (offset = 0) => {
+    const now = new Date()
+    const target = new Date(now)
+    target.setDate(now.getDate() + offset * 7)
+    // Compute ISO week year + number
+    const tmp = new Date(target)
+    tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
+    const isoYear = tmp.getFullYear()
+    const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+    if (!res.ok) return
+    const data: WeekData = await res.json()
+    setWeekData(data)
+
+    // Load user's applications
+    const appRes = await fetch('/api/applications/mine')
+    if (appRes.ok) {
+      const apps: Application[] = await appRes.json()
+      setApplications(apps)
+    }
+
+    // Load approved counts for each shift
+    const counts: Record<number, number> = {}
+    for (const shift of data.shifts) {
+      const countRes = await fetch(`/api/shifts/${shift.id}/counts`)
+      if (countRes.ok) {
+        const c = await countRes.json()
+        counts[shift.id] = c.approved
+      }
+    }
+    setAllApprovedCounts(counts)
+  }, [])
+
+  useEffect(() => { loadWeek(weekOffset) }, [weekOffset, loadWeek])
+
+  const handleApply = async (shiftId: number, force = false) => {
+    const res = await fetch('/api/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shiftId, force }),
+    })
+    const data = await res.json()
+    if (res.ok && data.warning === 'CONSECUTIVE_DAYS') {
+      setConsecutiveWarning({ shiftId, count: data.count })
+      return
+    }
+    if (res.ok) {
+      await loadWeek(weekOffset)
+      showToast('Intresseanmälan skickad!')
+    } else {
+      showToast('Något gick fel.', 'error')
+    }
+  }
+
+  const handleWithdraw = async (appId: number) => {
+    const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
+    if (res.ok) {
+      await loadWeek(weekOffset)
+      showToast('Anmälan återkallad.')
+    } else {
+      const data = await res.json()
+      if (data.error === 'ALREADY_APPROVED') showToast('Du är redan godkänd — kontakta trafikledningen.', 'error')
+      else showToast('Något gick fel.', 'error')
+    }
+  }
+
+  if (!weekData) {
+    return (
+      <div className="driver-shell">
+        <div className="driver-frame">
+          <div className="driver-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: 'var(--text-tertiary)' }}>Laddar…</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const days: ShiftDay[] = weekData.days.map(d => ({
+    ...d,
+    shift: weekData.shifts.find(s => s.day_index === d.dayIndex) ?? null,
+  }))
+
+  const myApps: Record<number, Application> = {}
+  for (const app of applications) {
+    if (weekData.shifts.some(s => s.id === app.shift_id)) {
+      myApps[app.shift_id] = app
+    }
+  }
+
+  const confirmedThisWeek = days.filter(d => d.shift && myApps[d.shift.id]?.approved)
+  const pendingThisWeek = days.filter(d => d.shift && myApps[d.shift.id] && !myApps[d.shift.id].approved)
+
+  // All confirmed (including past weeks from applications list)
+  const allConfirmed = applications.filter(a => a.approved)
+
+  if (isDesktop) {
+    return (
+      <div className="driver-shell desktop">
+        <div className="driver-desktop">
+          {/* Desktop header */}
+          <div className="driver-desktop-header">
+            <div className="brand">
+              <img src="/pn-logo.png" alt="PostNord" className="brand-logo" />
+              <div>
+                <div className="name">Passbokning</div>
+                <div className="sub">Trafikledning · Mina pass</div>
+              </div>
+            </div>
+            <div className="right">
+              <div style={{ textAlign: 'right' }}>
+                <div className="who">{user?.name}</div>
+                <div className="role">{user?.role === 'admin' ? 'Trafikledare' : 'Chaufför'}</div>
+              </div>
+              <div className="avatar">{initials(user?.name)}</div>
+              {user?.role === 'admin' && (
+                <button className="btn btn-sm" onClick={() => router.push('/admin')}>Adminvy</button>
+              )}
+              <button className="btn-ghost btn btn-icon" onClick={() => signOut({ callbackUrl: '/' })}>
+                <LogOut className="svg-ico" />
+              </button>
+            </div>
+          </div>
+
+          {/* KPI strip */}
+          <div className="driver-summary">
+            <div className="driver-stat">
+              <div className="label">Vecka</div>
+              <div className="value">{weekData.weekNumber}<span className="unit">/ {weekData.weekYear}</span></div>
+            </div>
+            <div className="driver-stat">
+              <div className="label">Bekräftade pass</div>
+              <div className="value">{confirmedThisWeek.length}<span className="unit">denna vecka</span></div>
+            </div>
+            <div className="driver-stat">
+              <div className="label">Väntar svar</div>
+              <div className="value">{pendingThisWeek.length}</div>
+            </div>
+          </div>
+
+          {/* Days grid */}
+          <div className="section-h" style={{ marginTop: 28 }}>
+            <span className="t">
+              <button className="arrow" onClick={() => setWeekOffset(o => o - 1)} style={{ marginRight: 4 }}><ChevronLeft className="svg-ico" /></button>
+              Vecka {weekData.weekNumber} · {weekData.weekYear}
+              <button className="arrow" onClick={() => setWeekOffset(o => o + 1)} style={{ marginLeft: 4 }}><ChevronRight className="svg-ico" /></button>
+            </span>
+            {weekOffset !== 0 && (
+              <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setWeekOffset(0)}>Idag</button>
+            )}
+          </div>
+          <div className="driver-grid">
+            {days.map(d => (
+              <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} />
+            ))}
+          </div>
+
+          {/* Confirmed strip */}
+          <div className="section-h">
+            <span className="t">Mina bekräftade pass</span>
+            <span className="count">{allConfirmed.length} st</span>
+          </div>
+          {allConfirmed.length === 0
+            ? <div className="empty-state">Inga bekräftade pass än. Anmäl intresse ovan.</div>
+            : <div className="confirmed-strip">
+                {allConfirmed.map(a => (
+                  <ConfirmedRow key={a.id} app={a} shifts={weekData.shifts} days={weekData.days} />
+                ))}
+              </div>
+          }
+        </div>
+        <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
+        {consecutiveWarning && <ConsecutiveWarning count={consecutiveWarning.count} onConfirm={() => { const id = consecutiveWarning.shiftId; setConsecutiveWarning(null); handleApply(id, true) }} onCancel={() => setConsecutiveWarning(null)} />}
+      </div>
+    )
+  }
+
+  // Mobile layout
+  return (
+    <div className="driver-shell">
+      <div className="driver-frame">
+        <div className="driver-header">
+          <div>
+            <div className="title">Passbokning</div>
+            <div className="who">{user?.name}</div>
+          </div>
+          <button className="btn-ghost btn btn-icon" onClick={() => signOut({ callbackUrl: '/' })}>
+            <LogOut className="svg-ico" />
+          </button>
+        </div>
+
+        <div className="driver-body">
+          <div className="section-h">
+            <span className="t" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button className="arrow" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="svg-ico" /></button>
+              Vecka {weekData.weekNumber} · {weekData.weekYear}
+              <button className="arrow" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="svg-ico" /></button>
+            </span>
+            {weekOffset !== 0 && (
+              <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setWeekOffset(0)}>Idag</button>
+            )}
+          </div>
+
+          {days.map(d => (
+            <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} />
+          ))}
+
+          <div className="section-h">
+            <span className="t">Mina bekräftade pass</span>
+            <span className="count">{allConfirmed.length}</span>
+          </div>
+          {allConfirmed.length === 0
+            ? <div className="empty-state">Inga bekräftade pass än. Anmäl intresse ovan.</div>
+            : allConfirmed.map(a => <ConfirmedRow key={a.id} app={a} shifts={weekData.shifts} days={weekData.days} />)
+          }
+        </div>
+
+        {/* Tab bar */}
+        <nav className="tabbar">
+          <button className="tab active">
+            <Home className="svg-ico ico" />
+            Pass
+          </button>
+          {user?.role === 'admin' && (
+            <button className="tab" onClick={() => router.push('/admin')}>
+              <Settings className="svg-ico ico" />
+              Admin
+            </button>
+          )}
+          <button className="tab">
+            <User className="svg-ico ico" />
+            Profil
+          </button>
+        </nav>
+      </div>
+      <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
+      {consecutiveWarning && <ConsecutiveWarning count={consecutiveWarning.count} onConfirm={() => { const id = consecutiveWarning.shiftId; setConsecutiveWarning(null); handleApply(id, true) }} onCancel={() => setConsecutiveWarning(null)} />}
+    </div>
+  )
+}
+
+function ConsecutiveWarning({ count, onConfirm, onCancel }: { count: number; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-title" style={{ color: '#F59E0B' }}>⚠ Obs — många dagar i rad</div>
+        <p className="modal-sub">
+          Det här passet innebär att du jobbar <strong>{count} dagar i rad</strong>.
+          Arbetstidslagen rekommenderar vila efter 5 dagar. Vill du ändå anmäla intresse?
+        </p>
+        <div className="modal-actions">
+          <button className="btn btn-sm btn-ghost" onClick={onCancel}>Avbryt</button>
+          <button className="btn btn-sm" style={{ background: '#F59E0B', color: '#000', fontWeight: 600 }} onClick={onConfirm}>
+            Anmäl ändå
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DayCard({ day, app, approvedCount, onApply, onWithdraw }: {
+  day: ShiftDay
+  app?: Application
+  approvedCount: number
+  onApply: (id: number) => void
+  onWithdraw: (appId: number) => void
+}) {
+  const status = statusFor(day.shift, app, approvedCount)
+  const cardClass = `day-card is-${status}`
+
+  const badgeLabel = { closed: 'Stängd', open: 'Öppen', pending: 'Sökt', confirmed: 'Bekräftad', full: 'Fullbokad', rejected: 'Nekad' }[status]
+  const badgeClass = { closed: 'b-closed', open: 'b-open', pending: 'b-pending', confirmed: 'b-confirmed', full: 'b-full', rejected: 'b-rejected' }[status]
+
+  return (
+    <div className={cardClass}>
+      <div className="accent-bar" />
+      <div className="day-row1">
+        <div>
+          <div className="day-label">{day.label}</div>
+          <div className="day-date">{fmt(day.date)}</div>
+        </div>
+        <span className={`badge ${badgeClass}`}>
+          <span className="pip" />{badgeLabel}
+        </span>
+      </div>
+      <div className="day-row2">
+        <span className="hours">
+          <Clock className="svg-ico svg-ico-sm" />
+          {day.startTime}–{day.endTime}
+        </span>
+      </div>
+      {status === 'open' && day.shift && (
+        <button className="day-action is-apply" onClick={() => onApply(day.shift!.id)}>Anmäl intresse</button>
+      )}
+      {status === 'pending' && app && (
+        <button className="day-action is-cancel" onClick={() => onWithdraw(app.id)}>Återta anmälan</button>
+      )}
+      {(status === 'closed' || status === 'full' || status === 'confirmed') && (
+        <button className="day-action is-disabled" disabled>
+          {status === 'closed' ? 'Stängd för anmälan' : status === 'full' ? 'Fullbokad' : 'Bekräftad ✓'}
+        </button>
+      )}
+      {status === 'rejected' && (
+        <div className="day-action is-rejected">
+          <span>Nekad</span>
+          {app?.rejection_reason && <span className="reject-reason">"{app.rejection_reason}"</span>}
+        </div>
+      )}
+      {status === 'closed' && day.holiday && (
+        <p className="day-holiday-reason">
+          {day.holiday.type === 'holiday' ? 'Röd dag' : 'Afton'} · {day.holiday.name}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ConfirmedRow({ app, shifts, days }: {
+  app: Application
+  shifts: WeekData['shifts']
+  days: WeekData['days']
+}) {
+  const shift = shifts.find(s => s.id === app.shift_id)
+  const day = shift ? days.find(d => d.dayIndex === shift.day_index) : null
+  if (!shift || !day) return null
+  const note = 'Vid avbok/sjuk, kontakta trafikledningen.'
+  return (
+    <div className="confirmed-row">
+      <div className="left">
+        <div className="check"><Check className="svg-ico svg-ico-sm" /></div>
+        <div>
+          <div className="date">{day.label} {fmt(shift.date)}</div>
+          <div className="hours">{day.startTime}{'–'}{day.endTime}</div>
+        </div>
+      </div>
+      <span className="badge b-confirmed"><span className="pip" />{'Bekräftad'}</span>
+      <p className="day-cancel-note">{note}</p>
+    </div>
+  )
+}
