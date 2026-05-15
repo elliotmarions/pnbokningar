@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { userRepo, getDb } from '@/lib/db'
+import { userRepo, getDb, ensureMigrated } from '@/lib/db'
 
 // POST /api/setup — create the first admin user
 // Only works when no admins exist yet
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Lösenordet måste vara minst 8 tecken.' }, { status: 400 })
   }
 
+  await ensureMigrated()
   const sql = getDb()
 
   // Check if any admin already exists
