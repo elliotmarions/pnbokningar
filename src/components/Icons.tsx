@@ -14,6 +14,7 @@ export const Check = (p: P) => <svg {...base} {...p}><polyline points="20 6 9 17
 export const X = (p: P) => <svg {...base} {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 export const ChevronLeft = (p: P) => <svg {...base} {...p}><polyline points="15 18 9 12 15 6"/></svg>
 export const ChevronRight = (p: P) => <svg {...base} {...p}><polyline points="9 18 15 12 9 6"/></svg>
+export const ChevronDown = (p: P) => <svg {...base} {...p}><polyline points="6 9 12 15 18 9"/></svg>
 export const Plus = (p: P) => <svg {...base} {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 export const Minus = (p: P) => <svg {...base} {...p}><line x1="5" y1="12" x2="19" y2="12"/></svg>
 export const LogOut = (p: P) => <svg {...base} {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>

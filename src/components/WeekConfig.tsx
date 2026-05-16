@@ -121,8 +121,13 @@ export function WeekConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ applicationId: appId }),
     })
-    if (res.ok) { showToast('Chaufför godkänd. SMS skickat.'); await load() }
-    else showToast('Fel vid godkännande.', 'error')
+    if (res.ok) {
+      showToast('Chaufför godkänd. SMS skickat.')
+      load() // fire-and-forget — don't block the optimistic UI
+    } else {
+      showToast('Fel vid godkännande.', 'error')
+      throw new Error('approve failed')
+    }
   }
 
   const handleUnapprove = async (appId: number, reason?: string) => {
@@ -131,8 +136,13 @@ export function WeekConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
-    if (res.ok) { showToast('Chaufför avbokad.'); await load() }
-    else showToast('Fel.', 'error')
+    if (res.ok) {
+      showToast('Chaufför avbokad.')
+      load()
+    } else {
+      showToast('Fel.', 'error')
+      throw new Error('unapprove failed')
+    }
   }
 
   const handleReject = async (appId: number, reason?: string) => {
@@ -141,18 +151,25 @@ export function WeekConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
-    if (res.ok) { showToast('Ansökan nekad.'); await load() }
-    else showToast('Fel vid nekande.', 'error')
+    if (res.ok) {
+      showToast('Ansökan nekad.')
+      load()
+    } else {
+      showToast('Fel vid nekande.', 'error')
+      throw new Error('reject failed')
+    }
   }
 
   const handleUnreject = async (appId: number) => {
-    await fetch(`/api/applications/${appId}/reject`, { method: 'DELETE' })
-    await load()
+    const res = await fetch(`/api/applications/${appId}/reject`, { method: 'DELETE' })
+    if (!res.ok) throw new Error('unreject failed')
+    load()
   }
 
   const handleUnwithdraw = async (appId: number) => {
-    await fetch(`/api/applications/${appId}/withdraw`, { method: 'DELETE' })
-    await load()
+    const res = await fetch(`/api/applications/${appId}/withdraw`, { method: 'DELETE' })
+    if (!res.ok) throw new Error('unwithdraw failed')
+    load()
   }
 
   const handleUpdateSlots = async (shiftId: number, slots: number) => {

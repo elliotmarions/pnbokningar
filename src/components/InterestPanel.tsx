@@ -59,6 +59,10 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [rejectReason, setRejectReason] = useState('')
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
   const [withdrawReason, setWithdrawReason] = useState('')
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
+
+  const addPending = (id: number) => setPendingIds(prev => new Set([...prev, id]))
+  const removePending = (id: number) => setPendingIds(prev => { const s = new Set(prev); s.delete(id); return s })
 
   useEffect(() => {
     if (!shift) return
@@ -82,17 +86,78 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const withdrawn = applicants.filter(a => a.withdrawn && !a.approved)
 
   const handleApprove = async (appId: number) => {
-    await onApprove(appId)
+    const snapshot = applicants
+    addPending(appId)
     setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: true, withdrawn: false } : a))
+    try {
+      await onApprove(appId)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
   }
+
   const handleUnapprove = async (appId: number, reason?: string) => {
-    await onUnapprove(appId, reason)
+    const snapshot = applicants
+    addPending(appId)
     setApplicants(prev => prev.map(a =>
       a.id === appId ? { ...a, approved: false, withdrawn: true, withdrawal_reason: reason ?? null } : a
     ))
     setWithdrawingId(null)
     setWithdrawReason('')
+    try {
+      await onUnapprove(appId, reason)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
   }
+
+  const handleReject = async (appId: number, reason: string) => {
+    if (!onReject) return
+    const snapshot = applicants
+    addPending(appId)
+    setApplicants(prev => prev.map(x => x.id === appId ? { ...x, rejected: true, rejection_reason: reason || null } : x))
+    setRejectingId(null)
+    try {
+      await onReject(appId, reason || undefined)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
+  }
+
+  const handleUnreject = async (appId: number) => {
+    if (!onUnreject) return
+    const snapshot = applicants
+    addPending(appId)
+    setApplicants(prev => prev.map(x => x.id === appId ? { ...x, rejected: false, rejection_reason: null } : x))
+    try {
+      await onUnreject(appId)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
+  }
+
+  const handleUnwithdraw = async (appId: number) => {
+    if (!onUnwithdraw) return
+    const snapshot = applicants
+    addPending(appId)
+    setApplicants(prev => prev.map(x => x.id === appId ? { ...x, withdrawn: false } : x))
+    try {
+      await onUnwithdraw(appId)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
+  }
+
   const handleSlots = async (delta: number) => {
     if (!shift) return
     const next = Math.max(1, Math.min(50, slots + delta))
@@ -175,6 +240,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Avboka"
+                      disabled={pendingIds.has(a.id)}
                       onClick={() => { setWithdrawingId(a.id); setWithdrawReason('') }}
                     >
                       <X className="svg-ico svg-ico-sm" />
@@ -193,7 +259,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     />
                     <div className="reject-form-actions">
                       <button className="btn btn-sm btn-ghost" onClick={() => setWithdrawingId(null)}>Avbryt</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleUnapprove(a.id, withdrawReason || undefined)}>
+                      <button className="btn btn-sm btn-danger" disabled={pendingIds.has(a.id)} onClick={() => handleUnapprove(a.id, withdrawReason || undefined)}>
                         Avboka
                       </button>
                     </div>
@@ -228,7 +294,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   <div className="actions">
                     <button
                       className="btn btn-sm btn-success"
-                      disabled={approved.length >= slots}
+                      disabled={approved.length >= slots || pendingIds.has(a.id)}
                       onClick={() => handleApprove(a.id)}
                     >
                       <Check className="svg-ico svg-ico-sm" />
@@ -237,6 +303,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     {onReject && (
                       <button
                         className="btn btn-sm btn-danger-ghost"
+                        disabled={pendingIds.has(a.id)}
                         onClick={() => { setRejectingId(a.id); setRejectReason('') }}
                       >
                         Neka
@@ -256,11 +323,11 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     />
                     <div className="reject-form-actions">
                       <button className="btn btn-sm btn-ghost" onClick={() => setRejectingId(null)}>Avbryt</button>
-                      <button className="btn btn-sm btn-danger" onClick={async () => {
-                        await onReject(a.id, rejectReason || undefined)
-                        setApplicants(prev => prev.map(x => x.id === a.id ? { ...x, rejected: true, rejection_reason: rejectReason || null } : x))
-                        setRejectingId(null)
-                      }}>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        disabled={pendingIds.has(a.id)}
+                        onClick={() => handleReject(a.id, rejectReason)}
+                      >
                         Neka
                       </button>
                     </div>
@@ -286,10 +353,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                 </div>
                 {onUnreject && (
                   <div className="actions">
-                    <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={async () => {
-                      await onUnreject(a.id)
-                      setApplicants(prev => prev.map(x => x.id === a.id ? { ...x, rejected: false, rejection_reason: null } : x))
-                    }}>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      style={{ fontSize: 11 }}
+                      disabled={pendingIds.has(a.id)}
+                      onClick={() => handleUnreject(a.id)}
+                    >
                       Ångra
                     </button>
                   </div>
@@ -321,10 +390,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                 </div>
                 {onUnwithdraw && (
                   <div className="actions">
-                    <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={async () => {
-                      await onUnwithdraw(a.id)
-                      setApplicants(prev => prev.map(x => x.id === a.id ? { ...x, withdrawn: false } : x))
-                    }}>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      style={{ fontSize: 11 }}
+                      disabled={pendingIds.has(a.id)}
+                      onClick={() => handleUnwithdraw(a.id)}
+                    >
                       Ångra
                     </button>
                   </div>
