@@ -161,7 +161,11 @@ export function DriverHome() {
   }
 
   const confirmedThisWeek = days.filter(d => d.shift && myApps[d.shift.id]?.approved)
-  const pendingThisWeek = days.filter(d => d.shift && myApps[d.shift.id] && !myApps[d.shift.id].approved)
+  const pendingThisWeek = days.filter(d => {
+    if (!d.shift) return false
+    const app = myApps[d.shift.id]
+    return app && !app.approved && !app.rejected && !app.withdrawn
+  })
 
   // All confirmed (including past weeks from applications list)
   const allConfirmed = applications.filter(a => a.approved)
