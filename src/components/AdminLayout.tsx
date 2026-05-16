@@ -46,6 +46,8 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
           </Link>
         ))}
 
+        <div style={{ flex: 1 }} />
+
         <div className="nav-section-label">Vyer</div>
         <Link href="/driver" prefetch className="nav-item">
           <Briefcase className="svg-ico ico" />
