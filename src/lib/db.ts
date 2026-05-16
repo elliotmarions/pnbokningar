@@ -268,7 +268,7 @@ export const applicationRepo = {
       withdrawn: number
     }
     return sql<Row[]>`
-      SELECT a.id, a.shift_id, a.user_id, a.(applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
+      SELECT a.id, a.shift_id, a.user_id, (a.applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
              a.rejected, a.rejection_reason, a.withdrawn,
              u.name AS user_name, u.phone AS user_phone,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
@@ -308,7 +308,7 @@ export const applicationRepo = {
       withdrawn: number
     }
     return sql<Row[]>`
-      SELECT a.id, a.shift_id, a.user_id, a.(applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
+      SELECT a.id, a.shift_id, a.user_id, (a.applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
              a.rejected, a.rejection_reason, a.withdrawn,
              s.date AS shift_date, s.day_index AS shift_day_index,
              s.week_year AS shift_week_year, s.week_number AS shift_week_number,
