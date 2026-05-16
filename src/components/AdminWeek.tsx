@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet, Phone, X } from './Icons'
+import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet, Phone } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 
@@ -49,13 +49,11 @@ export function AdminWeek() {
   const cache = useAdminCache()
   const loadId = useRef(0)
 
-  // Expanded panel state
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [driversMap, setDriversMap] = useState<Record<number, Driver[] | 'loading'>>({})
 
   const load = useCallback(async (offset: number) => {
     const id = ++loadId.current
-
     const base = new Date()
     base.setDate(base.getDate() + offset * 7)
     const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
@@ -77,9 +75,7 @@ export function AdminWeek() {
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
     if (!res.ok) { setLoading(false); return }
     const data = await res.json()
-
     if (id !== loadId.current) return
-
     cache.set(cacheKey, data)
     apply(data)
 
@@ -89,27 +85,33 @@ export function AdminWeek() {
   }, [cache])
 
   useEffect(() => {
-    setExpandedId(null)
+    setExpandedIds(new Set())
     setDriversMap({})
     load(weekOffset)
   }, [weekOffset, load])
 
   const handleCardClick = async (shiftId: number) => {
-    if (expandedId === shiftId) {
-      setExpandedId(null)
-      return
-    }
-    setExpandedId(shiftId)
-    if (driversMap[shiftId] !== undefined) return
-    setDriversMap(prev => ({ ...prev, [shiftId]: 'loading' }))
-    try {
-      const res = await fetch(`/api/shifts/${shiftId}`)
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-      const approved: Driver[] = (data.applicants ?? []).filter((a: { approved: number }) => a.approved)
-      setDriversMap(prev => ({ ...prev, [shiftId]: approved }))
-    } catch {
-      setDriversMap(prev => ({ ...prev, [shiftId]: [] }))
+    const isOpen = expandedIds.has(shiftId)
+
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(shiftId)) next.delete(shiftId)
+      else next.add(shiftId)
+      return next
+    })
+
+    // Fetch only on first open and if not already fetched
+    if (!isOpen && driversMap[shiftId] === undefined) {
+      setDriversMap(prev => ({ ...prev, [shiftId]: 'loading' }))
+      try {
+        const res = await fetch(`/api/shifts/${shiftId}`)
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        const approved: Driver[] = (data.applicants ?? []).filter((a: { approved: number }) => a.approved)
+        setDriversMap(prev => ({ ...prev, [shiftId]: approved }))
+      } catch {
+        setDriversMap(prev => ({ ...prev, [shiftId]: [] }))
+      }
     }
   }
 
@@ -119,10 +121,6 @@ export function AdminWeek() {
 
   const totalApproved = useMemo(() => shifts.reduce((s, c) => s + (c.approved ?? 0), 0), [shifts])
   const totalPending = useMemo(() => shifts.reduce((s, c) => s + (c.pending ?? 0), 0), [shifts])
-
-  const expandedShift = expandedId !== null ? shifts.find(s => s.id === expandedId) : null
-  const expandedDay = expandedShift ? days.find(d => d.dayIndex === expandedShift.day_index) : null
-  const expandedDrivers = expandedId !== null ? driversMap[expandedId] : undefined
 
   return (
     <>
@@ -163,109 +161,92 @@ export function AdminWeek() {
           ))}
         </div>
       ) : (
-        <>
-          <div className="week-grid">
-            {days.map(day => {
-              const shift = shifts.find(s => s.day_index === day.dayIndex)
-              if (!shift) return null
-              const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0 }
-              const pct = shift.slots > 0 ? Math.min(100, (c.approved / shift.slots) * 100) : 0
-              const isFull = c.approved >= shift.slots
-              const badgeClass = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
-              const badgeLabel = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
-              const isSelected = expandedId === shift.id
+        <div className="week-grid" style={{ alignItems: 'start' }}>
+          {days.map(day => {
+            const shift = shifts.find(s => s.day_index === day.dayIndex)
+            if (!shift) return null
+            const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0 }
+            const pct = shift.slots > 0 ? Math.min(100, (c.approved / shift.slots) * 100) : 0
+            const isFull = c.approved >= shift.slots
+            const badgeClass = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
+            const badgeLabel = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
+            const isExpanded = expandedIds.has(shift.id)
+            const drivers = driversMap[shift.id]
 
-              return (
-                <button
-                  key={day.dayIndex}
-                  type="button"
-                  className={`wk-card ${!shift.is_open ? 'is-closed' : ''} ${isSelected ? 'is-selected' : ''}`}
-                  onClick={() => handleCardClick(shift.id)}
-                >
-                  <div className="day-line">
-                    <div>
-                      <div className="day-name">{day.label}</div>
-                      <div className="day-date">{fmt(day.date)}</div>
-                    </div>
-                    <span className={`badge ${badgeClass}`}><span className="pip" />{badgeLabel}</span>
+            return (
+              <button
+                key={day.dayIndex}
+                type="button"
+                className={`wk-card ${!shift.is_open ? 'is-closed' : ''} ${isExpanded ? 'is-selected' : ''}`}
+                onClick={() => handleCardClick(shift.id)}
+              >
+                {/* Static card info */}
+                <div className="day-line">
+                  <div>
+                    <div className="day-name">{day.label}</div>
+                    <div className="day-date">{fmt(day.date)}</div>
                   </div>
+                  <span className={`badge ${badgeClass}`}><span className="pip" />{badgeLabel}</span>
+                </div>
 
-                  <div className="hours">
-                    <Clock className="svg-ico svg-ico-sm" />
-                    {day.startTime}–{day.endTime}
-                    {!shift.is_open && day.holiday && (
-                      <span className={`wk-holiday-tag ${day.holiday.type}`}>
-                        {day.holiday.type === 'holiday' ? 'Röd dag' : 'Afton'} · {day.holiday.name}
-                      </span>
+                <div className="hours">
+                  <Clock className="svg-ico svg-ico-sm" />
+                  {day.startTime}–{day.endTime}
+                  {!shift.is_open && day.holiday && (
+                    <span className={`wk-holiday-tag ${day.holiday.type}`}>
+                      {day.holiday.type === 'holiday' ? 'Röd dag' : 'Afton'} · {day.holiday.name}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <div className="wk-meter">
+                    <span className="num">{c.approved}</span>
+                    <span className="denom">/{shift.slots} godkända</span>
+                  </div>
+                  <div className="wk-meter-bar" style={{ marginTop: 6 }}>
+                    <div className={`fill ${isFull ? 'full' : ''}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="wk-waiting">{c.pending} väntar på godkännande</div>
+                </div>
+
+                {/* Expanded driver list — drops straight down inside the column */}
+                {isExpanded && (
+                  <div className="wk-inline-drivers" onClick={e => e.stopPropagation()}>
+                    {!drivers || drivers === 'loading' ? (
+                      [0,1,2].map(i => (
+                        <div key={i} className="wk-driver-row">
+                          <div className="skel" style={{ width:30, height:30, borderRadius:'50%', flexShrink:0 }} />
+                          <div style={{ flex:1, display:'flex', flexDirection:'column', gap:4 }}>
+                            <div className="skel" style={{ width:'70%', height:11 }} />
+                            <div className="skel" style={{ width:'50%', height:10 }} />
+                          </div>
+                        </div>
+                      ))
+                    ) : drivers.length === 0 ? (
+                      <p className="wk-drivers-empty">Inga bokade ännu.</p>
+                    ) : (
+                      drivers.map(d => (
+                        <div key={d.id} className="wk-driver-row">
+                          <div className="wk-driver-avatar">{initials(d.user_name)}</div>
+                          <div className="wk-driver-info">
+                            <div className="wk-driver-name">{d.user_name}</div>
+                            {d.user_phone && (
+                              <div className="wk-driver-phone">
+                                <Phone className="svg-ico" style={{ width:11, height:11 }} />
+                                {d.user_phone}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
-
-                  <div>
-                    <div className="wk-meter">
-                      <span className="num">{c.approved}</span>
-                      <span className="denom">/{shift.slots} godkända</span>
-                    </div>
-                    <div className="wk-meter-bar" style={{ marginTop: 6 }}>
-                      <div className={`fill ${isFull ? 'full' : ''}`} style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="wk-waiting">{c.pending} väntar på godkännande</div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Driver panel — appears below the grid when a card is clicked */}
-          {expandedId !== null && expandedDay && (
-            <div className="wk-driver-panel">
-              <div className="wk-driver-panel-head">
-                <div>
-                  <span className="wk-driver-panel-title">{expandedDay.label} {expandedShift ? fmt(expandedShift.date) : ''}</span>
-                  <span className="wk-driver-panel-sub">
-                    <Clock className="svg-ico" style={{ width:12, height:12 }} />
-                    {expandedDay.startTime}–{expandedDay.endTime}
-                    &nbsp;·&nbsp;
-                    {expandedShift && `${expandedShift.approved ?? 0} / ${expandedShift.slots} bokade`}
-                  </span>
-                </div>
-                <button className="wk-driver-panel-close" onClick={() => setExpandedId(null)} aria-label="Stäng">
-                  <X className="svg-ico svg-ico-sm" />
-                </button>
-              </div>
-
-              <div className="wk-driver-panel-list">
-                {!expandedDrivers || expandedDrivers === 'loading' ? (
-                  [0,1,2,3].map(i => (
-                    <div key={i} className="wk-driver-row">
-                      <div className="skel" style={{ width:32, height:32, borderRadius:'50%', flexShrink:0 }} />
-                      <div style={{ flex:1, display:'flex', flexDirection:'column', gap:5 }}>
-                        <div className="skel" style={{ width:'40%', height:12 }} />
-                        <div className="skel" style={{ width:'25%', height:10 }} />
-                      </div>
-                    </div>
-                  ))
-                ) : expandedDrivers.length === 0 ? (
-                  <p className="wk-drivers-empty">Inga godkända chaufförer för det här passet ännu.</p>
-                ) : (
-                  expandedDrivers.map(d => (
-                    <div key={d.id} className="wk-driver-row">
-                      <div className="wk-driver-avatar">{initials(d.user_name)}</div>
-                      <div className="wk-driver-info">
-                        <div className="wk-driver-name">{d.user_name}</div>
-                        {d.user_phone && (
-                          <div className="wk-driver-phone">
-                            <Phone className="svg-ico" style={{ width:11, height:11 }} />
-                            {d.user_phone}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
                 )}
-              </div>
-            </div>
-          )}
-        </>
+              </button>
+            )
+          })}
+        </div>
       )}
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
