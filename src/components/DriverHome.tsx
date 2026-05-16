@@ -176,7 +176,7 @@ export function DriverHome() {
               <img src="/pn-logo.png" alt="PostNord" className="brand-logo" />
               <div>
                 <div className="name">Passbokning</div>
-                <div className="sub">Trafikledning · Mina pass</div>
+                <div className="sub">Chaufför · Mina pass</div>
               </div>
             </div>
             <div className="right">
