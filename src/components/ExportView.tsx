@@ -31,12 +31,15 @@ export function ExportView() {
     })
   }, [])
 
-  useEffect(() => { loadPreview() }, [from, to, group])
-
-  async function loadPreview() {
-    const res = await fetch(`/api/export/preview?from=${from}&to=${to}&group=${group}`)
-    if (res.ok) setPreview(await res.json())
-  }
+  useEffect(() => {
+    // Debounce: wait 400 ms after last change before fetching preview.
+    // Prevents firing one request per keystroke when typing a date.
+    const id = setTimeout(async () => {
+      const res = await fetch(`/api/export/preview?from=${from}&to=${to}&group=${group}`)
+      if (res.ok) setPreview(await res.json())
+    }, 400)
+    return () => clearTimeout(id)
+  }, [from, to, group])
 
   const download = () => {
     window.location.href = `/api/export?from=${from}&to=${to}&group=${group}`
