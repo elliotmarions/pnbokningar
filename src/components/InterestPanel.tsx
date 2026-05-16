@@ -12,6 +12,7 @@ interface Applicant {
   rejected: boolean
   rejection_reason: string | null
   withdrawn: boolean
+  withdrawal_reason: string | null
 }
 
 interface Shift {
@@ -28,7 +29,7 @@ interface Props {
   dayLabel: string
   onClose: () => void
   onApprove: (appId: number) => Promise<void>
-  onUnapprove: (appId: number) => Promise<void>
+  onUnapprove: (appId: number, reason?: string) => Promise<void>
   onUpdateSlots: (shiftId: number, slots: number) => Promise<void>
   readOnlySlots?: boolean
   onReject?: (appId: number, reason?: string) => Promise<void>
@@ -56,6 +57,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
   const [rejectingId, setRejectingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
+  const [withdrawReason, setWithdrawReason] = useState('')
 
   useEffect(() => {
     if (!shift) return
@@ -82,9 +85,13 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     await onApprove(appId)
     setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: true, withdrawn: false } : a))
   }
-  const handleUnapprove = async (appId: number) => {
-    await onUnapprove(appId)
-    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: false, withdrawn: true } : a))
+  const handleUnapprove = async (appId: number, reason?: string) => {
+    await onUnapprove(appId, reason)
+    setApplicants(prev => prev.map(a =>
+      a.id === appId ? { ...a, approved: false, withdrawn: true, withdrawal_reason: reason ?? null } : a
+    ))
+    setWithdrawingId(null)
+    setWithdrawReason('')
   }
   const handleSlots = async (delta: number) => {
     if (!shift) return
@@ -150,24 +157,48 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           {approved.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga godkända ännu.</p>
             : approved.map(a => (
-              <div key={a.id} className="applicant-row approved">
-                <div className="avatar lg">{initials(a.user_name)}</div>
-                <div className="info">
-                  <div className="name">
-                    {a.user_name}
-                    <span className="badge b-confirmed" style={{ fontSize: 11 }}><span className="pip" />Godkänd</span>
+              <div key={a.id}>
+                <div className="applicant-row approved">
+                  <div className="avatar lg">{initials(a.user_name)}</div>
+                  <div className="info">
+                    <div className="name">
+                      {a.user_name}
+                      <span className="badge b-confirmed" style={{ fontSize: 11 }}><span className="pip" />Godkänd</span>
+                    </div>
+                    <div className="meta">
+                      {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
+                      <span className="sep">·</span>
+                      anmäld {fmtTime(a.applied_at)}
+                    </div>
                   </div>
-                  <div className="meta">
-                    {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
-                    <span className="sep">·</span>
-                    anmäld {fmtTime(a.applied_at)}
+                  <div className="actions">
+                    <button
+                      className="btn btn-sm btn-danger-ghost btn-icon"
+                      title="Avboka"
+                      onClick={() => { setWithdrawingId(a.id); setWithdrawReason('') }}
+                    >
+                      <X className="svg-ico svg-ico-sm" />
+                    </button>
                   </div>
                 </div>
-                <div className="actions">
-                  <button className="btn btn-sm btn-danger-ghost btn-icon" title="Ta bort" onClick={() => handleUnapprove(a.id)}>
-                    <X className="svg-ico svg-ico-sm" />
-                  </button>
-                </div>
+                {withdrawingId === a.id && (
+                  <div className="reject-form">
+                    <textarea
+                      className="reject-textarea"
+                      placeholder="Anledning till avbokning (valfritt, visas bara internt)…"
+                      value={withdrawReason}
+                      onChange={e => setWithdrawReason(e.target.value)}
+                      rows={2}
+                      autoFocus
+                    />
+                    <div className="reject-form-actions">
+                      <button className="btn btn-sm btn-ghost" onClick={() => setWithdrawingId(null)}>Avbryt</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleUnapprove(a.id, withdrawReason || undefined)}>
+                        Avboka
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           }
@@ -282,6 +313,11 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   <div className="meta">
                     {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
                   </div>
+                  {a.withdrawal_reason && (
+                    <div className="meta" style={{ color: '#F59E0B', marginTop: 2 }}>
+                      Internt: "{a.withdrawal_reason}"
+                    </div>
+                  )}
                 </div>
                 {onUnwithdraw && (
                   <div className="actions">

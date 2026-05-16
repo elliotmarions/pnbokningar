@@ -74,6 +74,10 @@ async function migrate() {
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawn INTEGER NOT NULL DEFAULT 0
   `
+  // Add withdrawal_reason column (internal admin note, not shown to drivers)
+  await sql`
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT
+  `
 }
 
 // --------------- Users ---------------
@@ -266,10 +270,11 @@ export const applicationRepo = {
       rejected: number
       rejection_reason: string | null
       withdrawn: number
+      withdrawal_reason: string | null
     }
     return sql<Row[]>`
       SELECT a.id, a.shift_id, a.user_id, (a.applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
-             a.rejected, a.rejection_reason, a.withdrawn,
+             a.rejected, a.rejection_reason, a.withdrawn, a.withdrawal_reason,
              u.name AS user_name, u.phone AS user_phone,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
       FROM applications a
@@ -288,8 +293,8 @@ export const applicationRepo = {
     await sql`UPDATE applications SET rejected = 0, rejection_reason = NULL WHERE id = ${appId}`
   },
 
-  async markWithdrawn(appId: number): Promise<void> {
-    await sql`UPDATE applications SET withdrawn = 1 WHERE id = ${appId}`
+  async markWithdrawn(appId: number, reason?: string): Promise<void> {
+    await sql`UPDATE applications SET withdrawn = 1, withdrawal_reason = ${reason ?? null} WHERE id = ${appId}`
   },
 
   async unmarkWithdrawn(appId: number): Promise<void> {

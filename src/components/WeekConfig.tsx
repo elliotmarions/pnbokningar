@@ -125,9 +125,13 @@ export function WeekConfig() {
     else showToast('Fel vid godkännande.', 'error')
   }
 
-  const handleUnapprove = async (appId: number) => {
-    const res = await fetch(`/api/approvals/${appId}`, { method: 'DELETE' })
-    if (res.ok) { showToast('Godkännande återkallat.'); await load() }
+  const handleUnapprove = async (appId: number, reason?: string) => {
+    const res = await fetch(`/api/approvals/${appId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    if (res.ok) { showToast('Chaufför avbokad.'); await load() }
     else showToast('Fel.', 'error')
   }
 

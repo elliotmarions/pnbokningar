@@ -12,7 +12,14 @@ export async function DELETE(
 
   const { id } = await params
   const appId = parseInt(id)
+
+  let reason: string | undefined
+  try {
+    const body = await req.json()
+    reason = body?.reason?.trim() || undefined
+  } catch { /* body is optional */ }
+
   await approvalRepo.unapprove(appId)
-  await applicationRepo.markWithdrawn(appId)
+  await applicationRepo.markWithdrawn(appId, reason)
   return NextResponse.json({ ok: true })
 }
