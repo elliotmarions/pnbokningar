@@ -56,7 +56,10 @@ export async function GET(req: NextRequest) {
 
     const ws = wb.addWorksheet(sheetName)
     ws.getColumn(1).width = 32
-    formatted.forEach(name => ws.addRow([name]))
+    formatted.forEach(name => {
+      const row = ws.addRow([name])
+      row.getCell(1).font = { name: 'Calibri', size: 14 }
+    })
   }
 
   if (wb.worksheets.length === 0) {
