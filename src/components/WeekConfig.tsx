@@ -37,7 +37,7 @@ export function WeekConfig() {
   // loadId: race-condition guard — stale fetch responses are discarded.
   const loadId = useRef(0)
 
-  const [weekOffset, setWeekOffset] = useState(0)
+  const [weekOffset, setWeekOffset] = useState(1)
   const [weekYear, setWeekYear] = useState(0)
   const [weekNumber, setWeekNumber] = useState(0)
   const [shifts, setShifts] = useState<Shift[]>([])
