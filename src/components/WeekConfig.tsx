@@ -32,10 +32,10 @@ function fmt(dateStr: string) {
 
 export function WeekConfig() {
   const cache = useAdminCache()
-  // isMounted tracks whether this component instance has already loaded once.
-  // On first mount we show cached data instantly (no re-fetch).
-  // After that (week navigation, mutations) we always fetch fresh.
+  // isMounted: first-mount cache (see load() below).
   const isMounted = useRef(false)
+  // loadId: race-condition guard — stale fetch responses are discarded.
+  const loadId = useRef(0)
 
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
@@ -82,9 +82,16 @@ export function WeekConfig() {
       if (cached) { apply(cached as Parameters<typeof apply>[0]); return }
     }
 
+    // Assign a unique id to this call so we can detect stale responses.
+    const id = ++loadId.current
+
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
     if (!res.ok) return
     const data = await res.json()
+
+    // Discard response if a newer load() has already been triggered.
+    if (id !== loadId.current) return
+
     cache.set(cacheKey, data)   // keep cache up-to-date for other tabs
     apply(data)
   }, [weekOffset, cache])

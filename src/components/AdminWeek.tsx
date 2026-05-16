@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
@@ -37,8 +37,14 @@ export function AdminWeek() {
   const [loading, setLoading] = useState(true)
   const { toast, show: showToast, clear: clearToast } = useToast()
   const cache = useAdminCache()
+  // Each load() call gets a unique id. If a newer call has started before
+  // the fetch resolves, the stale response is discarded — fixing the race
+  // condition that caused week 22 to flash briefly when jumping to week 21.
+  const loadId = useRef(0)
 
   const load = useCallback(async (offset: number) => {
+    const id = ++loadId.current
+
     const base = new Date()
     base.setDate(base.getDate() + offset * 7)
     const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
@@ -54,13 +60,17 @@ export function AdminWeek() {
       setLoading(false)
     }
 
-    // Stale-while-revalidate: show cached data instantly, then refresh silently.
+    // Cache hit is synchronous — no race condition, always safe to apply.
     const cached = cache.get(cacheKey)
     if (cached) apply(cached as typeof apply extends (d: infer D) => void ? D : never)
 
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
     if (!res.ok) { setLoading(false); return }
     const data = await res.json()
+
+    // Discard response if a newer load() has already been triggered.
+    if (id !== loadId.current) return
+
     cache.set(cacheKey, data)
     apply(data)
 
