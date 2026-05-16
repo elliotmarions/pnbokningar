@@ -119,6 +119,11 @@ export function WeekConfig() {
     await load()
   }
 
+  const handleUnwithdraw = async (appId: number) => {
+    await fetch(`/api/applications/${appId}/withdraw`, { method: 'DELETE' })
+    await load()
+  }
+
   const handleUpdateSlots = async (shiftId: number, slots: number) => {
     await fetch('/api/shifts', {
       method: 'PUT',
@@ -272,6 +277,7 @@ export function WeekConfig() {
         onUpdateSlots={handleUpdateSlots}
         onReject={handleReject}
         onUnreject={handleUnreject}
+        onUnwithdraw={handleUnwithdraw}
       />
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />

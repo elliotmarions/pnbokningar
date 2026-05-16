@@ -70,6 +70,10 @@ async function migrate() {
   await sql`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
   `
+  // Add withdrawn column (admin removed previously-approved driver)
+  await sql`
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawn INTEGER NOT NULL DEFAULT 0
+  `
 }
 
 // --------------- Users ---------------
@@ -165,7 +169,10 @@ export const shiftRepo = {
     return sql<Row[]>`
       SELECT s.*,
         COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
-        COALESCE(COUNT(DISTINCT CASE WHEN a.rejected = 0 THEN a.id END) - COUNT(DISTINCT ap.id), 0)::int AS pending
+        COALESCE(
+          COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 THEN a.id END)
+          - COUNT(DISTINCT ap.id), 0
+        )::int AS pending
       FROM shifts s
       LEFT JOIN applications a ON a.shift_id = s.id
       LEFT JOIN approvals ap ON ap.application_id = a.id
@@ -258,10 +265,11 @@ export const applicationRepo = {
       approved: boolean
       rejected: number
       rejection_reason: string | null
+      withdrawn: number
     }
     return sql<Row[]>`
       SELECT a.id, a.shift_id, a.user_id, a.applied_at::text AS applied_at,
-             a.rejected, a.rejection_reason,
+             a.rejected, a.rejection_reason, a.withdrawn,
              u.name AS user_name, u.phone AS user_phone,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
       FROM applications a
@@ -278,6 +286,14 @@ export const applicationRepo = {
 
   async unreject(appId: number): Promise<void> {
     await sql`UPDATE applications SET rejected = 0, rejection_reason = NULL WHERE id = ${appId}`
+  },
+
+  async markWithdrawn(appId: number): Promise<void> {
+    await sql`UPDATE applications SET withdrawn = 1 WHERE id = ${appId}`
+  },
+
+  async unmarkWithdrawn(appId: number): Promise<void> {
+    await sql`UPDATE applications SET withdrawn = 0 WHERE id = ${appId}`
   },
 
   async forUser(userId: string) {

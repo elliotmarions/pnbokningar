@@ -11,6 +11,7 @@ interface Applicant {
   approved: boolean
   rejected: boolean
   rejection_reason: string | null
+  withdrawn: boolean
 }
 
 interface Shift {
@@ -32,6 +33,7 @@ interface Props {
   readOnlySlots?: boolean
   onReject?: (appId: number, reason?: string) => Promise<void>
   onUnreject?: (appId: number) => Promise<void>
+  onUnwithdraw?: (appId: number) => Promise<void>
 }
 
 function fmt(dateStr: string) {
@@ -48,7 +50,7 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, readOnlySlots = false, onReject, onUnreject }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, readOnlySlots = false, onReject, onUnreject, onUnwithdraw }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [slots, setSlots] = useState(shift?.slots ?? 5)
   const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
@@ -72,16 +74,17 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   }, [open, onClose])
 
   const approved = applicants.filter(a => a.approved)
-  const pending = applicants.filter(a => !a.approved && !a.rejected)
+  const pending = applicants.filter(a => !a.approved && !a.rejected && !a.withdrawn)
   const rejected = applicants.filter(a => a.rejected)
+  const withdrawn = applicants.filter(a => a.withdrawn && !a.approved)
 
   const handleApprove = async (appId: number) => {
     await onApprove(appId)
-    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: true } : a))
+    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: true, withdrawn: false } : a))
   }
   const handleUnapprove = async (appId: number) => {
     await onUnapprove(appId)
-    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: false } : a))
+    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, approved: false, withdrawn: true } : a))
   }
   const handleSlots = async (delta: number) => {
     if (!shift) return
@@ -255,6 +258,36 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={async () => {
                       await onUnreject(a.id)
                       setApplicants(prev => prev.map(x => x.id === a.id ? { ...x, rejected: false, rejection_reason: null } : x))
+                    }}>
+                      Ångra
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          }
+
+          {/* Withdrawn group — always visible */}
+          <div className="list-group-h" style={{ marginTop: 12 }}>
+            <span>Avbokade</span>
+            {withdrawn.length > 0 && <span className="badge b-closed">{withdrawn.length}</span>}
+          </div>
+          {withdrawn.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga avbokade.</p>
+            : withdrawn.map(a => (
+              <div key={a.id} className="applicant-row" style={{ opacity: 0.7 }}>
+                <div className="avatar lg" style={{ background: '#3a2f1a' }}>{initials(a.user_name)}</div>
+                <div className="info">
+                  <div className="name" style={{ textDecoration: 'line-through' }}>{a.user_name}</div>
+                  <div className="meta">
+                    {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
+                  </div>
+                </div>
+                {onUnwithdraw && (
+                  <div className="actions">
+                    <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }} onClick={async () => {
+                      await onUnwithdraw(a.id)
+                      setApplicants(prev => prev.map(x => x.id === a.id ? { ...x, withdrawn: false } : x))
                     }}>
                       Ångra
                     </button>
