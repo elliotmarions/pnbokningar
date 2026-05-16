@@ -21,6 +21,7 @@ interface Application {
   approved: boolean
   rejected: boolean
   rejection_reason: string | null
+  withdrawn: boolean
   applied_at: string
 }
 interface WeekData {
@@ -41,12 +42,13 @@ function initials(name?: string | null) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
-type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'full' | 'open'
+type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'withdrawn' | 'full' | 'open'
 
 function statusFor(shift: ShiftDay['shift'], app?: Application, approvedCount = 0): DayStatus {
   if (!shift || !shift.is_open) return 'closed'
   if (app?.approved) return 'confirmed'
   if (app?.rejected) return 'rejected'
+  if (app?.withdrawn) return 'withdrawn'
   if (app) return 'pending'
   if (approvedCount >= shift.slots) return 'full'
   return 'open'
@@ -339,8 +341,8 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw }: {
   const status = statusFor(day.shift, app, approvedCount)
   const cardClass = `day-card is-${status}`
 
-  const badgeLabel = { closed: 'Stängd', open: 'Öppen', pending: 'Sökt', confirmed: 'Bekräftad', full: 'Fullbokad', rejected: 'Nekad' }[status]
-  const badgeClass = { closed: 'b-closed', open: 'b-open', pending: 'b-pending', confirmed: 'b-confirmed', full: 'b-full', rejected: 'b-rejected' }[status]
+  const badgeLabel = { closed: 'Stängd', open: 'Öppen', pending: 'Sökt', confirmed: 'Bekräftad', full: 'Fullbokad', rejected: 'Nekad', withdrawn: 'Avbokad' }[status]
+  const badgeClass = { closed: 'b-closed', open: 'b-open', pending: 'b-pending', confirmed: 'b-confirmed', full: 'b-full', rejected: 'b-rejected', withdrawn: 'b-closed' }[status]
 
   return (
     <div className={cardClass}>
@@ -375,6 +377,11 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw }: {
         <div className="day-action is-rejected">
           <span>Nekad</span>
           {app?.rejection_reason && <span className="reject-reason">"{app.rejection_reason}"</span>}
+        </div>
+      )}
+      {status === 'withdrawn' && (
+        <div className="day-action is-rejected">
+          <span>Avbokad av trafikledning</span>
         </div>
       )}
       {status === 'closed' && day.holiday && (
