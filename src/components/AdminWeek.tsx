@@ -39,7 +39,7 @@ function initials(name: string) {
 }
 
 export function AdminWeek() {
-  const [weekOffset, setWeekOffset] = useState(1)
+  const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
   const [weekNumber, setWeekNumber] = useState(0)
   const [shifts, setShifts] = useState<Shift[]>([])
