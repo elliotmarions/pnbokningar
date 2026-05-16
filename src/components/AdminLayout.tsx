@@ -7,8 +7,8 @@ import { Home, Calendar, Users, Download, Briefcase, LogOut, Sun } from './Icons
 const NAV = [
   { href: '/admin',          label: 'Översikt',    icon: Home },
   { href: '/admin/config',   label: 'Schemalägg',  icon: Calendar },
-  { href: '/admin/drivers',  label: 'Chaufförer',  icon: Users },
   { href: '/admin/calendar', label: 'Kalender',    icon: Sun },
+  { href: '/admin/drivers',  label: 'Chaufförer',  icon: Users },
   { href: '/admin/export',   label: 'Export',      icon: Download },
 ]
 
