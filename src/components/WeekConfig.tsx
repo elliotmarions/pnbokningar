@@ -1,8 +1,9 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Clock, Check, Plus, Users } from './Icons'
 import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
+import { useAdminCache } from './AdminCacheProvider'
 
 interface Shift {
   id: number
@@ -30,6 +31,12 @@ function fmt(dateStr: string) {
 }
 
 export function WeekConfig() {
+  const cache = useAdminCache()
+  // isMounted tracks whether this component instance has already loaded once.
+  // On first mount we show cached data instantly (no re-fetch).
+  // After that (week navigation, mutations) we always fetch fresh.
+  const isMounted = useRef(false)
+
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
   const [weekNumber, setWeekNumber] = useState(0)
@@ -49,25 +56,38 @@ export function WeekConfig() {
     const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    const cacheKey = `weeks-${isoYear}-${isoWeek}`
+
+    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[] }) => {
+      setWeekYear(data.weekYear)
+      setWeekNumber(data.weekNumber)
+      setShifts(data.shifts)
+      setDays(data.days)
+      setLocal(data.shifts.map((s: Shift) => ({ ...s })))
+      const drafts: Record<number, string> = {}
+      data.shifts.forEach((s: Shift) => { drafts[s.id] = String(s.slots) })
+      setDraftSlots(drafts)
+      const c: Record<number, { approved: number; pending: number }> = {}
+      data.shifts.forEach((s: Shift) => {
+        c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0 }
+      })
+      setCounts(c)
+    }
+
+    // First mount only: serve from cache to avoid re-fetching data the user
+    // just saw in Översikt. Avoids overwriting in-progress edits on revisit.
+    if (!isMounted.current) {
+      isMounted.current = true
+      const cached = cache.get(cacheKey)
+      if (cached) { apply(cached as Parameters<typeof apply>[0]); return }
+    }
+
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
     if (!res.ok) return
     const data = await res.json()
-    setWeekYear(data.weekYear)
-    setWeekNumber(data.weekNumber)
-    setShifts(data.shifts)
-    setDays(data.days)
-    setLocal(data.shifts.map((s: Shift) => ({ ...s })))
-    const drafts: Record<number, string> = {}
-    data.shifts.forEach((s: Shift) => { drafts[s.id] = String(s.slots) })
-    setDraftSlots(drafts)
-
-    // Counts now come inline from /api/weeks
-    const c: Record<number, { approved: number; pending: number }> = {}
-    data.shifts.forEach((s: Shift) => {
-      c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0 }
-    })
-    setCounts(c)
-  }, [weekOffset])
+    cache.set(cacheKey, data)   // keep cache up-to-date for other tabs
+    apply(data)
+  }, [weekOffset, cache])
 
   useEffect(() => { load() }, [weekOffset, load])
 

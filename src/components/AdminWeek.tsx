@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet } from './Icons'
 import { Toast, useToast } from './Toast'
+import { useAdminCache } from './AdminCacheProvider'
 
 interface Shift {
   id: number
@@ -33,7 +34,9 @@ export function AdminWeek() {
   const [weekNumber, setWeekNumber] = useState(0)
   const [shifts, setShifts] = useState<Shift[]>([])
   const [days, setDays] = useState<DayInfo[]>([])
+  const [loading, setLoading] = useState(true)
   const { toast, show: showToast, clear: clearToast } = useToast()
+  const cache = useAdminCache()
 
   const load = useCallback(async (offset: number) => {
     const base = new Date()
@@ -41,14 +44,31 @@ export function AdminWeek() {
     const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    const cacheKey = `weeks-${isoYear}-${isoWeek}`
+
+    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[] }) => {
+      setWeekYear(data.weekYear)
+      setWeekNumber(data.weekNumber)
+      setShifts(data.shifts)
+      setDays(data.days)
+      setLoading(false)
+    }
+
+    // Stale-while-revalidate: show cached data instantly, then refresh silently.
+    const cached = cache.get(cacheKey)
+    if (cached) apply(cached as typeof apply extends (d: infer D) => void ? D : never)
+
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
-    if (!res.ok) return
+    if (!res.ok) { setLoading(false); return }
     const data = await res.json()
-    setWeekYear(data.weekYear)
-    setWeekNumber(data.weekNumber)
-    setShifts(data.shifts)
-    setDays(data.days)
-  }, [])
+    cache.set(cacheKey, data)
+    apply(data)
+
+    // Prefetch Chaufförer-tab data in the background after the overview loads.
+    if (!cache.get('users')) {
+      fetch('/api/users').then(r => r.json()).then(u => cache.set('users', u)).catch(() => {})
+    }
+  }, [cache])
 
   useEffect(() => { load(weekOffset) }, [weekOffset, load])
 
@@ -80,6 +100,24 @@ export function AdminWeek() {
         </div>
       </div>
 
+      {loading && shifts.length === 0 ? (
+        <div className="week-grid">
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} className="wk-card skel-card">
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                <div>
+                  <div className="skel" style={{ width:64, height:13, marginBottom:6 }} />
+                  <div className="skel" style={{ width:44, height:11 }} />
+                </div>
+                <div className="skel" style={{ width:56, height:20, borderRadius:20 }} />
+              </div>
+              <div className="skel" style={{ width:96, height:11, marginTop:14 }} />
+              <div className="skel" style={{ width:'100%', height:8, marginTop:16, borderRadius:4 }} />
+              <div className="skel" style={{ width:80, height:11, marginTop:10 }} />
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="week-grid">
         {days.map(day => {
           const shift = shifts.find(s => s.day_index === day.dayIndex)
@@ -127,6 +165,7 @@ export function AdminWeek() {
           )
         })}
       </div>
+      )}
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
     </>

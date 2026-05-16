@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Download, FileSpreadsheet } from './Icons'
 import { Toast, useToast } from './Toast'
+import { useAdminCache } from './AdminCacheProvider'
 
 interface DriverRow { name: string; shifts: number; hours: number; last_shift: string }
 interface WeekRow { week_year: number; week_number: number; shifts: number; hours: number; drivers: number; last_date: string }
@@ -15,7 +16,10 @@ function nWeeksAgoStr(n: number) {
   return d.toISOString().slice(0, 10)
 }
 
+const WEEKS_CACHE_KEY = 'weeks-current'
+
 export function ExportView() {
+  const cache = useAdminCache()
   const [from, setFrom] = useState(nWeeksAgoStr(12))
   const [to, setTo] = useState(todayStr())
   const [group, setGroup] = useState<'driver' | 'week'>('driver')
@@ -25,11 +29,15 @@ export function ExportView() {
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   useEffect(() => {
+    // Use cached current-week info if available (avoids a round-trip on revisit).
+    const cached = cache.get(WEEKS_CACHE_KEY) as { weekYear: number; weekNumber: number } | undefined
+    if (cached) { setWeekYear(cached.weekYear); setWeekNumber(cached.weekNumber) }
     fetch('/api/weeks').then(r => r.json()).then(d => {
+      cache.set(WEEKS_CACHE_KEY, { weekYear: d.weekYear, weekNumber: d.weekNumber })
       setWeekYear(d.weekYear)
       setWeekNumber(d.weekNumber)
     })
-  }, [])
+  }, [cache])
 
   useEffect(() => {
     // Debounce: wait 400 ms after last change before fetching preview.

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Phone } from './Icons'
 import { Toast, useToast } from './Toast'
+import { useAdminCache } from './AdminCacheProvider'
 
 interface Driver {
   id: string
@@ -15,8 +16,12 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
+const CACHE_KEY = 'users'
+
 export function DriversTable() {
-  const [drivers, setDrivers] = useState<Driver[]>([])
+  const cache = useAdminCache()
+  const [drivers, setDrivers] = useState<Driver[]>(() => (cache.get(CACHE_KEY) as Driver[]) ?? [])
+  const [loading, setLoading] = useState(!cache.get(CACHE_KEY))
   const [editId, setEditId] = useState<string | null>(null)
   const [editPhone, setEditPhone] = useState('')
   const [pwUserId, setPwUserId] = useState<string | null>(null)
@@ -24,8 +29,16 @@ export function DriversTable() {
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   useEffect(() => {
-    fetch('/api/users').then(r => r.json()).then(setDrivers)
-  }, [])
+    // Stale-while-revalidate: if cache exists, data is already shown —
+    // refresh silently in background; otherwise show loading skeleton.
+    fetch('/api/users')
+      .then(r => r.json())
+      .then(data => {
+        cache.set(CACHE_KEY, data)
+        setDrivers(data)
+        setLoading(false)
+      })
+  }, [cache])
 
   const savePhone = async (id: string) => {
     const res = await fetch('/api/users', {
@@ -137,6 +150,23 @@ export function DriversTable() {
       </td>
     </tr>
   ))
+
+  if (loading) {
+    return (
+      <div className="tbl-wrap" style={{ padding: '8px 0' }}>
+        {[...Array(6)].map((_, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+            <div className="skel" style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <div className="skel" style={{ width: '38%', height: 13 }} />
+              <div className="skel" style={{ width: '22%', height: 11 }} />
+            </div>
+            <div className="skel" style={{ width: 56, height: 20, borderRadius: 20 }} />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <>
