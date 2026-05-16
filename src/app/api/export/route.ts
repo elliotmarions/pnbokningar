@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     rows.forEach(r => ws.addRow(r))
 
     const detail = await sql<{ name: string; date: string; day_index: number; approved_at: string }[]>`
-      SELECT u.name, s.date, s.day_index, ap.approved_at::text AS approved_at
+      SELECT u.name, s.date, s.day_index, (ap.approved_at AT TIME ZONE 'Europe/Stockholm')::text AS approved_at
       FROM approvals ap
       JOIN applications a ON a.id = ap.application_id
       JOIN shifts s ON s.id = a.shift_id

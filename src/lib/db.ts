@@ -242,7 +242,7 @@ export const applicationRepo = {
   async apply(shiftId: number, userId: string): Promise<DbApplication> {
     await sql`INSERT INTO applications (shift_id, user_id) VALUES (${shiftId}, ${userId})`
     const [app] = await sql<DbApplication[]>`
-      SELECT id, shift_id, user_id, applied_at::text AS applied_at
+      SELECT id, shift_id, user_id, (applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at
       FROM applications WHERE shift_id = ${shiftId} AND user_id = ${userId}
     `
     return app
@@ -268,7 +268,7 @@ export const applicationRepo = {
       withdrawn: number
     }
     return sql<Row[]>`
-      SELECT a.id, a.shift_id, a.user_id, a.applied_at::text AS applied_at,
+      SELECT a.id, a.shift_id, a.user_id, a.(applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
              a.rejected, a.rejection_reason, a.withdrawn,
              u.name AS user_name, u.phone AS user_phone,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
@@ -308,7 +308,7 @@ export const applicationRepo = {
       withdrawn: number
     }
     return sql<Row[]>`
-      SELECT a.id, a.shift_id, a.user_id, a.applied_at::text AS applied_at,
+      SELECT a.id, a.shift_id, a.user_id, a.(applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
              a.rejected, a.rejection_reason, a.withdrawn,
              s.date AS shift_date, s.day_index AS shift_day_index,
              s.week_year AS shift_week_year, s.week_number AS shift_week_number,
@@ -367,7 +367,7 @@ export const approvalRepo = {
       ON CONFLICT (application_id) DO NOTHING
     `
     const [approval] = await sql<DbApproval[]>`
-      SELECT id, application_id, approved_by, approved_at::text AS approved_at, sms_sent, reminder_sent
+      SELECT id, application_id, approved_by, (approved_at AT TIME ZONE 'Europe/Stockholm')::text AS approved_at, sms_sent, reminder_sent
       FROM approvals WHERE application_id = ${applicationId}
     `
     return approval
