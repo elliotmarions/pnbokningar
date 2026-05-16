@@ -10,6 +10,8 @@ interface Shift {
   date: string
   is_open: number
   slots: number
+  approved?: number
+  pending?: number
 }
 interface DayInfo {
   dayIndex: number
@@ -59,11 +61,11 @@ export function WeekConfig() {
     data.shifts.forEach((s: Shift) => { drafts[s.id] = String(s.slots) })
     setDraftSlots(drafts)
 
+    // Counts now come inline from /api/weeks
     const c: Record<number, { approved: number; pending: number }> = {}
-    await Promise.all(data.shifts.map(async (s: Shift) => {
-      const r = await fetch(`/api/shifts/${s.id}/counts`)
-      if (r.ok) c[s.id] = await r.json()
-    }))
+    data.shifts.forEach((s: Shift) => {
+      c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0 }
+    })
     setCounts(c)
   }, [weekOffset])
 

@@ -29,7 +29,6 @@ export function ExportView() {
       setWeekYear(d.weekYear)
       setWeekNumber(d.weekNumber)
     })
-    loadPreview()
   }, [])
 
   useEffect(() => { loadPreview() }, [from, to, group])

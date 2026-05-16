@@ -159,12 +159,33 @@ export const shiftRepo = {
     `
   },
 
+  async getWeekWithCounts(weekYear: number, weekNumber: number) {
+    await ensureMigrated()
+    type Row = DbShift & { approved: number; pending: number }
+    return sql<Row[]>`
+      SELECT s.*,
+        COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
+        COALESCE(COUNT(DISTINCT CASE WHEN a.rejected = 0 THEN a.id END) - COUNT(DISTINCT ap.id), 0)::int AS pending
+      FROM shifts s
+      LEFT JOIN applications a ON a.shift_id = s.id
+      LEFT JOIN approvals ap ON ap.application_id = a.id
+      WHERE s.week_year = ${weekYear} AND s.week_number = ${weekNumber}
+      GROUP BY s.id
+      ORDER BY s.day_index
+    `
+  },
+
   async ensureWeek(
     weekYear: number,
     weekNumber: number,
     days: { dayIndex: number; date: string }[]
   ): Promise<DbShift[]> {
     await ensureMigrated()
+
+    // Fast path: if the week is fully created, skip the transaction entirely.
+    const existing = await shiftRepo.getWeek(weekYear, weekNumber)
+    if (existing.length === days.length) return existing
+
     const today = new Date()
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 

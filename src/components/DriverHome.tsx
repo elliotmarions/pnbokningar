@@ -26,7 +26,7 @@ interface Application {
 interface WeekData {
   weekYear: number
   weekNumber: number
-  shifts: { id: number; day_index: number; date: string; is_open: number; slots: number }[]
+  shifts: { id: number; day_index: number; date: string; is_open: number; slots: number; approved?: number; pending?: number }[]
   days: { dayIndex: number; date: string; label: string; shortLabel: string; startTime: string; endTime: string; holiday: { name: string; type: 'holiday' | 'eve' } | null }[]
 }
 
@@ -93,14 +93,10 @@ export function DriverHome() {
       setApplications(apps)
     }
 
-    // Load approved counts for each shift
+    // Counts now come inline from /api/weeks
     const counts: Record<number, number> = {}
     for (const shift of data.shifts) {
-      const countRes = await fetch(`/api/shifts/${shift.id}/counts`)
-      if (countRes.ok) {
-        const c = await countRes.json()
-        counts[shift.id] = c.approved
-      }
+      counts[shift.id] = shift.approved ?? 0
     }
     setAllApprovedCounts(counts)
   }, [])

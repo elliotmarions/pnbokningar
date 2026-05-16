@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet } from './Icons'
 import { Toast, useToast } from './Toast'
 
@@ -9,6 +9,8 @@ interface Shift {
   date: string
   is_open: number
   slots: number
+  approved: number
+  pending: number
 }
 interface DayInfo {
   dayIndex: number
@@ -19,11 +21,6 @@ interface DayInfo {
   endTime: string
   holiday: { name: string; type: 'holiday' | 'eve' } | null
 }
-interface Counts {
-  approved: number
-  pending: number
-}
-
 function fmt(dateStr: string) {
   const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
   const d = new Date(dateStr + 'T12:00:00')
@@ -36,7 +33,6 @@ export function AdminWeek() {
   const [weekNumber, setWeekNumber] = useState(0)
   const [shifts, setShifts] = useState<Shift[]>([])
   const [days, setDays] = useState<DayInfo[]>([])
-  const [counts, setCounts] = useState<Record<number, Counts>>({})
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   const load = useCallback(async (offset: number) => {
@@ -52,13 +48,6 @@ export function AdminWeek() {
     setWeekNumber(data.weekNumber)
     setShifts(data.shifts)
     setDays(data.days)
-
-    const c: Record<number, Counts> = {}
-    await Promise.all(data.shifts.map(async (s: Shift) => {
-      const r = await fetch(`/api/shifts/${s.id}/counts`)
-      if (r.ok) c[s.id] = await r.json()
-    }))
-    setCounts(c)
   }, [])
 
   useEffect(() => { load(weekOffset) }, [weekOffset, load])
@@ -67,8 +56,8 @@ export function AdminWeek() {
     window.location.href = `/api/export/planning?year=${weekYear}&week=${weekNumber}`
   }
 
-  const totalApproved = Object.values(counts).reduce((s, c) => s + c.approved, 0)
-  const totalPending = Object.values(counts).reduce((s, c) => s + c.pending, 0)
+  const totalApproved = useMemo(() => shifts.reduce((s, c) => s + (c.approved ?? 0), 0), [shifts])
+  const totalPending = useMemo(() => shifts.reduce((s, c) => s + (c.pending ?? 0), 0), [shifts])
 
   return (
     <>
@@ -95,7 +84,7 @@ export function AdminWeek() {
         {days.map(day => {
           const shift = shifts.find(s => s.day_index === day.dayIndex)
           if (!shift) return null
-          const c = counts[shift.id] ?? { approved: 0, pending: 0 }
+          const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0 }
           const pct = shift.slots > 0 ? Math.min(100, (c.approved / shift.slots) * 100) : 0
           const isFull = c.approved >= shift.slots
           const badgeClass = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'

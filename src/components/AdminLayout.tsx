@@ -1,5 +1,6 @@
 'use client'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
 import { Home, Calendar, Users, Download, Briefcase, LogOut, Sun } from './Icons'
 
@@ -18,7 +19,6 @@ function initials(name?: string | null) {
 
 export function AdminLayout({ children, title, sub }: { children: React.ReactNode; title: string; sub: string }) {
   const pathname = usePathname()
-  const router = useRouter()
   const { data: session } = useSession()
   const user = session?.user
 
@@ -35,21 +35,22 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
 
         <div className="nav-section-label">Administration</div>
         {NAV.map(({ href, label, icon: Icon }) => (
-          <button
+          <Link
             key={href}
+            href={href}
+            prefetch
             className={`nav-item ${pathname === href ? 'active' : ''}`}
-            onClick={() => router.push(href)}
           >
             <Icon className="svg-ico ico" />
             {label}
-          </button>
+          </Link>
         ))}
 
         <div className="nav-section-label">Vyer</div>
-        <button className="nav-item" onClick={() => router.push('/driver')}>
+        <Link href="/driver" prefetch className="nav-item">
           <Briefcase className="svg-ico ico" />
           Chaufförsvy
-        </button>
+        </Link>
 
         <div className="nav-foot">
           <div className="avatar">{initials(user?.name)}</div>
