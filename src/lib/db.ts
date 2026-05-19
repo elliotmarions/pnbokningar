@@ -231,6 +231,30 @@ export const shiftRepo = {
       await sql`UPDATE shifts SET slots = ${fields.slots} WHERE id = ${id}`
     }
   },
+
+  // Close any open shifts whose start time has passed (runs via cron).
+  // Start times: 09:45 Saturday (day_index=5), 16:00 all other days.
+  async closeExpired(): Promise<number> {
+    await ensureMigrated()
+    const result = await sql`
+      UPDATE shifts SET is_open = 0
+      WHERE is_open = 1
+      AND (
+        -- Past dates
+        date < (NOW() AT TIME ZONE 'Europe/Stockholm')::date::text
+        OR (
+          -- Today, start time has passed
+          date = (NOW() AT TIME ZONE 'Europe/Stockholm')::date::text
+          AND (
+            (day_index = 5  AND (NOW() AT TIME ZONE 'Europe/Stockholm')::time >= TIME '09:45')
+            OR
+            (day_index != 5 AND (NOW() AT TIME ZONE 'Europe/Stockholm')::time >= TIME '16:00')
+          )
+        )
+      )
+    `
+    return result.count
+  },
 }
 
 // --------------- Applications ---------------
