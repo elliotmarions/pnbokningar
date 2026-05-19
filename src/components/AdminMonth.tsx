@@ -208,11 +208,9 @@ export function AdminMonth() {
                 {week.days.map(d => {
                   const shift      = shiftByDate[d.date]
                   const isToday    = d.date === todayStr
-                  const isPast     = d.inRange && d.date < todayStr
-                  const hadDrivers = isPast && shift && shift.approved > 0
-                  // Explicitly closed by admin (is_open=0), not just a past day
+                  const isPast           = d.inRange && d.date < todayStr
                   const isManuallyClosed = !isPast && shift && shift.is_open === 0
-                  const showClosed = (isPast && !hadDrivers) || isManuallyClosed
+                  const showClosed       = isPast || !!isManuallyClosed
                   const isExpanded = shift ? expandedIds.has(shift.id) : false
                   const drivers    = shift ? driversMap[shift.id] : undefined
                   const isFull     = shift ? shift.approved >= shift.slots : false
@@ -233,9 +231,7 @@ export function AdminMonth() {
                     >
                       <div className="month-cell-top">
                         <span className="month-cell-day">{d.n}</span>
-                        {hadDrivers ? (
-                          <span className="month-cell-past-count">{shift!.approved} st</span>
-                        ) : showClosed ? (
+                        {showClosed ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : shift?.is_open === 1 ? (
                           <span className={`month-cell-count ${isFull ? 'full' : ''}`}>
@@ -243,6 +239,10 @@ export function AdminMonth() {
                           </span>
                         ) : null}
                       </div>
+
+                      {showClosed && shift && shift.approved > 0 && (
+                        <div className="month-cell-past-count">{shift.approved} st</div>
+                      )}
 
                       {shift?.is_open === 1 && shift.pending > 0 && (
                         <div className="month-cell-pending">
