@@ -220,7 +220,7 @@ export function AdminMonth() {
                         !d.inRange              ? 'out-of-month' : '',
                         isToday                 ? 'is-today'     : '',
                         shift?.is_open          ? 'has-shift'    : '',
-                        shift && !shift.is_open ? 'is-closed'    : '',
+                        shift && !shift.is_open && d.date <= todayStr ? 'is-closed' : '',
                         isExpanded              ? 'is-selected'  : '',
                         shift                   ? 'clickable'    : '',
                       ].filter(Boolean).join(' ')}
