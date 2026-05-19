@@ -209,13 +209,11 @@ export function AdminMonth() {
                 {week.days.map(d => {
                   const shift      = shiftByDate[d.date]
                   const isToday    = d.date === todayStr
-                  const isPast           = d.inRange && d.date < todayStr
-                  // Only "Stängd" if admin explicitly opened it at some point (ever_opened=1) and then closed it
-                  const isManuallyClosed = !isPast && shift && shift.is_open === 0 && shift.ever_opened === 1
-                  const showClosed       = isPast || !!isManuallyClosed
-                  const isExpanded = shift ? expandedIds.has(shift.id) : false
-                  const drivers    = shift ? driversMap[shift.id] : undefined
-                  const isFull     = shift ? shift.approved >= shift.slots : false
+                  const isOpen     = shift?.is_open === 1
+                  const showClosed = d.inRange && !isOpen
+                  const isExpanded = isOpen ? expandedIds.has(shift!.id) : false
+                  const drivers    = isOpen ? driversMap[shift!.id] : undefined
+                  const isFull     = isOpen ? shift!.approved >= shift!.slots : false
 
                   return (
                     <div
@@ -224,12 +222,12 @@ export function AdminMonth() {
                         'month-cell',
                         !d.inRange              ? 'out-of-month' : '',
                         isToday                 ? 'is-today'     : '',
-                        shift?.is_open === 1    ? 'has-shift'    : '',
+                        isOpen                  ? 'has-shift'    : '',
                         showClosed              ? 'is-closed'    : '',
                         isExpanded              ? 'is-selected'  : '',
-                        shift && !isPast && !isManuallyClosed ? 'clickable' : '',
+                        isOpen                  ? 'clickable'    : '',
                       ].filter(Boolean).join(' ')}
-                      onClick={shift && !isPast && !isManuallyClosed ? () => handleCell(shift) : undefined}
+                      onClick={isOpen ? () => handleCell(shift!) : undefined}
                     >
                       <div className="month-cell-top">
                         <span className="month-cell-day">{d.n}</span>
