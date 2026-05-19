@@ -107,31 +107,54 @@ export function DriverHome() {
   useEffect(() => { loadWeek(weekOffset) }, [weekOffset, loadWeek])
 
   const handleApply = async (shiftId: number, force = false) => {
+    // Optimistic: add a pending app immediately so the UI reacts instantly
+    const tempId = -Date.now()
+    const optimisticApp: Application = {
+      id: tempId,
+      shift_id: shiftId,
+      approved: false,
+      rejected: false,
+      rejection_reason: null,
+      withdrawn: false,
+      applied_at: new Date().toISOString(),
+    }
+    setApplications(prev => [...prev, optimisticApp])
+
     const res = await fetch('/api/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shiftId, force }),
     })
     const data = await res.json()
+
     if (res.ok && data.warning === 'CONSECUTIVE_DAYS') {
+      // Revert optimistic — warning needs confirmation
+      setApplications(prev => prev.filter(a => a.id !== tempId))
       setConsecutiveWarning({ shiftId, count: data.count })
       return
     }
     if (res.ok) {
-      await loadWeek(weekOffset)
+      // Replace temp with real
+      setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
       showToast('Intresseanmälan skickad!')
     } else {
+      setApplications(prev => prev.filter(a => a.id !== tempId))
       showToast('Något gick fel.', 'error')
     }
   }
 
   const handleWithdraw = async (appId: number) => {
+    // Optimistic: remove from local state instantly
+    const previous = applications
+    setApplications(prev => prev.filter(a => a.id !== appId))
+
     const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
     if (res.ok) {
-      await loadWeek(weekOffset)
       showToast('Anmälan återkallad.')
     } else {
-      const data = await res.json()
+      // Revert
+      setApplications(previous)
+      const data = await res.json().catch(() => ({}))
       if (data.error === 'ALREADY_APPROVED') showToast('Du är redan godkänd — kontakta trafikledningen.', 'error')
       else showToast('Något gick fel.', 'error')
     }
