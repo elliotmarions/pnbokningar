@@ -760,6 +760,38 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .book-driver-row:disabled { opacity: 0.6; cursor: not-allowed; }
 .book-driver-empty { padding: 12px; font-size: 12px; color: var(--text-tertiary); font-style: italic; }
 
+/* ===== Long-term bookings ===== */
+.lt-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+}
+.lt-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 16px 14px; border-bottom: 1px solid var(--border);
+}
+.lt-weeks { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.lt-week-row { display: flex; align-items: flex-start; gap: 10px; }
+.lt-week-label {
+  font-size: 10px; color: var(--text-tertiary); font-weight: 500;
+  min-width: 26px; padding-top: 6px; font-variant-numeric: tabular-nums;
+}
+.lt-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.lt-chip {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 5px 8px; border-radius: 6px; border: 1px solid transparent;
+  cursor: pointer; transition: all var(--t); min-width: 38px;
+  background: var(--primary-soft); border-color: var(--primary-border);
+}
+.lt-chip:hover:not(:disabled) { filter: brightness(1.15); }
+.lt-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+.lt-chip.excluded {
+  background: var(--bg-elevated); border-color: var(--border);
+  opacity: 0.45;
+}
+.lt-chip-day { font-size: 9px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+.lt-chip.active .lt-chip-day { color: var(--primary); }
+.lt-chip-n { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); margin-top: 1px; }
+.lt-chip.excluded .lt-chip-n { text-decoration: line-through; color: var(--text-tertiary); }
+
 /* ===== Skeleton loader ===== */
 @keyframes shimmer {
   0%   { background-position: 200% 0; }

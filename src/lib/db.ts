@@ -91,6 +91,19 @@ async function migrate() {
         OR id IN (SELECT DISTINCT shift_id FROM applications)
       )
   `
+  // Long-term bookings
+  await sql`
+    CREATE TABLE IF NOT EXISTS long_term_bookings (
+      id             SERIAL PRIMARY KEY,
+      user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      from_date      TEXT NOT NULL,
+      to_date        TEXT NOT NULL,
+      excluded_dates TEXT NOT NULL DEFAULT '[]',
+      notes          TEXT,
+      created_by     TEXT NOT NULL REFERENCES users(id),
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
 }
 
 // --------------- Users ---------------
@@ -268,6 +281,66 @@ export const shiftRepo = {
       GROUP BY s.id
       ORDER BY s.date
     `
+  },
+}
+
+// --------------- Long-term bookings ---------------
+
+export const longTermRepo = {
+  async all() {
+    await ensureMigrated()
+    return sql<{
+      id: number; user_id: string; from_date: string; to_date: string;
+      excluded_dates: string; notes: string | null; created_at: string;
+      user_name: string; user_phone: string | null;
+    }[]>`
+      SELECT lt.*, u.name AS user_name, u.phone AS user_phone
+      FROM long_term_bookings lt
+      JOIN users u ON u.id = lt.user_id
+      ORDER BY lt.from_date ASC, u.name ASC
+    `
+  },
+
+  async create(data: { userId: string; fromDate: string; toDate: string; notes?: string; createdBy: string }) {
+    await ensureMigrated()
+    const [booking] = await sql<{ id: number }[]>`
+      INSERT INTO long_term_bookings (user_id, from_date, to_date, notes, created_by)
+      VALUES (${data.userId}, ${data.fromDate}, ${data.toDate}, ${data.notes ?? null}, ${data.createdBy})
+      RETURNING id
+    `
+    return booking
+  },
+
+  async delete(id: number) {
+    await ensureMigrated()
+    await sql`DELETE FROM long_term_bookings WHERE id = ${id}`
+  },
+
+  async toggleExcludeDate(id: number, date: string): Promise<string[]> {
+    await ensureMigrated()
+    const [booking] = await sql<{ excluded_dates: string }[]>`
+      SELECT excluded_dates FROM long_term_bookings WHERE id = ${id}
+    `
+    if (!booking) throw new Error('Not found')
+    const excluded: string[] = JSON.parse(booking.excluded_dates)
+    const idx = excluded.indexOf(date)
+    if (idx >= 0) excluded.splice(idx, 1)
+    else excluded.push(date)
+    await sql`UPDATE long_term_bookings SET excluded_dates = ${JSON.stringify(excluded)} WHERE id = ${id}`
+    return excluded
+  },
+
+  async forDate(date: string): Promise<{ id: number; user_id: string }[]> {
+    await ensureMigrated()
+    const rows = await sql<{ id: number; user_id: string; excluded_dates: string }[]>`
+      SELECT id, user_id, excluded_dates
+      FROM long_term_bookings
+      WHERE from_date <= ${date} AND to_date >= ${date}
+    `
+    return rows.filter(r => {
+      const excluded: string[] = JSON.parse(r.excluded_dates)
+      return !excluded.includes(date)
+    })
   },
 }
 

@@ -1,0 +1,284 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { Plus, Trash2, X, Check } from './Icons'
+
+interface Driver { id: string; name: string; phone: string | null; role: string }
+interface Booking {
+  id: number
+  user_id: string
+  user_name: string
+  user_phone: string | null
+  from_date: string
+  to_date: string
+  excluded_dates: string // JSON string array
+  notes: string | null
+  created_at: string
+}
+
+const DAY_SHORT = ['Mån','Tis','Ons','Tor','Fre','Lör']
+const MONTHS = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
+
+function fmt(dateStr: string) {
+  const d = new Date(dateStr + 'T12:00:00')
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`
+}
+
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date); d.setDate(d.getDate() + n); return d
+}
+function toStr(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+}
+function isoWeek(date: Date): number {
+  const d = new Date(date)
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
+  const w1 = new Date(d.getFullYear(), 0, 4)
+  return Math.round(((d.getTime() - w1.getTime()) / 86400000 + (w1.getDay() + 6) % 7) / 7) + 1
+}
+function initials(name: string) {
+  return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
+}
+
+// Returns all Mon-Sat dates in range, grouped by ISO week
+function buildWeekGroups(fromDate: string, toDate: string): { wk: number; days: { date: string; dayIdx: number; n: number }[] }[] {
+  const from = new Date(fromDate + 'T00:00:00')
+  const to   = new Date(toDate   + 'T00:00:00')
+  const groups: { wk: number; days: { date: string; dayIdx: number; n: number }[] }[] = []
+  let cur = new Date(from)
+  while (cur <= to) {
+    const dow = cur.getDay() // 0=Sun,1=Mon,...,6=Sat
+    if (dow >= 1 && dow <= 6) { // Mon-Sat only
+      const wk = isoWeek(cur)
+      const ds = toStr(cur)
+      const dayIdx = dow - 1 // 0=Mon ... 5=Sat
+      let group = groups.find(g => g.wk === wk)
+      if (!group) { group = { wk, days: [] }; groups.push(group) }
+      group.days.push({ date: ds, dayIdx, n: cur.getDate() })
+    }
+    cur = addDays(cur, 1)
+  }
+  return groups
+}
+
+export function LongTermBookings() {
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+
+  // Create form state
+  const today = toStr(new Date())
+  const [selDriver, setSelDriver] = useState('')
+  const [fromDate, setFromDate] = useState(today)
+  const [toDate, setToDate]     = useState(today)
+  const [notes, setNotes]       = useState('')
+  const [saving, setSaving]     = useState(false)
+
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [togglingDate, setTogglingDate] = useState<string | null>(null) // "bookingId:date"
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/long-term').then(r => r.json()),
+      fetch('/api/users').then(r => r.json()),
+    ]).then(([lt, users]) => {
+      setBookings(lt.bookings ?? [])
+      setDrivers((users as Driver[]).filter(u => u.role === 'driver'))
+    }).finally(() => setLoading(false))
+  }, [])
+
+  const handleCreate = async () => {
+    if (!selDriver || !fromDate || !toDate) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/long-term', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: selDriver, fromDate, toDate, notes: notes || undefined }),
+      })
+      if (!res.ok) return
+      // Reload
+      const lt = await fetch('/api/long-term').then(r => r.json())
+      setBookings(lt.bookings ?? [])
+      setShowCreate(false)
+      setSelDriver(''); setFromDate(today); setToDate(today); setNotes('')
+    } finally { setSaving(false) }
+  }
+
+  const handleDelete = async (id: number) => {
+    setDeletingId(id)
+    try {
+      await fetch(`/api/long-term/${id}`, { method: 'DELETE' })
+      setBookings(prev => prev.filter(b => b.id !== id))
+    } finally { setDeletingId(null) }
+  }
+
+  const handleToggleDate = async (bookingId: number, date: string) => {
+    const key = `${bookingId}:${date}`
+    setTogglingDate(key)
+    try {
+      const res = await fetch(`/api/long-term/${bookingId}/toggle-date`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      })
+      const { excluded } = await res.json()
+      setBookings(prev => prev.map(b =>
+        b.id === bookingId ? { ...b, excluded_dates: JSON.stringify(excluded) } : b
+      ))
+    } finally { setTogglingDate(null) }
+  }
+
+  if (loading) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {[0,1,2].map(i => <div key={i} className="skel" style={{ height: 120, borderRadius: 8 }} />)}
+    </div>
+  )
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-tertiary)', fontWeight: 500, marginBottom: 4 }}>
+            {bookings.length} aktiva bokningar
+          </div>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+          <Plus className="svg-ico svg-ico-sm" />
+          Ny bokning
+        </button>
+      </div>
+
+      {/* Booking cards */}
+      {bookings.length === 0 ? (
+        <div className="empty-state">Inga långtidsbokningar ännu.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {bookings.map(b => {
+            const excluded: string[] = JSON.parse(b.excluded_dates)
+            const groups = buildWeekGroups(b.from_date, b.to_date)
+            const totalDays = groups.reduce((s, g) => s + g.days.length, 0)
+            const activeDays = totalDays - excluded.length
+            return (
+              <div key={b.id} className="lt-card">
+                {/* Card header */}
+                <div className="lt-card-head">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div className="avatar lg">{initials(b.user_name)}</div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{b.user_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {fmt(b.from_date)} – {fmt(b.to_date)}
+                        <span style={{ marginLeft: 8, color: 'var(--text-tertiary)' }}>·</span>
+                        <span style={{ marginLeft: 8 }}>{activeDays} av {totalDays} dagar</span>
+                      </div>
+                      {b.notes && <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 3 }}>{b.notes}</div>}
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-sm btn-danger-ghost btn-icon"
+                    disabled={deletingId === b.id}
+                    onClick={() => handleDelete(b.id)}
+                    title="Ta bort bokning"
+                  >
+                    <Trash2 className="svg-ico svg-ico-sm" />
+                  </button>
+                </div>
+
+                {/* Day chips by week */}
+                <div className="lt-weeks">
+                  {groups.map(group => (
+                    <div key={group.wk} className="lt-week-row">
+                      <span className="lt-week-label">v{group.wk}</span>
+                      <div className="lt-chips">
+                        {group.days.map(d => {
+                          const isExcluded = excluded.includes(d.date)
+                          const isToggling = togglingDate === `${b.id}:${d.date}`
+                          return (
+                            <button
+                              key={d.date}
+                              className={`lt-chip ${isExcluded ? 'excluded' : 'active'}`}
+                              onClick={() => handleToggleDate(b.id, d.date)}
+                              disabled={isToggling}
+                              title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
+                            >
+                              <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                              <span className="lt-chip-n">{d.n}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Create modal */}
+      {showCreate && (
+        <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
+          <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div className="modal-title" style={{ marginBottom: 0 }}>Ny långtidsbokning</div>
+              <button className="close-btn" onClick={() => setShowCreate(false)}><X className="svg-ico" /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 22 }}>
+              <div className="field">
+                <label>Chaufför</label>
+                <select
+                  value={selDriver}
+                  onChange={e => setSelDriver(e.target.value)}
+                  style={{ background: 'var(--bg-deep)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '8px 10px', borderRadius: 6, fontSize: 13, outline: 'none', colorScheme: 'dark' }}
+                >
+                  <option value="">Välj chaufför…</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="field">
+                  <label>Från</label>
+                  <input type="date" className="date-range-input" style={{ width: '100%' }} value={fromDate} min={today} onChange={e => setFromDate(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Till</label>
+                  <input type="date" className="date-range-input" style={{ width: '100%' }} value={toDate} min={fromDate} onChange={e => setToDate(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="field">
+                <label>Anteckning (valfritt)</label>
+                <input
+                  type="text"
+                  placeholder="T.ex. sommarvikariat"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  style={{ background: 'var(--bg-deep)', border: '1px solid var(--border)', color: 'var(--text-primary)', padding: '8px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }}
+                />
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-sm btn-ghost" onClick={() => setShowCreate(false)}>Avbryt</button>
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={!selDriver || !fromDate || !toDate || fromDate > toDate || saving}
+                onClick={handleCreate}
+              >
+                <Check className="svg-ico svg-ico-sm" />
+                {saving ? 'Sparar…' : 'Boka in'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
