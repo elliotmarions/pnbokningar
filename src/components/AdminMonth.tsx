@@ -86,8 +86,14 @@ export function AdminMonth() {
       .catch(() => setLoading(false))
   }, [year, month, cache])
 
-  const prevMonth = () => month === 1 ? (setYear(y => y-1), setMonth(12)) : setMonth(m => m-1)
-  const nextMonth = () => month === 12 ? (setYear(y => y+1), setMonth(1))  : setMonth(m => m+1)
+  const prevMonth = () => {
+    if (month === 1) { setYear(y => y - 1); setMonth(12) }
+    else setMonth(m => m - 1)
+  }
+  const nextMonth = () => {
+    if (month === 12) { setYear(y => y + 1); setMonth(1) }
+    else setMonth(m => m + 1)
+  }
 
   const handleCell = async (shift: MonthShift) => {
     const wasOpen = expandedIds.has(shift.id)
