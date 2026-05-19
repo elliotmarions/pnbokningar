@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { longTermRepo, shiftRepo, getDb } from '@/lib/db'
+import { longTermRepo, shiftRepo, getDb, customClosedRepo } from '@/lib/db'
 import { applyLongTermToShift } from '@/lib/apply-long-term'
+import { isHolidayOrEve } from '@/lib/holidays'
 
 export async function GET() {
   const session = await requireAdmin()
@@ -23,12 +24,17 @@ export async function POST(req: NextRequest) {
 
   const booking = await longTermRepo.create({ userId, fromDate, toDate, notes, createdBy: adminId })
 
-  // Auto-apply to all existing shifts in the date range
+  // Auto-apply to all existing open shifts in the date range, skipping closed days
   const sql = getDb()
   const shifts = await sql<{ id: number; date: string }[]>`
-    SELECT id, date FROM shifts WHERE date >= ${fromDate} AND date <= ${toDate}
+    SELECT id, date FROM shifts WHERE date >= ${fromDate} AND date <= ${toDate} AND is_open = 1
   `
+  const customClosedDates = new Set(
+    (await customClosedRepo.all()).map(d => d.date)
+  )
   for (const shift of shifts) {
+    if (isHolidayOrEve(shift.date)) continue
+    if (customClosedDates.has(shift.date)) continue
     await applyLongTermToShift(shift.id, shift.date, adminId)
   }
 

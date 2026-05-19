@@ -1,10 +1,16 @@
-import { getDb, applicationRepo, approvalRepo, longTermRepo } from './db'
+import { getDb, applicationRepo, approvalRepo, longTermRepo, customClosedRepo } from './db'
+import { isHolidayOrEve } from './holidays'
 
 /**
  * Applies any active long-term bookings to a specific shift.
  * Called when a shift is created or opened.
+ * Skips holidays, eves, and custom closed days.
  */
 export async function applyLongTermToShift(shiftId: number, date: string, adminId: string) {
+  if (isHolidayOrEve(date)) return
+  const customClosed = await customClosedRepo.forDate(date)
+  if (customClosed) return
+
   const sql = getDb()
   const bookings = await longTermRepo.forDate(date)
   for (const booking of bookings) {
