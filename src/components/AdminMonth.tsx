@@ -207,13 +207,14 @@ export function AdminMonth() {
               <Fragment key={week.wk}>
                 <div className="month-wk-label">v{week.wk}</div>
                 {week.days.map(d => {
-                  const shift      = shiftByDate[d.date]
-                  const isToday    = d.date === todayStr
-                  const isOpen     = shift?.is_open === 1
-                  const showClosed = d.inRange && !isOpen
-                  const isExpanded = isOpen ? expandedIds.has(shift!.id) : false
-                  const drivers    = isOpen ? driversMap[shift!.id] : undefined
-                  const isFull     = isOpen ? shift!.approved >= shift!.slots : false
+                  const shift       = shiftByDate[d.date]
+                  const isToday     = d.date === todayStr
+                  const isOpen      = shift?.is_open === 1
+                  const showClosed  = d.inRange && !isOpen
+                  const isClickable = isOpen || (showClosed && !!shift && shift.approved > 0)
+                  const isExpanded  = shift ? expandedIds.has(shift.id) : false
+                  const drivers     = shift ? driversMap[shift.id] : undefined
+                  const isFull      = isOpen ? shift!.approved >= shift!.slots : false
 
                   return (
                     <div
@@ -225,9 +226,9 @@ export function AdminMonth() {
                         isOpen                  ? 'has-shift'    : '',
                         showClosed              ? 'is-closed'    : '',
                         isExpanded              ? 'is-selected'  : '',
-                        isOpen                  ? 'clickable'    : '',
+                        isClickable             ? 'clickable'    : '',
                       ].filter(Boolean).join(' ')}
-                      onClick={isOpen ? () => handleCell(shift!) : undefined}
+                      onClick={isClickable ? () => handleCell(shift!) : undefined}
                     >
                       <div className="month-cell-top">
                         <span className="month-cell-day">{d.n}</span>
