@@ -73,7 +73,7 @@ function monthTo(year: number, month: number): string {
   return `${year}-${String(month).padStart(2,'0')}-${String(last).padStart(2,'0')}`
 }
 
-export function AdminMonth() {
+export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
   const now = new Date()
   const todayStr = fmt(now)
 
@@ -82,7 +82,6 @@ export function AdminMonth() {
   const [month, setMonth] = useState(now.getMonth() + 1)
 
   // Interval-mode inputs
-  const [mode,     setMode]     = useState<'month' | 'interval'>('month')
   const [fromDate, setFromDate] = useState(fmt(now))
   const [toDate,   setToDate]   = useState(fmt(addDays(now, 27)))
 
@@ -177,11 +176,6 @@ export function AdminMonth() {
           </div>
         </div>
 
-        {/* Mode toggle */}
-        <div className="view-toggle">
-          <button className={mode === 'month'    ? 'active' : ''} onClick={() => setMode('month')}>Månad</button>
-          <button className={mode === 'interval' ? 'active' : ''} onClick={() => setMode('interval')}>Intervall</button>
-        </div>
       </div>
 
       {/* Calendar grid */}
