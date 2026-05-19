@@ -64,6 +64,18 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
             <LogOut className="svg-ico" />
           </button>
         </div>
+
+        <div style={{
+          marginTop: 10,
+          paddingTop: 10,
+          borderTop: '1px solid var(--border)',
+          fontSize: 10.5,
+          color: 'var(--text-tertiary)',
+          textAlign: 'center',
+          letterSpacing: '0.3px',
+        }}>
+          Powered by <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Veddesta Hempaket</span>
+        </div>
       </aside>
 
       <div className="main">
