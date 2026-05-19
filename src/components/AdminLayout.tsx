@@ -2,12 +2,11 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
-import { Home, Calendar, Users, Download, Briefcase, LogOut, Sun, Layers } from './Icons'
+import { Home, Calendar, Users, Download, Briefcase, LogOut, Sun } from './Icons'
 
 const NAV = [
   { href: '/admin',            label: 'Översikt',    icon: Home },
   { href: '/admin/config',     label: 'Schemalägg',  icon: Calendar },
-  { href: '/admin/long-term',  label: 'Långtid',     icon: Layers },
   { href: '/admin/calendar',   label: 'Kalender',    icon: Sun },
   { href: '/admin/drivers',    label: 'Chaufförer',  icon: Users },
   { href: '/admin/export',     label: 'Export',      icon: Download },
