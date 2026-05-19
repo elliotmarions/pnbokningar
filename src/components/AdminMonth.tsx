@@ -132,23 +132,6 @@ export function AdminMonth() {
     }
   }
 
-  const [closing, setClosing] = useState(false)
-
-  const handleClosePast = async () => {
-    setClosing(true)
-    try {
-      await fetch('/api/admin/close-past', { method: 'POST' })
-      // Refetch current view
-      const key = `month-${from}-${to}`
-      cache.del(key)
-      const data = await fetch(`/api/months?from=${from}&to=${to}`).then(r => r.json())
-      cache.set(key, data)
-      setShifts(data.shifts ?? [])
-    } finally {
-      setClosing(false)
-    }
-  }
-
   const shiftByDate    = Object.fromEntries(shifts.map(s => [s.date, s]))
   const safeTo         = from <= to ? to : from
   const weeks          = buildWeeks(from, safeTo)
@@ -192,16 +175,6 @@ export function AdminMonth() {
             Tillsatta <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
           </div>
         </div>
-
-        {/* Close past button */}
-        <button
-          className="btn btn-sm"
-          onClick={handleClosePast}
-          disabled={closing}
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          {closing ? 'Stänger…' : 'Stäng passerade'}
-        </button>
 
         {/* Mode toggle */}
         <div className="view-toggle">
