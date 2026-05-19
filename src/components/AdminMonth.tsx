@@ -1,7 +1,8 @@
 'use client'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Phone } from './Icons'
 import { useAdminCache } from './AdminCacheProvider'
+import { getHolidayMap, HolidayInfo } from '../lib/holidays'
 
 interface MonthShift {
   id: number
@@ -17,6 +18,12 @@ interface Driver {
   id: number
   user_name: string
   user_phone: string | null
+}
+interface CustomClosedDay {
+  id: number
+  date: string
+  reason: string
+  color: string
 }
 
 const MONTH_NAMES = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December']
@@ -89,7 +96,15 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
   const [loading,     setLoading]     = useState(true)
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [driversMap,  setDriversMap]  = useState<Record<number, Driver[] | 'loading'>>({})
+  const [customClosed, setCustomClosed] = useState<CustomClosedDay[]>([])
   const cache = useAdminCache()
+
+  useEffect(() => {
+    fetch('/api/custom-closed')
+      .then(r => r.json())
+      .then(data => setCustomClosed(data.days ?? []))
+      .catch(() => {})
+  }, [])
 
   // Effective date range
   const from = mode === 'month' ? monthFrom(year, month) : fromDate
@@ -137,6 +152,21 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
   const weeks          = buildWeeks(from, safeTo)
   const totalApproved  = shifts.reduce((s, c) => s + c.approved, 0)
   const totalPending   = shifts.reduce((s, c) => s + c.pending,  0)
+
+  const holidayMap = useMemo(() => {
+    const fromYear = parseInt(from.slice(0, 4))
+    const toYear   = parseInt(safeTo.slice(0, 4))
+    const combined = new Map<string, HolidayInfo>()
+    for (let y = fromYear; y <= toYear; y++) {
+      for (const [k, v] of getHolidayMap(y)) combined.set(k, v)
+    }
+    return combined
+  }, [from, safeTo])
+
+  const customClosedMap = useMemo(
+    () => Object.fromEntries(customClosed.map(d => [d.date, d])),
+    [customClosed]
+  )
 
   return (
     <div>
@@ -209,6 +239,20 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
                   const isExpanded  = shift ? expandedIds.has(shift.id) : false
                   const drivers     = shift ? driversMap[shift.id] : undefined
                   const isFull      = isOpen ? shift!.approved >= shift!.slots : false
+                  const holiday     = holidayMap.get(d.date)
+                  const customDay   = customClosedMap[d.date]
+
+                  const HOLIDAY_COLOR: Record<string, string> = {
+                    holiday: '#ef4444',
+                    eve:     '#f59e0b',
+                    closed:  '#6b7280',
+                  }
+                  const calColor = customDay
+                    ? customDay.color
+                    : holiday ? HOLIDAY_COLOR[holiday.type] : null
+                  const calLabel = customDay
+                    ? customDay.reason
+                    : holiday ? holiday.name : null
 
                   if (!d.inRange && mode === 'interval') {
                     return <div key={d.date} className="month-cell" style={{ visibility:'hidden', border:'none', background:'transparent' }} />
@@ -226,10 +270,11 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
                         isExpanded              ? 'is-selected'  : '',
                         isClickable             ? 'clickable'    : '',
                       ].filter(Boolean).join(' ')}
+                      style={calColor ? { borderTop: `2px solid ${calColor}` } : undefined}
                       onClick={isClickable ? () => handleCell(shift!) : undefined}
                     >
                       <div className="month-cell-top">
-                        <span className="month-cell-day">{d.n}</span>
+                        <span className="month-cell-day" style={calColor ? { color: calColor } : undefined}>{d.n}</span>
                         {showClosed ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : shift?.is_open === 1 ? (
@@ -238,6 +283,12 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
                           </span>
                         ) : null}
                       </div>
+
+                      {calLabel && (
+                        <div style={{ fontSize: 9, color: calColor ?? 'var(--text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {calLabel}
+                        </div>
+                      )}
 
                       {showClosed && shift && shift.approved > 0 && (
                         <div className="month-cell-past-count">{shift.approved} st</div>
