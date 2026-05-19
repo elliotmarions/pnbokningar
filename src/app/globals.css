@@ -733,6 +733,33 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .modal-input:focus { border-color: var(--accent); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
+/* ===== Book driver panel (InterestPanel) ===== */
+.book-driver-panel {
+  margin: 0 0 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.book-driver-search {
+  width: 100%; padding: 9px 12px;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text-primary); font-size: 13px; font-family: inherit;
+  outline: none;
+}
+.book-driver-search::placeholder { color: var(--text-tertiary); }
+.book-driver-list { max-height: 220px; overflow-y: auto; }
+.book-driver-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px;
+  background: transparent; border: none; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background var(--t);
+}
+.book-driver-row:last-child { border-bottom: none; }
+.book-driver-row:hover:not(:disabled) { background: var(--bg-hover); }
+.book-driver-row:disabled { opacity: 0.6; cursor: not-allowed; }
+.book-driver-empty { padding: 12px; font-size: 12px; color: var(--text-tertiary); font-style: italic; }
+
 /* ===== Skeleton loader ===== */
 @keyframes shimmer {
   0%   { background-position: 200% 0; }

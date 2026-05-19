@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Clock, Phone, Check, Plus, Minus } from './Icons'
 
 interface Applicant {
@@ -23,6 +23,8 @@ interface Shift {
   slots: number
 }
 
+interface Driver { id: string; name: string; phone: string | null }
+
 interface Props {
   open: boolean
   shift: Shift | null
@@ -31,6 +33,7 @@ interface Props {
   onApprove: (appId: number) => Promise<void>
   onUnapprove: (appId: number, reason?: string) => Promise<void>
   onUpdateSlots: (shiftId: number, slots: number) => Promise<void>
+  onBookDriver?: (shiftId: number, userId: string) => Promise<void>
   readOnlySlots?: boolean
   onReject?: (appId: number, reason?: string) => Promise<void>
   onUnreject?: (appId: number) => Promise<void>
@@ -51,7 +54,7 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, readOnlySlots = false, onReject, onUnreject, onUnwithdraw }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [slots, setSlots] = useState(shift?.slots ?? 5)
   const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
@@ -60,6 +63,13 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
   const [withdrawReason, setWithdrawReason] = useState('')
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
+
+  // Book driver state
+  const [showBooking, setShowBooking] = useState(false)
+  const [allDrivers, setAllDrivers] = useState<Driver[]>([])
+  const [driverSearch, setDriverSearch] = useState('')
+  const [bookingId, setBookingId] = useState<string | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const addPending = (id: number) => setPendingIds(prev => new Set([...prev, id]))
   const removePending = (id: number) => setPendingIds(prev => { const s = new Set(prev); s.delete(id); return s })
@@ -79,6 +89,37 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
+
+  // Fetch all drivers once when panel opens (for booking)
+  useEffect(() => {
+    if (!open || !onBookDriver) return
+    fetch('/api/users')
+      .then(r => r.json())
+      .then((data: (Driver & { role: string })[]) => {
+        setAllDrivers(data.filter(u => u.role === 'driver'))
+      })
+      .catch(() => {})
+  }, [open, onBookDriver])
+
+  // Focus search input when booking section opens
+  useEffect(() => {
+    if (showBooking) setTimeout(() => searchRef.current?.focus(), 50)
+  }, [showBooking])
+
+  const handleBookDriver = async (userId: string, userName: string) => {
+    if (!shift || !onBookDriver) return
+    setBookingId(userId)
+    try {
+      await onBookDriver(shift.id, userId)
+      // Refresh applicants list
+      const d = await fetch(`/api/shifts/${shift.id}`).then(r => r.json())
+      setApplicants(d.applicants ?? [])
+      setShowBooking(false)
+      setDriverSearch('')
+    } finally {
+      setBookingId(null)
+    }
+  }
 
   const approved = applicants.filter(a => a.approved)
   const pending = applicants.filter(a => !a.approved && !a.rejected && !a.withdrawn)
@@ -217,8 +258,65 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           {/* Approved group */}
           <div className="list-group-h">
             <span>Godkända</span>
-            <span>{approved.length} / {slots}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{approved.length} / {slots}</span>
+              {onBookDriver && (
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ padding: '2px 8px', fontSize: 11, gap: 4 }}
+                  onClick={() => { setShowBooking(b => !b); setDriverSearch('') }}
+                >
+                  <Plus className="svg-ico" style={{ width: 11, height: 11 }} />
+                  Boka
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Inline driver booking */}
+          {showBooking && onBookDriver && (() => {
+            const bookedIds = new Set(applicants.map(a => a.user_id))
+            const filtered = allDrivers.filter(d =>
+              !bookedIds.has(d.id) &&
+              d.name.toLowerCase().includes(driverSearch.toLowerCase())
+            )
+            return (
+              <div className="book-driver-panel">
+                <input
+                  ref={searchRef}
+                  className="book-driver-search"
+                  placeholder="Sök chaufför…"
+                  value={driverSearch}
+                  onChange={e => setDriverSearch(e.target.value)}
+                />
+                <div className="book-driver-list">
+                  {filtered.length === 0
+                    ? <div className="book-driver-empty">Inga chaufförer att visa</div>
+                    : filtered.map(d => (
+                        <button
+                          key={d.id}
+                          className="book-driver-row"
+                          disabled={bookingId === d.id}
+                          onClick={() => handleBookDriver(d.id, d.name)}
+                        >
+                          <div className="avatar" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}>
+                            {initials(d.name)}
+                          </div>
+                          <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{d.name}</div>
+                            {d.phone && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{d.phone}</div>}
+                          </div>
+                          {bookingId === d.id
+                            ? <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bokar…</span>
+                            : <span style={{ fontSize: 11, color: 'var(--primary)' }}>Boka</span>
+                          }
+                        </button>
+                      ))
+                  }
+                </div>
+              </div>
+            )
+          })()}
           {approved.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga godkända ännu.</p>
             : approved.map(a => (

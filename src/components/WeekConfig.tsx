@@ -172,6 +172,17 @@ export function WeekConfig() {
     load()
   }
 
+  const handleBookDriver = async (shiftId: number, userId: string) => {
+    const res = await fetch(`/api/shifts/${shiftId}/book`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    })
+    if (!res.ok) { showToast('Fel vid bokning.', 'error'); throw new Error('book failed') }
+    showToast('Chaufför bokad. SMS skickat.')
+    load()
+  }
+
   const handleUpdateSlots = async (shiftId: number, slots: number) => {
     await fetch('/api/shifts', {
       method: 'PUT',
@@ -323,6 +334,7 @@ export function WeekConfig() {
         onApprove={handleApprove}
         onUnapprove={handleUnapprove}
         onUpdateSlots={handleUpdateSlots}
+        onBookDriver={handleBookDriver}
         onReject={handleReject}
         onUnreject={handleUnreject}
         onUnwithdraw={handleUnwithdraw}
