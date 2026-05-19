@@ -78,6 +78,10 @@ async function migrate() {
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT
   `
+  // Track whether a shift was ever opened by admin (distinguishes "never opened" from "opened then closed")
+  await sql`
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS ever_opened INTEGER NOT NULL DEFAULT 0
+  `
 }
 
 // --------------- Users ---------------
@@ -147,6 +151,7 @@ export interface DbShift {
   day_index: number
   date: string
   is_open: number
+  ever_opened: number
   slots: number
   created_at: string
 }
@@ -225,7 +230,12 @@ export const shiftRepo = {
 
   async update(id: number, fields: { is_open?: number; slots?: number }): Promise<void> {
     if (fields.is_open !== undefined) {
-      await sql`UPDATE shifts SET is_open = ${fields.is_open} WHERE id = ${id}`
+      if (fields.is_open === 1) {
+        // Mark as ever_opened when admin opens a shift
+        await sql`UPDATE shifts SET is_open = 1, ever_opened = 1 WHERE id = ${id}`
+      } else {
+        await sql`UPDATE shifts SET is_open = ${fields.is_open} WHERE id = ${id}`
+      }
     }
     if (fields.slots !== undefined) {
       await sql`UPDATE shifts SET slots = ${fields.slots} WHERE id = ${id}`

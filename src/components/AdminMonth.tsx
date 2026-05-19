@@ -8,6 +8,7 @@ interface MonthShift {
   day_index: number
   date: string
   is_open: number
+  ever_opened: number
   slots: number
   approved: number
   pending: number
@@ -209,7 +210,8 @@ export function AdminMonth() {
                   const shift      = shiftByDate[d.date]
                   const isToday    = d.date === todayStr
                   const isPast           = d.inRange && d.date < todayStr
-                  const isManuallyClosed = !isPast && shift && shift.is_open === 0
+                  // Only "Stängd" if admin explicitly opened it at some point (ever_opened=1) and then closed it
+                  const isManuallyClosed = !isPast && shift && shift.is_open === 0 && shift.ever_opened === 1
                   const showClosed       = isPast || !!isManuallyClosed
                   const isExpanded = shift ? expandedIds.has(shift.id) : false
                   const drivers    = shift ? driversMap[shift.id] : undefined
