@@ -210,6 +210,10 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
                   const drivers     = shift ? driversMap[shift.id] : undefined
                   const isFull      = isOpen ? shift!.approved >= shift!.slots : false
 
+                  if (!d.inRange && mode === 'interval') {
+                    return <div key={d.date} className="month-cell" style={{ visibility:'hidden', border:'none', background:'transparent' }} />
+                  }
+
                   return (
                     <div
                       key={d.date}
