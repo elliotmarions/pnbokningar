@@ -1,8 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Plus, Trash2, X, Check } from './Icons'
+import { getHolidayMap } from '../lib/holidays'
 
 interface Driver { id: string; name: string; phone: string | null; role: string }
+interface CustomClosed { id: number; date: string; reason: string; color: string }
 interface Booking {
   id: number
   user_id: string
@@ -39,21 +41,25 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
-// Returns all Mon-Sat dates in range, grouped by ISO week
-function buildWeekGroups(fromDate: string, toDate: string): { wk: number; days: { date: string; dayIdx: number; n: number }[] }[] {
+// Returns all Mon-Sat dates in range, grouped by ISO week, with locked flag for closed days
+function buildWeekGroups(
+  fromDate: string,
+  toDate: string,
+  lockedDates: Set<string>
+): { wk: number; days: { date: string; dayIdx: number; n: number; locked: boolean }[] }[] {
   const from = new Date(fromDate + 'T00:00:00')
   const to   = new Date(toDate   + 'T00:00:00')
-  const groups: { wk: number; days: { date: string; dayIdx: number; n: number }[] }[] = []
+  const groups: { wk: number; days: { date: string; dayIdx: number; n: number; locked: boolean }[] }[] = []
   let cur = new Date(from)
   while (cur <= to) {
-    const dow = cur.getDay() // 0=Sun,1=Mon,...,6=Sat
-    if (dow >= 1 && dow <= 6) { // Mon-Sat only
+    const dow = cur.getDay()
+    if (dow >= 1 && dow <= 6) {
       const wk = isoWeek(cur)
       const ds = toStr(cur)
-      const dayIdx = dow - 1 // 0=Mon ... 5=Sat
+      const dayIdx = dow - 1
       let group = groups.find(g => g.wk === wk)
       if (!group) { group = { wk, days: [] }; groups.push(group) }
-      group.days.push({ date: ds, dayIdx, n: cur.getDate() })
+      group.days.push({ date: ds, dayIdx, n: cur.getDate(), locked: lockedDates.has(ds) })
     }
     cur = addDays(cur, 1)
   }
@@ -76,14 +82,17 @@ export function LongTermBookings() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [togglingDate, setTogglingDate] = useState<string | null>(null) // "bookingId:date"
+  const [customClosed, setCustomClosed] = useState<CustomClosed[]>([])
 
   useEffect(() => {
     Promise.all([
       fetch('/api/long-term').then(r => r.json()),
       fetch('/api/users').then(r => r.json()),
-    ]).then(([lt, users]) => {
+      fetch('/api/custom-closed').then(r => r.json()),
+    ]).then(([lt, users, cc]) => {
       setBookings(lt.bookings ?? [])
       setDrivers((users as Driver[]).filter(u => u.role === 'driver'))
+      setCustomClosed(cc.days ?? [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -129,6 +138,18 @@ export function LongTermBookings() {
     } finally { setTogglingDate(null) }
   }
 
+  const lockedDates = useMemo(() => {
+    const set = new Set<string>()
+    const customSet = new Set(customClosed.map(d => d.date))
+    // Build holiday maps for nearby years
+    const thisYear = new Date().getFullYear()
+    for (let y = thisYear - 1; y <= thisYear + 3; y++) {
+      for (const [date] of getHolidayMap(y)) set.add(date)
+    }
+    for (const d of customSet) set.add(d)
+    return set
+  }, [customClosed])
+
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {[0,1,2].map(i => <div key={i} className="skel" style={{ height: 120, borderRadius: 8 }} />)}
@@ -157,9 +178,9 @@ export function LongTermBookings() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {bookings.map(b => {
             const excluded: string[] = JSON.parse(b.excluded_dates)
-            const groups = buildWeekGroups(b.from_date, b.to_date)
-            const totalDays = groups.reduce((s, g) => s + g.days.length, 0)
-            const activeDays = totalDays - excluded.length
+            const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
+            const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
+            const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
             return (
               <div key={b.id} className="lt-card">
                 {/* Card header */}
@@ -195,6 +216,19 @@ export function LongTermBookings() {
                         {group.days.map(d => {
                           const isExcluded = excluded.includes(d.date)
                           const isToggling = togglingDate === `${b.id}:${d.date}`
+                          if (d.locked) {
+                            return (
+                              <div
+                                key={d.date}
+                                className="lt-chip excluded"
+                                style={{ opacity: 0.4, cursor: 'not-allowed' }}
+                                title="Stängd dag – kan ej bokas"
+                              >
+                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                                <span className="lt-chip-n">{d.n}</span>
+                              </div>
+                            )
+                          }
                           return (
                             <button
                               key={d.date}
