@@ -82,6 +82,15 @@ async function migrate() {
   await sql`
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS ever_opened INTEGER NOT NULL DEFAULT 0
   `
+  // Backfill: mark shifts as ever_opened if they are currently open OR have had applicants
+  await sql`
+    UPDATE shifts SET ever_opened = 1
+    WHERE ever_opened = 0
+      AND (
+        is_open = 1
+        OR id IN (SELECT DISTINCT shift_id FROM applications)
+      )
+  `
 }
 
 // --------------- Users ---------------
