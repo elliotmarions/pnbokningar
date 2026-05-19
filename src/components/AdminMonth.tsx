@@ -210,6 +210,9 @@ export function AdminMonth() {
                   const isToday    = d.date === todayStr
                   const isPast     = d.inRange && d.date < todayStr
                   const hadDrivers = isPast && shift && shift.approved > 0
+                  // Explicitly closed by admin (is_open=0), not just a past day
+                  const isManuallyClosed = !isPast && shift && shift.is_open === 0
+                  const showClosed = (isPast && !hadDrivers) || isManuallyClosed
                   const isExpanded = shift ? expandedIds.has(shift.id) : false
                   const drivers    = shift ? driversMap[shift.id] : undefined
                   const isFull     = shift ? shift.approved >= shift.slots : false
@@ -219,20 +222,20 @@ export function AdminMonth() {
                       key={d.date}
                       className={[
                         'month-cell',
-                        !d.inRange                  ? 'out-of-month' : '',
-                        isToday                     ? 'is-today'     : '',
-                        shift?.is_open === 1        ? 'has-shift'    : '',
-                        isPast && !hadDrivers       ? 'is-closed'    : '',
-                        isExpanded                  ? 'is-selected'  : '',
-                        shift && !isPast            ? 'clickable'    : '',
+                        !d.inRange              ? 'out-of-month' : '',
+                        isToday                 ? 'is-today'     : '',
+                        shift?.is_open === 1    ? 'has-shift'    : '',
+                        showClosed              ? 'is-closed'    : '',
+                        isExpanded              ? 'is-selected'  : '',
+                        shift && !isPast && !isManuallyClosed ? 'clickable' : '',
                       ].filter(Boolean).join(' ')}
-                      onClick={shift && !isPast ? () => handleCell(shift) : undefined}
+                      onClick={shift && !isPast && !isManuallyClosed ? () => handleCell(shift) : undefined}
                     >
                       <div className="month-cell-top">
                         <span className="month-cell-day">{d.n}</span>
                         {hadDrivers ? (
                           <span className="month-cell-past-count">{shift!.approved} st</span>
-                        ) : isPast ? (
+                        ) : showClosed ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : shift?.is_open === 1 ? (
                           <span className={`month-cell-count ${isFull ? 'full' : ''}`}>
