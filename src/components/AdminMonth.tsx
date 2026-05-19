@@ -208,6 +208,7 @@ export function AdminMonth() {
                 {week.days.map(d => {
                   const shift      = shiftByDate[d.date]
                   const isToday    = d.date === todayStr
+                  const isPast     = d.inRange && d.date < todayStr
                   const isExpanded = shift ? expandedIds.has(shift.id) : false
                   const drivers    = shift ? driversMap[shift.id] : undefined
                   const isFull     = shift ? shift.approved >= shift.slots : false
@@ -219,21 +220,21 @@ export function AdminMonth() {
                         'month-cell',
                         !d.inRange              ? 'out-of-month' : '',
                         isToday                 ? 'is-today'     : '',
-                        shift?.is_open          ? 'has-shift'    : '',
-                        shift && !shift.is_open && d.date <= todayStr ? 'is-closed' : '',
+                        shift?.is_open === 1    ? 'has-shift'    : '',
+                        isPast                  ? 'is-closed'    : '',
                         isExpanded              ? 'is-selected'  : '',
-                        shift                   ? 'clickable'    : '',
+                        shift && !isPast        ? 'clickable'    : '',
                       ].filter(Boolean).join(' ')}
-                      onClick={shift ? () => handleCell(shift) : undefined}
+                      onClick={shift && !isPast ? () => handleCell(shift) : undefined}
                     >
                       <div className="month-cell-top">
                         <span className="month-cell-day">{d.n}</span>
-                        {shift?.is_open ? (
+                        {isPast ? (
+                          <span className="month-cell-closed">Stängd</span>
+                        ) : shift?.is_open === 1 ? (
                           <span className={`month-cell-count ${isFull ? 'full' : ''}`}>
                             {shift.approved}/{shift.slots}
                           </span>
-                        ) : shift && !shift.is_open && d.inRange && d.date <= todayStr ? (
-                          <span className="month-cell-closed">Stängd</span>
                         ) : null}
                       </div>
 
