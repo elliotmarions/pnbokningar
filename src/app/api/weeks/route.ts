@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
   const info = weekInfoFromNumbers(weekYear, weekNumber)
   // Ensure week exists (fast path skips if already created)
   await shiftRepo.ensureWeek(weekYear, weekNumber, info.days)
+  // Close any shifts whose start time has passed (runs on every load — no cron needed)
+  await shiftRepo.closeExpired()
   // Fetch shifts + counts in a single query (replaces N+1 fetch loop on the client)
   const shifts = await shiftRepo.getWeekWithCounts(weekYear, weekNumber)
 
