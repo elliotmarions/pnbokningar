@@ -74,29 +74,44 @@ export function WeekConfig() {
       setCounts(c)
     }
 
-    // First mount only: serve from cache to avoid re-fetching data the user
-    // just saw in Översikt. Avoids overwriting in-progress edits on revisit.
-    if (!isMounted.current) {
-      isMounted.current = true
-      const cached = cache.get(cacheKey)
-      if (cached) { apply(cached as Parameters<typeof apply>[0]); return }
-    }
+    // SWR: serve cached data immediately if available, then revalidate in background.
+    const cached = cache.get(cacheKey)
+    if (cached) apply(cached as Parameters<typeof apply>[0])
+    isMounted.current = true
 
-    // Assign a unique id to this call so we can detect stale responses.
     const id = ++loadId.current
-
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
     if (!res.ok) return
     const data = await res.json()
+    if (id !== loadId.current) return  // stale
 
-    // Discard response if a newer load() has already been triggered.
-    if (id !== loadId.current) return
-
-    cache.set(cacheKey, data)   // keep cache up-to-date for other tabs
+    cache.set(cacheKey, data)
     apply(data)
   }, [weekOffset, cache])
 
   useEffect(() => { load() }, [weekOffset, load])
+
+  // Prefetch adjacent weeks for instant navigation
+  useEffect(() => {
+    const prefetch = (offset: number) => {
+      const base = new Date()
+      base.setDate(base.getDate() + offset * 7)
+      const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
+      const isoYear = tmp.getFullYear()
+      const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+      const key = `weeks-${isoYear}-${isoWeek}`
+      if (cache.get(key)) return
+      fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) cache.set(key, data) })
+        .catch(() => {})
+    }
+    const t = setTimeout(() => {
+      prefetch(weekOffset - 1)
+      prefetch(weekOffset + 1)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [weekOffset, cache])
 
   const update = (id: number, field: 'is_open' | 'slots', value: number) => {
     setLocal(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s))

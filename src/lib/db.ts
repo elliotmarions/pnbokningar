@@ -115,6 +115,12 @@ async function migrate() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
+  // Indexes for query performance
+  await sql`CREATE INDEX IF NOT EXISTS idx_shifts_date ON shifts(date)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_applications_shift_id ON applications(shift_id)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_approvals_application_id ON approvals(application_id)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_long_term_dates ON long_term_bookings(from_date, to_date)`
 }
 
 // --------------- Users ---------------
@@ -228,12 +234,12 @@ export const shiftRepo = {
     weekYear: number,
     weekNumber: number,
     days: { dayIndex: number; date: string }[]
-  ): Promise<DbShift[]> {
+  ): Promise<{ shifts: DbShift[]; created: boolean }> {
     await ensureMigrated()
 
     // Fast path: if the week is fully created, skip the transaction entirely.
     const existing = await shiftRepo.getWeek(weekYear, weekNumber)
-    if (existing.length === days.length) return existing
+    if (existing.length === days.length) return { shifts: existing, created: false }
 
     const today = new Date()
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -258,7 +264,8 @@ export const shiftRepo = {
       `
     })
 
-    return shiftRepo.getWeek(weekYear, weekNumber)
+    const shifts = await shiftRepo.getWeek(weekYear, weekNumber)
+    return { shifts, created: true }
   },
 
   async update(id: number, fields: { is_open?: number; slots?: number }): Promise<void> {

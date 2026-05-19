@@ -83,13 +83,14 @@ export function DriverHome() {
     tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
-    const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+    // Parallel fetch of week + user's applications
+    const [res, appRes] = await Promise.all([
+      fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
+      fetch('/api/applications/mine'),
+    ])
     if (!res.ok) return
     const data: WeekData = await res.json()
     setWeekData(data)
-
-    // Load user's applications
-    const appRes = await fetch('/api/applications/mine')
     if (appRes.ok) {
       const apps: Application[] = await appRes.json()
       setApplications(apps)

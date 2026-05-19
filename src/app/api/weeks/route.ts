@@ -17,35 +17,40 @@ export async function GET(req: NextRequest) {
   if (!weekNumber) weekNumber = current.weekNumber
 
   const info = weekInfoFromNumbers(weekYear, weekNumber)
-  // Ensure week exists (fast path skips if already created)
-  await shiftRepo.ensureWeek(weekYear, weekNumber, info.days)
-  // Auto-apply long-term bookings to any newly created shifts (admin only)
-  const sessionUser = session.user as Record<string, unknown>
-  const adminId = sessionUser.id as string | undefined
-  const userRole = sessionUser.role as string | undefined
-  if (adminId && userRole === 'admin') {
-    const { applyLongTermToShift } = await import('@/lib/apply-long-term')
+
+  const { created } = await shiftRepo.ensureWeek(weekYear, weekNumber, info.days)
+
+  // Only run side-effect loops when the week was freshly created.
+  // On subsequent loads, these are no-ops anyway and just slow things down.
+  if (created) {
+    const sessionUser = session.user as Record<string, unknown>
+    const adminId = sessionUser.id as string | undefined
+    const userRole = sessionUser.role as string | undefined
+
     const freshShifts = await shiftRepo.getWeek(weekYear, weekNumber)
+
+    // Apply long-term bookings + auto-close custom-closed days in parallel
+    const tasks: Promise<unknown>[] = []
+
+    if (adminId && userRole === 'admin') {
+      const { applyLongTermToShift } = await import('@/lib/apply-long-term')
+      for (const s of freshShifts) {
+        tasks.push(applyLongTermToShift(s.id, s.date, adminId))
+      }
+    }
+
     for (const s of freshShifts) {
-      await applyLongTermToShift(s.id, s.date, adminId)
+      tasks.push((async () => {
+        const ccd = await customClosedRepo.forDate(s.date)
+        if (ccd && s.is_open === 1) await shiftRepo.update(s.id, { is_open: 0 })
+      })())
     }
-  }
-  // Auto-close any shifts that fall on a custom closed day
-  const freshShiftsForClose = await shiftRepo.getWeek(weekYear, weekNumber)
-  for (const s of freshShiftsForClose) {
-    const ccd = await customClosedRepo.forDate(s.date)
-    if (ccd && s.is_open === 1) {
-      await shiftRepo.update(s.id, { is_open: 0 })
-    }
+
+    await Promise.all(tasks)
   }
 
-  // Fetch shifts + counts in a single query (replaces N+1 fetch loop on the client)
   const shifts = await shiftRepo.getWeekWithCounts(weekYear, weekNumber)
-
-  const days = info.days.map(d => ({
-    ...d,
-    holiday: getHolidayInfo(d.date),
-  }))
+  const days = info.days.map(d => ({ ...d, holiday: getHolidayInfo(d.date) }))
 
   return NextResponse.json({ weekYear, weekNumber, shifts, days })
 }
