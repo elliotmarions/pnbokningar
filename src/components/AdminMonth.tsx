@@ -237,7 +237,7 @@ export function AdminMonth() {
                         ) : null}
                       </div>
 
-                      {shift?.is_open && shift.pending > 0 && (
+                      {shift?.is_open === 1 && shift.pending > 0 && (
                         <div className="month-cell-pending">
                           <span style={{ background:'var(--yellow)', display:'inline-block', width:5, height:5, borderRadius:'50%', marginRight:3, flexShrink:0 }} />
                           {shift.pending} väntar
