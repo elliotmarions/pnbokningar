@@ -15,8 +15,6 @@ export async function GET(req: NextRequest) {
   const lastDay = new Date(year, month, 0).getDate()
   const to   = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-  // Close any shifts whose start time has passed
-  await shiftRepo.closeExpired()
   const shifts = await shiftRepo.getMonthWithCounts(from, to)
   return NextResponse.json({ year, month, shifts })
 }
