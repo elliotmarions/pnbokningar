@@ -48,13 +48,29 @@ function allSaintsDay(year: number): Date {
 
 export interface HolidayInfo {
   name: string
-  type: 'holiday' | 'eve'
+  type: 'holiday' | 'eve' | 'closed'
+}
+
+// Returns the Saturday of a given ISO week
+function saturdayOfIsoWeek(year: number, week: number): Date {
+  const jan4 = new Date(year, 0, 4)
+  const mondayOffset = (jan4.getDay() + 6) % 7 // days back to Monday
+  const week1Mon = new Date(jan4)
+  week1Mon.setDate(jan4.getDate() - mondayOffset)
+  const targetSat = new Date(week1Mon)
+  targetSat.setDate(week1Mon.getDate() + (week - 1) * 7 + 5)
+  return targetSat
+}
+
+// Weeks 27-32: Saturdays are closed (sommaruppehåll)
+function getClosedSaturdays(year: number): Date[] {
+  return [27, 28, 29, 30, 31, 32].map(w => saturdayOfIsoWeek(year, w))
 }
 
 export function getHolidayMap(year: number): Map<string, HolidayInfo> {
   const m = new Map<string, HolidayInfo>()
-  const add = (d: Date, name: string, type: 'holiday' | 'eve') => m.set(fmt(d), { name, type })
-  const fixed = (mo: number, day: number, name: string, type: 'holiday' | 'eve') =>
+  const add = (d: Date, name: string, type: 'holiday' | 'eve' | 'closed') => m.set(fmt(d), { name, type })
+  const fixed = (mo: number, day: number, name: string, type: 'holiday' | 'eve' | 'closed') =>
     add(new Date(year, mo - 1, day), name, type)
 
   // Fixed röda dagar
@@ -88,6 +104,11 @@ export function getHolidayMap(year: number): Map<string, HolidayInfo> {
 
   // All Saints
   add(allSaintsDay(year), 'Alla helgons dag', 'holiday')
+
+  // Closed Saturdays: weeks 27-32 (sommaruppehåll)
+  for (const sat of getClosedSaturdays(year)) {
+    add(sat, 'Sommarstängt', 'closed')
+  }
 
   return m
 }

@@ -104,6 +104,17 @@ async function migrate() {
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
+  // Custom closed days (admin-defined, with reason + color)
+  await sql`
+    CREATE TABLE IF NOT EXISTS custom_closed_days (
+      id         SERIAL PRIMARY KEY,
+      date       TEXT NOT NULL UNIQUE,
+      reason     TEXT NOT NULL,
+      color      TEXT NOT NULL DEFAULT '#EF4444',
+      created_by TEXT NOT NULL REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
 }
 
 // --------------- Users ---------------
@@ -341,6 +352,46 @@ export const longTermRepo = {
       const excluded: string[] = JSON.parse(r.excluded_dates)
       return !excluded.includes(date)
     })
+  },
+}
+
+// --------------- Custom closed days ---------------
+
+export interface DbCustomClosedDay {
+  id: number
+  date: string
+  reason: string
+  color: string
+  created_by: string
+  created_at: string
+}
+
+export const customClosedRepo = {
+  async all(): Promise<DbCustomClosedDay[]> {
+    await ensureMigrated()
+    return sql<DbCustomClosedDay[]>`SELECT * FROM custom_closed_days ORDER BY date ASC`
+  },
+
+  async create(data: { date: string; reason: string; color: string; createdBy: string }): Promise<DbCustomClosedDay> {
+    await ensureMigrated()
+    const [row] = await sql<DbCustomClosedDay[]>`
+      INSERT INTO custom_closed_days (date, reason, color, created_by)
+      VALUES (${data.date}, ${data.reason}, ${data.color}, ${data.createdBy})
+      ON CONFLICT (date) DO UPDATE SET reason = EXCLUDED.reason, color = EXCLUDED.color
+      RETURNING *
+    `
+    return row
+  },
+
+  async delete(id: number): Promise<void> {
+    await ensureMigrated()
+    await sql`DELETE FROM custom_closed_days WHERE id = ${id}`
+  },
+
+  async forDate(date: string): Promise<DbCustomClosedDay | null> {
+    await ensureMigrated()
+    const [row] = await sql<DbCustomClosedDay[]>`SELECT * FROM custom_closed_days WHERE date = ${date}`
+    return row ?? null
   },
 }
 

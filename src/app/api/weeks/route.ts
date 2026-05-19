@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
-import { shiftRepo } from '@/lib/db'
+import { shiftRepo, customClosedRepo } from '@/lib/db'
 import { weekInfoFromNumbers, currentWeekInfo } from '@/lib/weeks'
 import { getHolidayInfo } from '@/lib/holidays'
 
@@ -30,6 +30,15 @@ export async function GET(req: NextRequest) {
       await applyLongTermToShift(s.id, s.date, adminId)
     }
   }
+  // Auto-close any shifts that fall on a custom closed day
+  const freshShiftsForClose = await shiftRepo.getWeek(weekYear, weekNumber)
+  for (const s of freshShiftsForClose) {
+    const ccd = await customClosedRepo.forDate(s.date)
+    if (ccd && s.is_open === 1) {
+      await shiftRepo.update(s.id, { is_open: 0 })
+    }
+  }
+
   // Fetch shifts + counts in a single query (replaces N+1 fetch loop on the client)
   const shifts = await shiftRepo.getWeekWithCounts(weekYear, weekNumber)
 

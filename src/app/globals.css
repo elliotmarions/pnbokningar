@@ -276,6 +276,7 @@ a { color: inherit; text-decoration: none; }
 .wk-holiday-tag { display: block; margin-top: 5px; font-size: 10.5px; font-weight: 500; }
 .wk-holiday-tag.holiday { color: #F87171; }
 .wk-holiday-tag.eve { color: #FBBF24; }
+.wk-holiday-tag.closed { color: #C084FC; }
 
 /* Confirmed rows */
 .confirmed-row {
@@ -656,6 +657,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cal-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .cal-dot.holiday { background: var(--red); }
 .cal-dot.eve { background: #F59E0B; }
+.cal-dot.closed { background: #A855F7; }
 
 .cal-months { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
 @media (max-width: 1300px) { .cal-months { grid-template-columns: repeat(3, 1fr); } }
@@ -673,18 +675,42 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cal-cell.holiday { background: rgba(239,68,68,.18); color: #F87171; font-weight: 700; border-radius: 4px; }
 .cal-cell.eve { background: rgba(245,158,11,.15); color: #FBBF24; font-weight: 600; }
 .cal-cell.sunday { color: #F87171; opacity: .7; }
+.cal-cell.closed { background: rgba(168,85,247,.18); color: #C084FC; font-weight: 700; }
 
 /* List section */
 .cal-list-section { }
-.cal-list-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+.cal-list-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; }
+@media (max-width: 1100px) { .cal-list-cols { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 800px) { .cal-list-cols { grid-template-columns: 1fr; } }
 .cal-list-heading { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; margin-bottom: 12px; }
 .cal-list-rows { display: flex; flex-direction: column; gap: 5px; }
 .cal-list-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px; }
 .cal-list-row.holiday { border-left: 3px solid #EF4444; }
 .cal-list-row.eve { border-left: 3px solid #F59E0B; }
+.cal-list-row.closed { border-left: 3px solid #A855F7; }
 .cal-row-date { font-size: 12px; color: var(--text-secondary); min-width: 90px; }
 .cal-row-name { font-size: 13px; font-weight: 500; }
+
+/* ── Custom closed days ── */
+.ccd-section { margin-top: 40px; }
+.ccd-section-heading { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); }
+.ccd-form { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.ccd-date-input { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 8px 12px; outline: none; }
+.ccd-date-input:focus { border-color: var(--primary); }
+.ccd-reason-input { flex: 1; min-width: 200px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 8px 12px; outline: none; }
+.ccd-reason-input:focus { border-color: var(--primary); }
+.ccd-color-wrap { position: relative; width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; cursor: pointer; flex-shrink: 0; }
+.ccd-color-input { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); opacity: 0; cursor: pointer; }
+.ccd-color-preview { display: block; width: 100%; height: 100%; pointer-events: none; }
+.ccd-add-btn { white-space: nowrap; flex-shrink: 0; }
+.ccd-empty { font-size: 13px; color: var(--text-tertiary); padding: 12px 0; }
+.ccd-list { display: flex; flex-direction: column; gap: 6px; }
+.ccd-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; }
+.ccd-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.ccd-date { font-size: 12px; color: var(--text-secondary); min-width: 90px; flex-shrink: 0; }
+.ccd-reason { flex: 1; font-size: 13px; font-weight: 500; }
+.ccd-delete-btn { background: none; border: none; color: var(--text-tertiary); cursor: pointer; padding: 4px; border-radius: 5px; display: flex; align-items: center; flex-shrink: 0; transition: color .15s, background .15s; }
+.ccd-delete-btn:hover { color: #F87171; background: rgba(239,68,68,.1); }
 
 /* ── Rejected badge & driver card ── */
 .b-rejected { background: rgba(239,68,68,.15); color: #F87171; }
