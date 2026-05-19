@@ -232,6 +232,25 @@ export const shiftRepo = {
     }
   },
 
+  async getMonthWithCounts(from: string, to: string) {
+    await ensureMigrated()
+    type Row = DbShift & { approved: number; pending: number }
+    return sql<Row[]>`
+      SELECT s.*,
+        COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
+        COALESCE(
+          COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 THEN a.id END)
+          - COUNT(DISTINCT ap.id), 0
+        )::int AS pending
+      FROM shifts s
+      LEFT JOIN applications a ON a.shift_id = s.id
+      LEFT JOIN approvals ap ON ap.application_id = a.id
+      WHERE s.date >= ${from} AND s.date <= ${to}
+      GROUP BY s.id
+      ORDER BY s.date
+    `
+  },
+
   // Close any open shifts whose start time has passed (runs via cron).
   // Start times: 09:45 Saturday (day_index=5), 16:00 all other days.
   async closeExpired(): Promise<number> {

@@ -1,10 +1,10 @@
 import { AdminLayout } from '@/components/AdminLayout'
-import { AdminWeek } from '@/components/AdminWeek'
+import { AdminOverview } from '@/components/AdminOverview'
 
 export default function AdminPage() {
   return (
-    <AdminLayout title="Veckoöversikt" sub="Pass, sökande och godkännanden för aktuell vecka.">
-      <AdminWeek />
+    <AdminLayout title="Översikt" sub="Pass, sökande och godkännanden.">
+      <AdminOverview />
     </AdminLayout>
   )
 }

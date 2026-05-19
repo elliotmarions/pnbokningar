@@ -418,6 +418,79 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
 }
 
+/* ===== View toggle (Vecka / Månad) ===== */
+.view-toggle {
+  display: flex; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 7px; padding: 3px; gap: 2px;
+}
+.view-toggle button {
+  padding: 5px 16px; border-radius: 5px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); transition: background var(--t), color var(--t); cursor: pointer;
+}
+.view-toggle button:hover { color: var(--text-primary); }
+.view-toggle button.active { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* ===== Month calendar ===== */
+.month-grid {
+  display: grid;
+  grid-template-columns: 32px repeat(6, 1fr);
+  gap: 4px;
+}
+.month-wk-hdr { }
+.month-day-hdr {
+  text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 4px 0 8px;
+}
+.month-wk-label {
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 8px; font-size: 10px; color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.month-cell {
+  min-height: 64px; border-radius: 7px; padding: 7px 8px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color var(--t), background var(--t);
+}
+.month-cell.clickable { cursor: pointer; }
+.month-cell.clickable:hover { border-color: var(--primary-border); background: var(--bg-hover); }
+.month-cell.out-of-month { opacity: 0.3; pointer-events: none; }
+.month-cell.is-today { border-color: var(--primary-border); }
+.month-cell.is-selected { border-color: var(--primary); background: var(--bg-hover); }
+.month-cell.is-closed { opacity: 0.55; }
+.month-cell-top { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+.month-cell-day {
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.month-cell.is-today .month-cell-day {
+  background: var(--primary); color: #fff;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+.month-cell-count {
+  font-size: 11px; font-weight: 600; color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.month-cell-count.full { color: var(--red); }
+.month-cell-closed { font-size: 10px; color: var(--text-tertiary); }
+.month-cell-pending { font-size: 10.5px; color: var(--text-tertiary); display: flex; align-items: center; }
+
+/* Inline drivers inside month cell */
+.month-inline-drivers {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border);
+}
+.month-drivers-empty { font-size: 10.5px; color: var(--text-tertiary); font-style: italic; }
+.month-driver-row { display: flex; align-items: center; gap: 5px; }
+.month-driver-name { font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-driver-phone {
+  display: flex; align-items: center; gap: 2px;
+  font-size: 10px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
+}
+
 /* ===== Slide-in panel ===== */
 .side-panel-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 20;
