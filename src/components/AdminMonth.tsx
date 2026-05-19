@@ -232,7 +232,7 @@ export function AdminMonth() {
                           <span className={`month-cell-count ${isFull ? 'full' : ''}`}>
                             {shift.approved}/{shift.slots}
                           </span>
-                        ) : shift && !shift.is_open && d.inRange ? (
+                        ) : shift && !shift.is_open && d.inRange && d.date <= todayStr ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : null}
                       </div>
