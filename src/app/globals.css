@@ -430,6 +430,24 @@ a { color: inherit; text-decoration: none; }
 .view-toggle button:hover { color: var(--text-primary); }
 .view-toggle button.active { background: var(--bg-elevated); color: var(--text-primary); }
 
+/* ===== Date range inputs (interval mode) ===== */
+.date-range-input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  padding: 5px 10px;
+  outline: none;
+  cursor: pointer;
+  color-scheme: dark;
+  transition: border-color var(--t);
+}
+.date-range-input:hover { border-color: var(--border-strong); }
+.date-range-input:focus { border-color: var(--primary); }
+
 /* ===== Month calendar ===== */
 .month-grid {
   display: grid;

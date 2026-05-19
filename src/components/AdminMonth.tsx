@@ -31,7 +31,7 @@ function monday(date: Date): Date {
 function addDays(date: Date, n: number): Date {
   const d = new Date(date); d.setDate(d.getDate() + n); return d
 }
-function toStr(date: Date): string {
+function fmt(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
 }
 function isoWeek(date: Date): number {
@@ -44,17 +44,19 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
-function buildWeeks(year: number, month: number) {
-  const first = new Date(year, month - 1, 1)
-  const last  = new Date(year, month, 0)
-  const start = monday(first)
-  const end   = monday(last)
-  const weeks: { wk: number; days: { date: string; n: number; inMonth: boolean }[] }[] = []
+// Build Mon–Sat weeks for any arbitrary date range
+function buildWeeks(fromStr: string, toStr: string) {
+  const from = new Date(fromStr + 'T00:00:00')
+  const to   = new Date(toStr   + 'T00:00:00')
+  const start = monday(from)
+  const end   = monday(to)
+  const weeks: { wk: number; days: { date: string; n: number; inRange: boolean }[] }[] = []
   let cur = new Date(start)
   while (cur <= end) {
     const days = Array.from({ length: 6 }, (_, i) => {
       const d = addDays(cur, i)
-      return { date: toStr(d), n: d.getDate(), inMonth: d.getMonth() + 1 === month && d.getFullYear() === year }
+      const ds = fmt(d)
+      return { date: ds, n: d.getDate(), inRange: ds >= fromStr && ds <= toStr }
     })
     weeks.push({ wk: isoWeek(cur), days })
     cur = addDays(cur, 7)
@@ -62,29 +64,50 @@ function buildWeeks(year: number, month: number) {
   return weeks
 }
 
+function monthFrom(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2,'0')}-01`
+}
+function monthTo(year: number, month: number): string {
+  const last = new Date(year, month, 0).getDate()
+  return `${year}-${String(month).padStart(2,'0')}-${String(last).padStart(2,'0')}`
+}
+
 export function AdminMonth() {
   const now = new Date()
-  const todayStr = toStr(now)
+  const todayStr = fmt(now)
+
+  // Month-mode navigation
   const [year,  setYear]  = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
-  const [shifts,   setShifts]   = useState<MonthShift[]>([])
-  const [loading,  setLoading]  = useState(true)
+
+  // Interval-mode inputs
+  const [mode,     setMode]     = useState<'month' | 'interval'>('month')
+  const [fromDate, setFromDate] = useState(fmt(now))
+  const [toDate,   setToDate]   = useState(fmt(addDays(now, 27)))
+
+  const [shifts,      setShifts]      = useState<MonthShift[]>([])
+  const [loading,     setLoading]     = useState(true)
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [driversMap,  setDriversMap]  = useState<Record<number, Driver[] | 'loading'>>({})
   const cache = useAdminCache()
 
+  // Effective date range
+  const from = mode === 'month' ? monthFrom(year, month) : fromDate
+  const to   = mode === 'month' ? monthTo(year, month)   : toDate
+
   useEffect(() => {
     setExpandedIds(new Set())
     setDriversMap({})
+    if (from > to) { setLoading(false); setShifts([]); return }
     setLoading(true)
-    const key = `month-${year}-${month}`
+    const key = `month-${from}-${to}`
     const cached = cache.get(key) as { shifts: MonthShift[] } | undefined
     if (cached) { setShifts(cached.shifts); setLoading(false) }
-    fetch(`/api/months?year=${year}&month=${month}`)
+    fetch(`/api/months?from=${from}&to=${to}`)
       .then(r => r.json())
       .then(data => { cache.set(key, data); setShifts(data.shifts ?? []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [year, month, cache])
+  }, [from, to, cache])
 
   const prevMonth = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12) }
@@ -109,28 +132,58 @@ export function AdminMonth() {
     }
   }
 
-  const shiftByDate = Object.fromEntries(shifts.map(s => [s.date, s]))
-  const weeks = buildWeeks(year, month)
-  const totalApproved = shifts.reduce((s, c) => s + c.approved, 0)
-  const totalPending  = shifts.reduce((s, c) => s + c.pending,  0)
+  const shiftByDate    = Object.fromEntries(shifts.map(s => [s.date, s]))
+  const safeTo         = from <= to ? to : from
+  const weeks          = buildWeeks(from, safeTo)
+  const totalApproved  = shifts.reduce((s, c) => s + c.approved, 0)
+  const totalPending   = shifts.reduce((s, c) => s + c.pending,  0)
 
   return (
     <div>
       {/* Header */}
       <div className="week-header">
-        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
-          <div className="week-nav">
-            <button className="arrow" onClick={prevMonth}><ChevronLeft className="svg-ico" /></button>
-            <span className="week-label">{MONTH_NAMES[month-1]} {year}</span>
-            <button className="arrow" onClick={nextMonth}><ChevronRight className="svg-ico" /></button>
-          </div>
+        <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap', flex:1 }}>
+          {/* Navigation / date inputs */}
+          {mode === 'month' ? (
+            <div className="week-nav">
+              <button className="arrow" onClick={prevMonth}><ChevronLeft className="svg-ico" /></button>
+              <span className="week-label">{MONTH_NAMES[month-1]} {year}</span>
+              <button className="arrow" onClick={nextMonth}><ChevronRight className="svg-ico" /></button>
+            </div>
+          ) : (
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <input
+                type="date"
+                className="date-range-input"
+                value={fromDate}
+                max={toDate}
+                onChange={e => setFromDate(e.target.value)}
+              />
+              <span style={{ color:'var(--text-tertiary)', fontSize:13 }}>–</span>
+              <input
+                type="date"
+                className="date-range-input"
+                value={toDate}
+                min={fromDate}
+                onChange={e => setToDate(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Totals */}
           <div className="week-stats">
             Tillsatta <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
           </div>
         </div>
+
+        {/* Mode toggle */}
+        <div className="view-toggle">
+          <button className={mode === 'month'    ? 'active' : ''} onClick={() => setMode('month')}>Månad</button>
+          <button className={mode === 'interval' ? 'active' : ''} onClick={() => setMode('interval')}>Intervall</button>
+        </div>
       </div>
 
-      {/* Calendar */}
+      {/* Calendar grid */}
       <div className="month-grid">
         {/* Column headers */}
         <div className="month-wk-hdr" />
@@ -153,7 +206,7 @@ export function AdminMonth() {
               <Fragment key={week.wk}>
                 <div className="month-wk-label">v{week.wk}</div>
                 {week.days.map(d => {
-                  const shift = shiftByDate[d.date]
+                  const shift      = shiftByDate[d.date]
                   const isToday    = d.date === todayStr
                   const isExpanded = shift ? expandedIds.has(shift.id) : false
                   const drivers    = shift ? driversMap[shift.id] : undefined
@@ -164,12 +217,12 @@ export function AdminMonth() {
                       key={d.date}
                       className={[
                         'month-cell',
-                        !d.inMonth           ? 'out-of-month' : '',
-                        isToday              ? 'is-today'     : '',
-                        shift?.is_open       ? 'has-shift'    : '',
-                        shift && !shift.is_open ? 'is-closed' : '',
-                        isExpanded           ? 'is-selected'  : '',
-                        shift                ? 'clickable'    : '',
+                        !d.inRange              ? 'out-of-month' : '',
+                        isToday                 ? 'is-today'     : '',
+                        shift?.is_open          ? 'has-shift'    : '',
+                        shift && !shift.is_open ? 'is-closed'    : '',
+                        isExpanded              ? 'is-selected'  : '',
+                        shift                   ? 'clickable'    : '',
                       ].filter(Boolean).join(' ')}
                       onClick={shift ? () => handleCell(shift) : undefined}
                     >
@@ -179,19 +232,18 @@ export function AdminMonth() {
                           <span className={`month-cell-count ${isFull ? 'full' : ''}`}>
                             {shift.approved}/{shift.slots}
                           </span>
-                        ) : shift && !shift.is_open && d.inMonth ? (
+                        ) : shift && !shift.is_open && d.inRange ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : null}
                       </div>
 
                       {shift?.is_open && shift.pending > 0 && (
                         <div className="month-cell-pending">
-                          <span className="pip" style={{ background:'var(--yellow)', display:'inline-block', width:5, height:5, borderRadius:'50%', marginRight:3 }} />
+                          <span style={{ background:'var(--yellow)', display:'inline-block', width:5, height:5, borderRadius:'50%', marginRight:3, flexShrink:0 }} />
                           {shift.pending} väntar
                         </div>
                       )}
 
-                      {/* Inline driver list */}
                       {isExpanded && (
                         <div className="month-inline-drivers" onClick={e => e.stopPropagation()}>
                           {!drivers || drivers === 'loading' ? (
