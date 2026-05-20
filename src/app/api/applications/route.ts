@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
   const shiftId = int(raw.shiftId, { min: 1 })
   if (shiftId === null) return NextResponse.json(fieldError('shiftId'), { status: 400 })
   const force = raw.force !== undefined ? bool(raw.force) : false
+  const reserve = raw.reserve === true
 
-  if (!force) {
+  if (!force && !reserve) {
     const shift = await shiftRepo.getById(shiftId)
     if (shift) {
       const streak = await applicationRepo.consecutiveCount(userId, shift.date)
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const app = await applicationRepo.apply(shiftId, userId)
+    const app = await applicationRepo.apply(shiftId, userId, reserve)
     return NextResponse.json(app)
   } catch (err: unknown) {
     const code = (err as Record<string, unknown>)?.code

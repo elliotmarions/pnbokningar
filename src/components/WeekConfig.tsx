@@ -191,6 +191,13 @@ export function WeekConfig() {
     load()
   }
 
+  const handlePromoteReserve = async (appId: number) => {
+    const res = await fetch(`/api/applications/${appId}/promote`, { method: 'POST' })
+    if (!res.ok) { showToast('Fel vid uppflyttning.', 'error'); throw new Error('promote failed') }
+    showToast('Reserv bokad in.')
+    load()
+  }
+
   const handleBookDriver = async (shiftId: number, userId: string) => {
     const res = await fetch(`/api/shifts/${shiftId}/book`, {
       method: 'POST',
@@ -350,6 +357,7 @@ export function WeekConfig() {
         onUnreject={handleUnreject}
         onUnwithdraw={handleUnwithdraw}
         onDeleteApplication={handleDeleteApplication}
+        onPromoteReserve={handlePromoteReserve}
       />
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />

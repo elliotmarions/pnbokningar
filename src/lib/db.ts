@@ -78,6 +78,10 @@ async function migrate() {
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT
   `
+  // Reserve list: driver can join when shift is full
+  await sql`
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS reserve INTEGER NOT NULL DEFAULT 0
+  `
   // Track whether a shift was ever opened by admin (distinguishes "never opened" from "opened then closed")
   await sql`
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS ever_opened INTEGER NOT NULL DEFAULT 0
@@ -478,8 +482,8 @@ export interface DbApplication {
 }
 
 export const applicationRepo = {
-  async apply(shiftId: number, userId: string): Promise<DbApplication> {
-    await sql`INSERT INTO applications (shift_id, user_id) VALUES (${shiftId}, ${userId})`
+  async apply(shiftId: number, userId: string, reserve = false): Promise<DbApplication> {
+    await sql`INSERT INTO applications (shift_id, user_id, reserve) VALUES (${shiftId}, ${userId}, ${reserve ? 1 : 0})`
     const [app] = await sql<DbApplication[]>`
       SELECT id, shift_id, user_id, (applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at
       FROM applications WHERE shift_id = ${shiftId} AND user_id = ${userId}
@@ -506,10 +510,11 @@ export const applicationRepo = {
       rejection_reason: string | null
       withdrawn: number
       withdrawal_reason: string | null
+      reserve: number
     }
     return sql<Row[]>`
       SELECT a.id, a.shift_id, a.user_id, (a.applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
-             a.rejected, a.rejection_reason, a.withdrawn, a.withdrawal_reason,
+             a.rejected, a.rejection_reason, a.withdrawn, a.withdrawal_reason, a.reserve,
              u.name AS user_name, u.phone AS user_phone,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
       FROM applications a
@@ -518,6 +523,20 @@ export const applicationRepo = {
       WHERE a.shift_id = ${shiftId}
       ORDER BY a.applied_at ASC
     `
+  },
+
+  async promote(appId: number, adminId: string): Promise<{ user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }> {
+    // Move from reserve to regular approved application
+    await sql`UPDATE applications SET reserve = 0 WHERE id = ${appId}`
+    await approvalRepo.approve(appId, adminId)
+    const [info] = await sql<{ user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }[]>`
+      SELECT u.name AS user_name, u.phone AS user_phone, s.day_index AS shift_day_index, s.date AS shift_date
+      FROM applications a
+      JOIN users u ON u.id = a.user_id
+      JOIN shifts s ON s.id = a.shift_id
+      WHERE a.id = ${appId}
+    `
+    return info
   },
 
   async reject(appId: number, reason?: string): Promise<void> {
@@ -549,7 +568,7 @@ export const applicationRepo = {
     }
     return sql<Row[]>`
       SELECT a.id, a.shift_id, a.user_id, (a.applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
-             a.rejected, a.rejection_reason, a.withdrawn,
+             a.rejected, a.rejection_reason, a.withdrawn, a.reserve,
              s.date AS shift_date, s.day_index AS shift_day_index,
              s.week_year AS shift_week_year, s.week_number AS shift_week_number,
              CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved

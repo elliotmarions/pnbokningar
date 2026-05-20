@@ -22,6 +22,7 @@ interface Application {
   rejected: boolean
   rejection_reason: string | null
   withdrawn: boolean
+  reserve: number
   applied_at: string
 }
 interface WeekData {
@@ -42,13 +43,14 @@ function initials(name?: string | null) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
-type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'withdrawn' | 'full' | 'open'
+type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'withdrawn' | 'full' | 'open' | 'reserve'
 
 function statusFor(shift: ShiftDay['shift'], app?: Application, approvedCount = 0): DayStatus {
   if (!shift || !shift.is_open) return 'closed'
   if (app?.approved) return 'confirmed'
   if (app?.rejected) return 'rejected'
   if (app?.withdrawn) return 'withdrawn'
+  if (app?.reserve === 1) return 'reserve'
   if (app) return 'pending'
   if (approvedCount >= shift.slots) return 'full'
   return 'open'
@@ -106,6 +108,29 @@ export function DriverHome() {
 
   useEffect(() => { loadWeek(weekOffset) }, [weekOffset, loadWeek])
 
+  const handleApplyReserve = async (shiftId: number) => {
+    const tempId = -Date.now()
+    const optimisticApp: Application = {
+      id: tempId, shift_id: shiftId,
+      approved: false, rejected: false, rejection_reason: null,
+      withdrawn: false, reserve: 1, applied_at: new Date().toISOString(),
+    }
+    setApplications(prev => [...prev, optimisticApp])
+    const res = await fetch('/api/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shiftId, reserve: true }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
+      showToast('Du är tillagd på reservlistan!')
+    } else {
+      setApplications(prev => prev.filter(a => a.id !== tempId))
+      showToast('Något gick fel.', 'error')
+    }
+  }
+
   const handleApply = async (shiftId: number, force = false) => {
     // Optimistic: add a pending app immediately so the UI reacts instantly
     const tempId = -Date.now()
@@ -116,6 +141,7 @@ export function DriverHome() {
       rejected: false,
       rejection_reason: null,
       withdrawn: false,
+      reserve: 0,
       applied_at: new Date().toISOString(),
     }
     setApplications(prev => [...prev, optimisticApp])
@@ -251,7 +277,7 @@ export function DriverHome() {
           </div>
           <div className="driver-grid">
             {days.map(d => (
-              <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} />
+              <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} onApplyReserve={handleApplyReserve} />
             ))}
           </div>
 
@@ -302,7 +328,7 @@ export function DriverHome() {
           </div>
 
           {days.map(d => (
-            <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} />
+            <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} onApplyReserve={handleApplyReserve} />
           ))}
 
           <div className="section-h">
@@ -359,18 +385,19 @@ function ConsecutiveWarning({ count, onConfirm, onCancel }: { count: number; onC
   )
 }
 
-function DayCard({ day, app, approvedCount, onApply, onWithdraw }: {
+function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve }: {
   day: ShiftDay
   app?: Application
   approvedCount: number
   onApply: (id: number) => void
   onWithdraw: (appId: number) => void
+  onApplyReserve: (id: number) => void
 }) {
   const status = statusFor(day.shift, app, approvedCount)
   const cardClass = `day-card is-${status}`
 
-  const badgeLabel = { closed: 'Stängd', open: 'Öppen', pending: 'Sökt', confirmed: 'Bekräftad', full: 'Fullbokad', rejected: 'Nekad', withdrawn: 'Avbokad' }[status]
-  const badgeClass = { closed: 'b-closed', open: 'b-open', pending: 'b-pending', confirmed: 'b-confirmed', full: 'b-full', rejected: 'b-rejected', withdrawn: 'b-closed' }[status]
+  const badgeLabel: Record<DayStatus, string> = { closed: 'Stängd', open: 'Öppen', pending: 'Sökt', confirmed: 'Bekräftad', full: 'Fullbokad', rejected: 'Nekad', withdrawn: 'Avbokad', reserve: 'Reserv' }
+  const badgeClass: Record<DayStatus, string> = { closed: 'b-closed', open: 'b-open', pending: 'b-pending', confirmed: 'b-confirmed', full: 'b-full', rejected: 'b-rejected', withdrawn: 'b-closed', reserve: 'b-reserve' }
 
   return (
     <div className={cardClass}>
@@ -380,8 +407,8 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw }: {
           <div className="day-label">{day.label}</div>
           <div className="day-date">{fmt(day.date)}</div>
         </div>
-        <span className={`badge ${badgeClass}`}>
-          <span className="pip" />{badgeLabel}
+        <span className={`badge ${badgeClass[status]}`}>
+          <span className="pip" />{badgeLabel[status]}
         </span>
       </div>
       <div className="day-row2">
@@ -393,12 +420,21 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw }: {
       {status === 'open' && day.shift && (
         <button className="day-action is-apply" onClick={() => onApply(day.shift!.id)}>Anmäl intresse</button>
       )}
+      {status === 'full' && day.shift && (
+        <button className="day-action is-reserve" onClick={() => onApplyReserve(day.shift!.id)}>Anmäl som reserv</button>
+      )}
       {status === 'pending' && app && (
         <button className="day-action is-cancel" onClick={() => onWithdraw(app.id)}>Återta anmälan</button>
       )}
-      {(status === 'closed' || status === 'full' || status === 'confirmed') && (
+      {status === 'reserve' && app && (
+        <div className="day-action is-reserve-info">
+          <span>Du är på reservlistan</span>
+          <button className="day-action-sub-cancel" onClick={() => onWithdraw(app.id)}>Ta bort mig</button>
+        </div>
+      )}
+      {(status === 'closed' || status === 'confirmed') && (
         <button className="day-action is-disabled" disabled>
-          {status === 'closed' ? 'Stängd för anmälan' : status === 'full' ? 'Fullbokad' : 'Bekräftad ✓'}
+          {status === 'closed' ? 'Stängd för anmälan' : 'Bekräftad ✓'}
         </button>
       )}
       {status === 'rejected' && (

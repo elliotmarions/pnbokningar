@@ -13,6 +13,7 @@ interface Applicant {
   rejection_reason: string | null
   withdrawn: boolean
   withdrawal_reason: string | null
+  reserve: number
 }
 
 interface Shift {
@@ -39,6 +40,7 @@ interface Props {
   onUnreject?: (appId: number) => Promise<void>
   onUnwithdraw?: (appId: number) => Promise<void>
   onDeleteApplication?: (appId: number) => Promise<void>
+  onPromoteReserve?: (appId: number) => Promise<void>
 }
 
 function fmt(dateStr: string) {
@@ -55,7 +57,7 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [slots, setSlots] = useState(shift?.slots ?? 5)
   const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
@@ -122,10 +124,11 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     }
   }
 
-  const approved = applicants.filter(a => a.approved)
-  const pending = applicants.filter(a => !a.approved && !a.rejected && !a.withdrawn)
-  const rejected = applicants.filter(a => a.rejected)
-  const withdrawn = applicants.filter(a => a.withdrawn && !a.approved)
+  const approved = applicants.filter(a => a.approved && !a.reserve)
+  const pending = applicants.filter(a => !a.approved && !a.rejected && !a.withdrawn && !a.reserve)
+  const rejected = applicants.filter(a => a.rejected && !a.reserve)
+  const withdrawn = applicants.filter(a => a.withdrawn && !a.approved && !a.reserve)
+  const reserves = applicants.filter(a => a.reserve === 1 && !a.approved)
 
   const handleApprove = async (appId: number) => {
     const snapshot = applicants
@@ -179,6 +182,20 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     setApplicants(prev => prev.map(x => x.id === appId ? { ...x, rejected: false, rejection_reason: null } : x))
     try {
       await onUnreject(appId)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
+  }
+
+  const handlePromoteReserve = async (appId: number) => {
+    if (!onPromoteReserve) return
+    const snapshot = applicants
+    addPending(appId)
+    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, reserve: 0, approved: true } : a))
+    try {
+      await onPromoteReserve(appId)
     } catch {
       setApplicants(snapshot)
     } finally {
@@ -526,6 +543,51 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Ta bort permanent"
+                      disabled={pendingIds.has(a.id)}
+                      onClick={() => handleDeleteApplication(a.id)}
+                    >
+                      <X className="svg-ico svg-ico-sm" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          }
+          {/* Reserve list */}
+          <div className="list-group-h" style={{ marginTop: 12 }}>
+            <span>Reservlista</span>
+            {reserves.length > 0 && <span className="badge b-reserve">{reserves.length}</span>}
+          </div>
+          {reserves.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Ingen på reservlistan.</p>
+            : reserves.map((a, i) => (
+              <div key={a.id} className="applicant-row reserve-row">
+                <div className="avatar lg" style={{ background: '#1a2a3a' }}>{initials(a.user_name)}</div>
+                <div className="info">
+                  <div className="name">
+                    <span className="order-tag">#{i + 1}</span>
+                    {a.user_name}
+                  </div>
+                  <div className="meta">
+                    {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
+                  </div>
+                </div>
+                <div className="actions">
+                  {onPromoteReserve && (
+                    <button
+                      className="btn btn-sm btn-success"
+                      disabled={pendingIds.has(a.id)}
+                      onClick={() => handlePromoteReserve(a.id)}
+                      title="Flytta till godkänd"
+                    >
+                      <Check className="svg-ico svg-ico-sm" />
+                      Boka in
+                    </button>
+                  )}
+                  {onDeleteApplication && (
+                    <button
+                      className="btn btn-sm btn-danger-ghost btn-icon"
+                      title="Ta bort från reservlista"
                       disabled={pendingIds.has(a.id)}
                       onClick={() => handleDeleteApplication(a.id)}
                     >
