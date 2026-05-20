@@ -59,6 +59,7 @@ function fmtTime(iso: string) {
 
 export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
+  const [activeTab, setActiveTab] = useState<'applications' | 'reserves'>('applications')
   const [slots, setSlots] = useState(shift?.slots ?? 5)
   const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
   const [rejectingId, setRejectingId] = useState<number | null>(null)
@@ -286,7 +287,30 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="ip-tabs">
+          <button
+            className={`ip-tab ${activeTab === 'applications' ? 'active' : ''}`}
+            onClick={() => setActiveTab('applications')}
+          >
+            Ansökningar
+            {(approved.length + pending.length) > 0 && (
+              <span className="ip-tab-badge">{approved.length + pending.length}</span>
+            )}
+          </button>
+          <button
+            className={`ip-tab ${activeTab === 'reserves' ? 'active' : ''}`}
+            onClick={() => setActiveTab('reserves')}
+          >
+            Reserver
+            {reserves.length > 0 && (
+              <span className="ip-tab-badge">{reserves.length}</span>
+            )}
+          </button>
+        </div>
+
         <div className="side-panel-list">
+          {activeTab === 'applications' && <>
           {/* Approved group */}
           <div className="list-group-h">
             <span>Godkända</span>
@@ -553,8 +577,11 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
               </div>
             ))
           }
+          </>}
+
+          {activeTab === 'reserves' && <>
           {/* Reserve list */}
-          <div className="list-group-h" style={{ marginTop: 12 }}>
+          <div className="list-group-h">
             <span>Reservlista</span>
             {reserves.length > 0 && <span className="badge b-reserve">{reserves.length}</span>}
           </div>
@@ -598,6 +625,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
               </div>
             ))
           }
+          </>}
         </div>
       </div>
     </>
