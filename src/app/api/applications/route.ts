@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
 import { applicationRepo, shiftRepo } from '@/lib/db'
+import { int, bool, fieldError } from '@/lib/validate'
 
 export async function POST(req: NextRequest) {
   const session = await requireUser()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const userId = (session.user as Record<string, unknown>).id as string
-  const { shiftId, force } = await req.json() as { shiftId: number; force?: boolean }
+
+  let body: unknown
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Ogiltig JSON.' }, { status: 400 }) }
+  const raw = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>
+
+  const shiftId = int(raw.shiftId, { min: 1 })
+  if (shiftId === null) return NextResponse.json(fieldError('shiftId'), { status: 400 })
+  const force = raw.force !== undefined ? bool(raw.force) : false
 
   if (!force) {
     const shift = await shiftRepo.getById(shiftId)

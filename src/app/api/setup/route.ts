@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { userRepo, getDb, ensureMigrated } from '@/lib/db'
+import { str, int as _int, EMAIL_RE, fieldError } from '@/lib/validate'
 
 // POST /api/setup — create the first admin user
 // Only works when no admins exist yet
 export async function POST(req: NextRequest) {
-  const { name, email, password } = await req.json() as {
-    name: string
-    email: string
-    password: string
+  let body: unknown
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Ogiltig JSON.' }, { status: 400 }) }
+  if (typeof body !== 'object' || body === null) {
+    return NextResponse.json({ error: 'Ogiltig förfrågan.' }, { status: 400 })
   }
+  const raw = body as Record<string, unknown>
 
-  if (!name || !email || !password) {
-    return NextResponse.json({ error: 'Namn, e-post och lösenord krävs.' }, { status: 400 })
-  }
-  if (password.length < 8) {
+  const name = str(raw.name, { min: 1, max: 100 })
+  const email = str(raw.email, { min: 3, max: 254 })
+  const password = str(raw.password, { min: 8, max: 128 })
+
+  if (!name) return NextResponse.json(fieldError('name'), { status: 400 })
+  if (!email || !EMAIL_RE.test(email)) return NextResponse.json(fieldError('email'), { status: 400 })
+  if (!password) {
     return NextResponse.json({ error: 'Lösenordet måste vara minst 8 tecken.' }, { status: 400 })
   }
 

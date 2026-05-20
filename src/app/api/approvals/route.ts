@@ -3,13 +3,19 @@ import { requireAdmin } from '@/lib/auth'
 import { approvalRepo, getDb } from '@/lib/db'
 import { sendConfirmationSms } from '@/lib/sms'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
+import { int, fieldError } from '@/lib/validate'
 
 export async function POST(req: NextRequest) {
   const session = await requireAdmin()
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const adminId = (session.user as Record<string, unknown>).id as string
-  const { applicationId } = await req.json() as { applicationId: number }
+
+  let body: unknown
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Ogiltig JSON.' }, { status: 400 }) }
+  const raw = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>
+  const applicationId = int(raw.applicationId, { min: 1 })
+  if (applicationId === null) return NextResponse.json(fieldError('applicationId'), { status: 400 })
   const sql = getDb()
 
   const [app] = await sql<{
