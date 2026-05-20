@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Clock, Check, Plus, Users } from './Icons'
+import { ChevronLeft, ChevronRight, Clock, Plus, Users } from './Icons'
 import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
@@ -113,22 +113,20 @@ export function WeekConfig() {
     return () => clearTimeout(t)
   }, [weekOffset, cache])
 
-  const update = (id: number, field: 'is_open' | 'slots', value: number) => {
-    setLocal(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s))
+  const update = async (id: number, field: 'is_open' | 'slots', value: number) => {
+    const currentShift = local.find(s => s.id === id)
+    if (!currentShift) return
+    const updatedShift = { ...currentShift, [field]: value }
+    setLocal(prev => prev.map(s => s.id === id ? updatedShift : s))
     if (field === 'slots') setDraftSlots(prev => ({ ...prev, [id]: String(value) }))
-  }
-
-  const save = async () => {
     const res = await fetch('/api/shifts', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(local.map(s => ({ id: s.id, is_open: s.is_open, slots: s.slots }))),
+      body: JSON.stringify([{ id: updatedShift.id, is_open: updatedShift.is_open, slots: updatedShift.slots }]),
     })
-    if (res.ok) { showToast('Veckan sparad') }
+    if (res.ok) showToast('Autosparad')
     else showToast('Fel vid sparande', 'error')
   }
-
-  const reset = () => setLocal(shifts.map(s => ({ ...s })))
 
   const handleApprove = async (appId: number) => {
     const res = await fetch('/api/approvals', {
@@ -331,14 +329,6 @@ export function WeekConfig() {
             </div>
           )
         })}
-      </div>
-
-      <div className="cfg-actions">
-        <button className="btn" onClick={reset}>Återställ</button>
-        <button className="btn btn-primary" onClick={save}>
-          <Check className="svg-ico svg-ico-sm" />
-          Spara vecka
-        </button>
       </div>
 
       <InterestPanel
