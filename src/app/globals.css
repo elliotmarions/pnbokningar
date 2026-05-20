@@ -650,6 +650,21 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tbl td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .tbl th.num { text-align: right; }
 
+/* ── Withdrawal history table ── */
+.wd-summary-row td { transition: background var(--t); }
+.wd-summary-row:hover td { background: var(--bg-hover); }
+.wd-chevron { font-size: 10px; color: var(--text-tertiary); margin-right: 6px; }
+.wd-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 22px; border-radius: 6px; font-weight: 600; font-size: 13px;
+  padding: 0 6px; background: var(--bg-elevated); color: var(--text-secondary);
+}
+.wd-count.wd-count-mid { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); }
+.wd-count.wd-count-high { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+.wd-detail-row td { background: var(--bg-deep) !important; padding-top: 6px; padding-bottom: 6px; }
+.wd-detail-row:last-child td { border-bottom: 1px solid var(--border) !important; }
+.wd-reasons-preview { color: var(--text-tertiary); font-style: italic; }
+
 /* ===== Drivers table ===== */
 .drivers-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
 .drivers-top h2 { margin: 0; font-size: 18px; font-weight: 600; }
