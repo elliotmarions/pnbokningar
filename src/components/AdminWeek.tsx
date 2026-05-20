@@ -53,26 +53,43 @@ export function AdminWeek() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [driversMap,  setDriversMap]  = useState<Record<number, Driver[] | 'loading'>>({})
   const [reservesMap, setReservesMap] = useState<Record<number, Driver[]>>({})
+  const [applicantsByShift, setApplicantsByShift] = useState<Record<number, unknown[]>>({})
 
-  const load = useCallback(async (offset: number) => {
-    const id = ++loadId.current
+  // Helper: derive ISO year+week from an offset (in weeks from today)
+  const isoFromOffset = (offset: number) => {
     const base = new Date()
     base.setDate(base.getDate() + offset * 7)
     const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    return { isoYear, isoWeek }
+  }
+
+  const load = useCallback(async (offset: number) => {
+    const id = ++loadId.current
+    const { isoYear, isoWeek } = isoFromOffset(offset)
     const cacheKey = `weeks-${isoYear}-${isoWeek}`
 
-    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[] }) => {
+    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[]; applicantsByShift?: Record<number, unknown[]> }) => {
       setWeekYear(data.weekYear)
       setWeekNumber(data.weekNumber)
       setShifts(data.shifts)
       setDays(data.days)
+      if (data.applicantsByShift) setApplicantsByShift(data.applicantsByShift)
       setLoading(false)
     }
 
     const cached = cache.get(cacheKey)
-    if (cached) apply(cached as typeof apply extends (d: infer D) => void ? D : never)
+    if (cached) {
+      apply(cached as Parameters<typeof apply>[0])
+    } else {
+      // No cached data — show skeleton instead of stale shifts from previous week
+      setShifts([])
+      setLoading(true)
+      // Show the new week number/year in the header immediately, even before data lands
+      setWeekYear(isoYear)
+      setWeekNumber(isoWeek)
+    }
 
     const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
     if (!res.ok) { setLoading(false); return }
@@ -93,6 +110,24 @@ export function AdminWeek() {
     load(weekOffset)
   }, [weekOffset, load])
 
+  // Prefetch adjacent weeks immediately so prev/next clicks feel instant
+  useEffect(() => {
+    const prefetch = (offset: number) => {
+      const { isoYear, isoWeek } = isoFromOffset(offset)
+      const key = `weeks-${isoYear}-${isoWeek}`
+      if (cache.get(key)) return
+      fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) cache.set(key, data) })
+        .catch(() => {})
+    }
+    // Fire immediately — no debounce. The browser handles parallel requests fine.
+    prefetch(weekOffset - 1)
+    prefetch(weekOffset + 1)
+    prefetch(weekOffset - 2)
+    prefetch(weekOffset + 2)
+  }, [weekOffset, cache])
+
   const handleCardClick = async (shiftId: number) => {
     const isOpen = expandedIds.has(shiftId)
 
@@ -105,12 +140,23 @@ export function AdminWeek() {
 
     // Fetch only on first open and if not already fetched
     if (!isOpen && driversMap[shiftId] === undefined) {
+      type Applicant = { approved: number; reserve: number; rejected: number; withdrawn: number; user_name: string; user_phone: string | null; id: number }
+
+      // Use the prefetched applicants from the week response if available — instant render
+      const prefetched = applicantsByShift[shiftId] as Applicant[] | undefined
+      if (prefetched) {
+        const approved: Driver[] = prefetched.filter(a => a.approved).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+        const reserves: Driver[] = prefetched.filter(a => a.reserve === 1 && !a.approved && !a.rejected && !a.withdrawn).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+        setDriversMap(prev  => ({ ...prev, [shiftId]: approved }))
+        setReservesMap(prev => ({ ...prev, [shiftId]: reserves }))
+        return
+      }
+
       setDriversMap(prev => ({ ...prev, [shiftId]: 'loading' }))
       try {
         const res = await fetch(`/api/shifts/${shiftId}`)
         if (!res.ok) throw new Error()
         const data = await res.json()
-        type Applicant = { approved: number; reserve: number; rejected: number; withdrawn: number; user_name: string; user_phone: string | null; id: number }
         const applicants: Applicant[] = data.applicants ?? []
         const approved:  Driver[] = applicants.filter(a => a.approved).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
         const reserves:  Driver[] = applicants.filter(a => a.reserve === 1 && !a.approved && !a.rejected && !a.withdrawn).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
