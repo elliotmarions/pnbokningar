@@ -199,6 +199,13 @@ export function WeekConfig() {
     load()
   }
 
+  const handleMoveToReserve = async (appId: number) => {
+    const res = await fetch(`/api/applications/${appId}/reserve`, { method: 'POST' })
+    if (!res.ok) { showToast('Fel vid flytt till reserv.', 'error'); throw new Error('move to reserve failed') }
+    showToast('Flyttad till reservlistan.')
+    load()
+  }
+
   const handleBookDriver = async (shiftId: number, userId: string) => {
     const res = await fetch(`/api/shifts/${shiftId}/book`, {
       method: 'POST',
@@ -368,6 +375,7 @@ export function WeekConfig() {
         onUnwithdraw={handleUnwithdraw}
         onDeleteApplication={handleDeleteApplication}
         onPromoteReserve={handlePromoteReserve}
+        onMoveToReserve={handleMoveToReserve}
       />
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />

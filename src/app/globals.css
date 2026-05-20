@@ -577,6 +577,7 @@ a { color: inherit; text-decoration: none; }
 .ip-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 .ip-tab-badge { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 10px; font-size: 10px; font-weight: 600; padding: 1px 6px; }
 .ip-tab.active .ip-tab-badge { background: rgba(0,149,255,.15); color: var(--primary); border-color: rgba(0,149,255,.3); }
+.ip-reserve-btn { font-size: 11.5px; color: var(--text-secondary); border-color: var(--border); }
 .side-panel-list { flex: 1; overflow-y: auto; padding: 8px 14px 20px; }
 .list-group-h {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-tertiary);

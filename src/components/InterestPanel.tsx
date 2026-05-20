@@ -41,6 +41,7 @@ interface Props {
   onUnwithdraw?: (appId: number) => Promise<void>
   onDeleteApplication?: (appId: number) => Promise<void>
   onPromoteReserve?: (appId: number) => Promise<void>
+  onMoveToReserve?: (appId: number) => Promise<void>
 }
 
 function fmt(dateStr: string) {
@@ -57,7 +58,7 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves'>('applications')
   const [slots, setSlots] = useState(shift?.slots ?? 5)
@@ -197,6 +198,20 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     setApplicants(prev => prev.map(a => a.id === appId ? { ...a, reserve: 0, approved: true } : a))
     try {
       await onPromoteReserve(appId)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
+  }
+
+  const handleMoveToReserve = async (appId: number) => {
+    if (!onMoveToReserve) return
+    const snapshot = applicants
+    addPending(appId)
+    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, reserve: 1 } : a))
+    try {
+      await onMoveToReserve(appId)
     } catch {
       setApplicants(snapshot)
     } finally {
@@ -454,6 +469,16 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       <Check className="svg-ico svg-ico-sm" />
                       Godkänn
                     </button>
+                    {onMoveToReserve && (
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        disabled={pendingIds.has(a.id)}
+                        onClick={() => handleMoveToReserve(a.id)}
+                        title="Flytta till reservlista"
+                      >
+                        Reserv
+                      </button>
+                    )}
                     {onReject && (
                       <button
                         className="btn btn-sm btn-danger-ghost"
