@@ -13,6 +13,7 @@ interface MonthShift {
   slots: number
   approved: number
   pending: number
+  reserves: number
 }
 interface Driver {
   id: number
@@ -298,6 +299,12 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
                         <div className="month-cell-pending">
                           <span style={{ background:'var(--yellow)', display:'inline-block', width:5, height:5, borderRadius:'50%', marginRight:3, flexShrink:0 }} />
                           {shift.pending} väntar
+                        </div>
+                      )}
+
+                      {shift?.is_open === 1 && shift.reserves > 0 && (
+                        <div className="month-cell-reserves">
+                          {shift.reserves} res.
                         </div>
                       )}
 

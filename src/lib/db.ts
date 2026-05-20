@@ -283,14 +283,15 @@ export const shiftRepo = {
 
   async getWeekWithCounts(weekYear: number, weekNumber: number) {
     await ensureMigrated()
-    type Row = DbShift & { approved: number; pending: number }
+    type Row = DbShift & { approved: number; pending: number; reserves: number }
     return sql<Row[]>`
       SELECT s.*,
         COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
         COALESCE(
           COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 AND a.reserve = 0 THEN a.id END)
           - COUNT(DISTINCT ap.id), 0
-        )::int AS pending
+        )::int AS pending,
+        COALESCE(COUNT(DISTINCT CASE WHEN a.reserve = 1 AND a.rejected = 0 AND a.withdrawn = 0 THEN a.id END), 0)::int AS reserves
       FROM shifts s
       LEFT JOIN applications a ON a.shift_id = s.id
       LEFT JOIN approvals ap ON ap.application_id = a.id
@@ -354,14 +355,15 @@ export const shiftRepo = {
 
   async getMonthWithCounts(from: string, to: string) {
     await ensureMigrated()
-    type Row = DbShift & { approved: number; pending: number }
+    type Row = DbShift & { approved: number; pending: number; reserves: number }
     return sql<Row[]>`
       SELECT s.*,
         COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
         COALESCE(
           COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 AND a.reserve = 0 THEN a.id END)
           - COUNT(DISTINCT ap.id), 0
-        )::int AS pending
+        )::int AS pending,
+        COALESCE(COUNT(DISTINCT CASE WHEN a.reserve = 1 AND a.rejected = 0 AND a.withdrawn = 0 THEN a.id END), 0)::int AS reserves
       FROM shifts s
       LEFT JOIN applications a ON a.shift_id = s.id
       LEFT JOIN approvals ap ON ap.application_id = a.id
