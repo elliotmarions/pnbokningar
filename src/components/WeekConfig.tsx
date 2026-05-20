@@ -13,6 +13,7 @@ interface Shift {
   slots: number
   approved?: number
   pending?: number
+  reserves?: number
 }
 interface DayInfo {
   dayIndex: number
@@ -44,7 +45,7 @@ export function WeekConfig() {
   const [days, setDays] = useState<DayInfo[]>([])
   const [local, setLocal] = useState<Shift[]>([])
   const [draftSlots, setDraftSlots] = useState<Record<number, string>>({})
-  const [counts, setCounts] = useState<Record<number, { approved: number; pending: number }>>({})
+  const [counts, setCounts] = useState<Record<number, { approved: number; pending: number; reserves: number }>>({})
   const [openShiftId, setOpenShiftId] = useState<number | null>(null)
   const [openWeekDialog, setOpenWeekDialog] = useState(false)
   const [openWeekSlots, setOpenWeekSlots] = useState<Record<number, string>>({})
@@ -67,9 +68,9 @@ export function WeekConfig() {
       const drafts: Record<number, string> = {}
       data.shifts.forEach((s: Shift) => { drafts[s.id] = String(s.slots) })
       setDraftSlots(drafts)
-      const c: Record<number, { approved: number; pending: number }> = {}
+      const c: Record<number, { approved: number; pending: number; reserves: number }> = {}
       data.shifts.forEach((s: Shift) => {
-        c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0 }
+        c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
       })
       setCounts(c)
     }
@@ -290,7 +291,7 @@ export function WeekConfig() {
 
               {/* Applicants button */}
               {(() => {
-                const c = counts[shift.id] ?? { approved: 0, pending: 0 }
+                const c = counts[shift.id] ?? { approved: 0, pending: 0, reserves: 0 }
                 return (
                   <button
                     className="cfg-applicants-btn"
@@ -300,6 +301,7 @@ export function WeekConfig() {
                     <Users className="svg-ico svg-ico-sm" />
                     <span>{c.approved} godkända</span>
                     {c.pending > 0 && <span className="badge b-pending" style={{ fontSize: 11 }}><span className="pip" />{c.pending} väntar</span>}
+                    {c.reserves > 0 && <span className="cfg-reserve-count">{c.reserves} res.</span>}
                   </button>
                 )
               })()}
