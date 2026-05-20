@@ -13,7 +13,7 @@ const AdminCache = createContext<AdminCacheCtx>({
   del: () => {},
 })
 
-const STORAGE_KEY = 'pn-admin-cache-v1'
+const STORAGE_KEY = 'pn-admin-cache-v2'
 const MAX_ENTRIES = 40
 
 interface Entry { data: unknown; ts: number }
