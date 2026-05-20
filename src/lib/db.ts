@@ -121,6 +121,35 @@ async function migrate() {
   await sql`CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_approvals_application_id ON approvals(application_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_long_term_dates ON long_term_bookings(from_date, to_date)`
+
+  // Indexes for unindexed foreign keys (Supabase advisor)
+  await sql`CREATE INDEX IF NOT EXISTS idx_approvals_approved_by ON approvals(approved_by)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_long_term_user_id ON long_term_bookings(user_id)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_long_term_created_by ON long_term_bookings(created_by)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_custom_closed_created_by ON custom_closed_days(created_by)`
+
+  // Enable Row Level Security on all tables (server-side app — service_role bypasses RLS)
+  await sql`ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY`
+  await sql`ALTER TABLE users ENABLE ROW LEVEL SECURITY`
+  await sql`ALTER TABLE shifts ENABLE ROW LEVEL SECURITY`
+  await sql`ALTER TABLE applications ENABLE ROW LEVEL SECURITY`
+  await sql`ALTER TABLE approvals ENABLE ROW LEVEL SECURITY`
+  await sql`ALTER TABLE long_term_bookings ENABLE ROW LEVEL SECURITY`
+  await sql`ALTER TABLE custom_closed_days ENABLE ROW LEVEL SECURITY`
+
+  // Allow service_role full access (all DB calls go through the server-side API)
+  for (const table of ['schema_migrations', 'users', 'shifts', 'applications', 'approvals', 'long_term_bookings', 'custom_closed_days']) {
+    await sql.unsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = '${table}' AND policyname = 'service_role_all'
+        ) THEN
+          EXECUTE 'CREATE POLICY service_role_all ON ${table} FOR ALL TO service_role USING (true) WITH CHECK (true)';
+        END IF;
+      END $$
+    `)
+  }
 }
 
 // --------------- Users ---------------
