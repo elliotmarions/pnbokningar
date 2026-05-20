@@ -665,7 +665,15 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .wd-count.wd-count-high { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
 .wd-detail-row td { background: var(--bg-deep) !important; padding-top: 6px; padding-bottom: 6px; }
 .wd-detail-row:last-child td { border-bottom: 1px solid var(--border) !important; }
-.wd-reasons-preview { color: var(--text-tertiary); font-style: italic; }
+.wd-reasons-preview {
+  color: var(--text-secondary);
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
 
 /* ===== Drivers table ===== */
 .drivers-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }

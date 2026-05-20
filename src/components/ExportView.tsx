@@ -34,6 +34,8 @@ function groupWithdrawals(rows: WithdrawalRow[]): WithdrawalGroup[] {
     if (r.shift_date > g.last_date) g.last_date = r.shift_date
     g.entries.push({ date: r.shift_date, reason: r.withdrawal_reason ?? '–' })
   }
+  // Sort entries within each group by date DESC so the first one is the most recent
+  for (const g of map.values()) g.entries.sort((a, b) => b.date.localeCompare(a.date))
   return Array.from(map.values()).sort((a, b) => b.total - a.total)
 }
 
@@ -237,11 +239,15 @@ export function ExportView() {
                       </td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{g.last_date}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 260 }}>
-                        {!isExpanded && (
-                          <span className="wd-reasons-preview">
-                            {[...new Set(g.entries.map(e => e.reason).filter(r => r !== '–'))].slice(0, 2).join(' · ') || '–'}
-                          </span>
-                        )}
+                        {!isExpanded && (() => {
+                          // Entries are sorted DESC by date in SQL — the first one is the most recent
+                          const latest = g.entries[0]?.reason
+                          return (
+                            <span className="wd-reasons-preview">
+                              {latest && latest !== '–' ? latest : '–'}
+                            </span>
+                          )
+                        })()}
                       </td>
                     </tr>
                     {isExpanded && g.entries.map((e, i) => (
