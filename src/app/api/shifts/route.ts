@@ -19,11 +19,11 @@ export async function PUT(req: NextRequest) {
     const r = item as Record<string, unknown>
     const id = int(r.id, { min: 1 })
     if (id === null) return NextResponse.json(fieldError('id'), { status: 400 })
-    const is_open = r.is_open !== undefined ? int(r.is_open, { min: 0, max: 1 }) : undefined
-    const slots = r.slots !== undefined ? int(r.slots, { min: 1, max: 50 }) : undefined
-    if (r.is_open !== undefined && is_open === null) return NextResponse.json(fieldError('is_open'), { status: 400 })
-    if (r.slots !== undefined && slots === null) return NextResponse.json(fieldError('slots'), { status: 400 })
-    body.push({ id, is_open, slots })
+    const is_open_val = r.is_open !== undefined ? int(r.is_open, { min: 0, max: 1 }) : undefined
+    const slots_val = r.slots !== undefined ? int(r.slots, { min: 1, max: 50 }) : undefined
+    if (r.is_open !== undefined && is_open_val === null) return NextResponse.json(fieldError('is_open'), { status: 400 })
+    if (r.slots !== undefined && slots_val === null) return NextResponse.json(fieldError('slots'), { status: 400 })
+    body.push({ id, is_open: is_open_val ?? undefined, slots: slots_val ?? undefined })
   }
 
   for (const s of body) {
