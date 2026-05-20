@@ -84,6 +84,26 @@ export function DriverHome() {
     tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+
+    // SWR: pull cached data from sessionStorage so the UI renders instantly,
+    // then revalidate in the background.
+    const cacheKey = `driver-week-${isoYear}-${isoWeek}`
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = sessionStorage.getItem(cacheKey)
+        if (raw) {
+          const { week, apps } = JSON.parse(raw)
+          if (week) {
+            setWeekData(week)
+            const counts: Record<number, number> = {}
+            for (const s of week.shifts) counts[s.id] = s.approved ?? 0
+            setAllApprovedCounts(counts)
+          }
+          if (apps) setApplications(apps)
+        }
+      } catch {}
+    }
+
     // Parallel fetch of week + user's applications
     const [res, appRes] = await Promise.all([
       fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
@@ -92,9 +112,10 @@ export function DriverHome() {
     if (!res.ok) return
     const data: WeekData = await res.json()
     setWeekData(data)
+    let apps: Application[] | null = null
     if (appRes.ok) {
-      const apps: Application[] = await appRes.json()
-      setApplications(apps)
+      apps = await appRes.json()
+      setApplications(apps!)
     }
 
     // Counts now come inline from /api/weeks
@@ -103,6 +124,11 @@ export function DriverHome() {
       counts[shift.id] = shift.approved ?? 0
     }
     setAllApprovedCounts(counts)
+
+    // Persist for instant reload on next visit
+    if (typeof window !== 'undefined') {
+      try { sessionStorage.setItem(cacheKey, JSON.stringify({ week: data, apps })) } catch {}
+    }
   }, [])
 
   useEffect(() => { loadWeek(weekOffset) }, [weekOffset, loadWeek])
