@@ -468,16 +468,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     >
                       <Check className="svg-ico svg-ico-sm" />
                     </button>
-                    {onMoveToReserve && (
-                      <button
-                        className="btn btn-sm btn-ghost ip-reserve-btn"
-                        disabled={pendingIds.has(a.id)}
-                        onClick={() => handleMoveToReserve(a.id)}
-                        title="Flytta till reservlista"
-                      >
-                        Reserv
-                      </button>
-                    )}
                     {onReject && (
                       <button
                         className="btn btn-sm btn-danger-ghost btn-icon"
@@ -486,6 +476,16 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                         title="Neka"
                       >
                         <X className="svg-ico svg-ico-sm" />
+                      </button>
+                    )}
+                    {onMoveToReserve && (
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        disabled={pendingIds.has(a.id)}
+                        onClick={() => handleMoveToReserve(a.id)}
+                        title="Flytta till reservlista"
+                      >
+                        Reserv
                       </button>
                     )}
                   </div>
