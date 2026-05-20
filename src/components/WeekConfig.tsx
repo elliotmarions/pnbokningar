@@ -291,15 +291,23 @@ export function WeekConfig() {
 
               {/* Applicants button */}
               {(() => {
-                const c = counts[shift.id] ?? { approved: 0, pending: 0, reserves: 0 }
+                const c            = counts[shift.id] ?? { approved: 0, pending: 0, reserves: 0 }
+                const isOverbooked = isOpen && c.approved > shift.slots
+                const isFull       = isOpen && c.approved >= shift.slots
                 return (
                   <button
-                    className="cfg-applicants-btn"
+                    className={`cfg-applicants-btn ${isOverbooked ? 'is-overbooked' : ''}`}
                     onClick={() => setOpenShiftId(shift.id)}
                     type="button"
                   >
                     <Users className="svg-ico svg-ico-sm" />
                     <span>{c.approved} godkända</span>
+                    {isOverbooked
+                      ? <span className="cfg-overbooked-tag">+{c.approved - shift.slots} över</span>
+                      : isFull
+                        ? <span className="cfg-full-tag">Fullbokad</span>
+                        : null
+                    }
                     {c.pending > 0 && <span className="badge b-pending" style={{ fontSize: 11 }}><span className="pip" />{c.pending} väntar</span>}
                     {c.reserves > 0 && <span className="cfg-reserve-count">{c.reserves} res.</span>}
                   </button>

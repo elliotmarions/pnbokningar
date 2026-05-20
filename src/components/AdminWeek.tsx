@@ -173,10 +173,11 @@ export function AdminWeek() {
             const shift = shifts.find(s => s.day_index === day.dayIndex)
             if (!shift) return null
             const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0, reserves: shift.reserves ?? 0 }
-            const pct = shift.slots > 0 ? Math.min(100, (c.approved / shift.slots) * 100) : 0
-            const isFull = c.approved >= shift.slots
-            const badgeClass = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
-            const badgeLabel = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
+            const pct          = shift.slots > 0 ? Math.min(100, (c.approved / shift.slots) * 100) : 0
+            const isFull       = c.approved >= shift.slots
+            const isOverbooked = c.approved > shift.slots
+            const badgeClass   = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
+            const badgeLabel   = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
             const isExpanded = expandedIds.has(shift.id)
             const drivers  = driversMap[shift.id]
             const reserves = reservesMap[shift.id] ?? []
@@ -209,11 +210,12 @@ export function AdminWeek() {
 
                 <div>
                   <div className="wk-meter">
-                    <span className="num">{c.approved}</span>
+                    <span className={`num ${isOverbooked ? 'overbooked' : ''}`}>{c.approved}</span>
                     <span className="denom">/{shift.slots} godkända</span>
+                    {isOverbooked && <span className="wk-overbooked-tag">+{c.approved - shift.slots} extra</span>}
                   </div>
                   <div className="wk-meter-bar" style={{ marginTop: 6 }}>
-                    <div className={`fill ${isFull ? 'full' : ''}`} style={{ width: `${pct}%` }} />
+                    <div className={`fill ${isOverbooked ? 'overbooked' : isFull ? 'full' : ''}`} style={{ width: `${pct}%` }} />
                   </div>
                   <div className="wk-waiting">{c.pending} väntar på godkännande</div>
                   {c.reserves > 0 && (
