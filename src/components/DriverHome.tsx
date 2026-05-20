@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
 import { Toast, useToast } from './Toast'
 
@@ -58,7 +58,6 @@ function statusFor(shift: ShiftDay['shift'], app?: Application, approvedCount = 
 
 export function DriverHome() {
   const { data: session } = useSession()
-  const router = useRouter()
   const [isDesktop, setIsDesktop] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekData, setWeekData] = useState<WeekData | null>(null)
@@ -240,7 +239,7 @@ export function DriverHome() {
               </div>
               <div className="avatar">{initials(user?.name)}</div>
               {user?.role === 'admin' && (
-                <button className="btn btn-sm" onClick={() => router.push('/admin')}>Adminvy</button>
+                <Link href="/admin" prefetch className="btn btn-sm">Adminvy</Link>
               )}
               <button className="btn-ghost btn btn-icon" onClick={() => signOut({ callbackUrl: '/' })}>
                 <LogOut className="svg-ico" />
@@ -348,10 +347,10 @@ export function DriverHome() {
             Pass
           </button>
           {user?.role === 'admin' && (
-            <button className="tab" onClick={() => router.push('/admin')}>
+            <Link href="/admin" prefetch className="tab">
               <Settings className="svg-ico ico" />
               Admin
-            </button>
+            </Link>
           )}
           <button className="tab">
             <User className="svg-ico ico" />
