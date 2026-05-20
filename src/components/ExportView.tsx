@@ -24,6 +24,8 @@ function nWeeksAgoStr(n: number) {
 }
 
 const WEEKS_CACHE_KEY = 'weeks-current'
+const previewKey = (from: string, to: string, group: string) => `export-preview-${from}-${to}-${group}`
+const withdrawalsKey = (from: string, to: string) => `export-withdrawals-${from}-${to}`
 
 function groupWithdrawals(rows: WithdrawalRow[]): WithdrawalGroup[] {
   const map = new Map<string, WithdrawalGroup>()
@@ -65,23 +67,34 @@ export function ExportView() {
   }, [cache])
 
   useEffect(() => {
+    const key = previewKey(from, to, group)
+    const cached = cache.get(key) as DriverRow[] | WeekRow[] | undefined
+    if (cached) setPreview(cached)
     const id = setTimeout(async () => {
       const res = await fetch(`/api/export/preview?from=${from}&to=${to}&group=${group}`)
-      if (res.ok) setPreview(await res.json())
-    }, 400)
+      if (res.ok) {
+        const data = await res.json()
+        cache.set(key, data)
+        setPreview(data)
+      }
+    }, cached ? 400 : 0)
     return () => clearTimeout(id)
-  }, [from, to, group])
+  }, [from, to, group, cache])
 
   useEffect(() => {
+    const key = withdrawalsKey(wFrom, wTo)
+    const cached = cache.get(key) as WithdrawalRow[] | undefined
+    if (cached) setWithdrawals(groupWithdrawals(cached))
     const id = setTimeout(async () => {
       const res = await fetch(`/api/export/withdrawals?from=${wFrom}&to=${wTo}`)
       if (res.ok) {
         const rows: WithdrawalRow[] = await res.json()
+        cache.set(key, rows)
         setWithdrawals(groupWithdrawals(rows))
       }
-    }, 400)
+    }, cached ? 400 : 0)
     return () => clearTimeout(id)
-  }, [wFrom, wTo])
+  }, [wFrom, wTo, cache])
 
   const download = () => {
     window.location.href = `/api/export?from=${from}&to=${to}&group=${group}`
