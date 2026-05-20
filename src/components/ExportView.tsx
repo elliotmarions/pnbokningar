@@ -202,13 +202,13 @@ export function ExportView() {
             <input
               type="date" value={wFrom}
               onChange={e => setWFrom(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
+              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)', colorScheme: 'dark' }}
             />
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>–</span>
             <input
               type="date" value={wTo}
               onChange={e => setWTo(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}
+              style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)', colorScheme: 'dark' }}
             />
           </div>
         </div>
