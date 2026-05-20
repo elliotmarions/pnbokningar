@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
-import { shiftRepo, customClosedRepo } from '@/lib/db'
+import { shiftRepo, applicationRepo, customClosedRepo } from '@/lib/db'
 import { weekInfoFromNumbers, currentWeekInfo } from '@/lib/weeks'
 import { getHolidayInfo } from '@/lib/holidays'
 
@@ -52,5 +52,15 @@ export async function GET(req: NextRequest) {
   const shifts = await shiftRepo.getWeekWithCounts(weekYear, weekNumber)
   const days = info.days.map(d => ({ ...d, holiday: getHolidayInfo(d.date) }))
 
-  return NextResponse.json({ weekYear, weekNumber, shifts, days })
+  // Prefetch applicants for all shifts in one query so the InterestPanel opens instantly
+  const shiftIds = shifts.map(s => s.id)
+  const allApplicants = await applicationRepo.forShifts(shiftIds)
+  type Applicant = typeof allApplicants[number]
+  const applicantsByShift: Record<number, Applicant[]> = {}
+  for (const a of allApplicants) {
+    if (!applicantsByShift[a.shift_id]) applicantsByShift[a.shift_id] = []
+    applicantsByShift[a.shift_id].push(a)
+  }
+
+  return NextResponse.json({ weekYear, weekNumber, shifts, days, applicantsByShift })
 }

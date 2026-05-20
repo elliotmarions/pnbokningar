@@ -42,6 +42,7 @@ interface Props {
   onDeleteApplication?: (appId: number) => Promise<void>
   onPromoteReserve?: (appId: number) => Promise<void>
   onMoveToReserve?: (appId: number) => Promise<void>
+  initialApplicants?: unknown[]
 }
 
 function fmt(dateStr: string) {
@@ -58,7 +59,7 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves'>('applications')
   const [slots, setSlots] = useState(shift?.slots ?? 5)
@@ -83,10 +84,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     if (!shift) return
     setSlots(shift.slots)
     setSlotsInput(String(shift.slots))
+    // Show prefetched applicants immediately if available, then revalidate in background (SWR pattern).
+    if (initialApplicants) setApplicants(initialApplicants as Applicant[])
     fetch(`/api/shifts/${shift.id}`)
       .then(r => r.json())
       .then(d => setApplicants(d.applicants ?? []))
-  }, [shift, open])
+  }, [shift, open, initialApplicants])
 
   useEffect(() => {
     if (!open) return

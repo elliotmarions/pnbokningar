@@ -46,6 +46,7 @@ export function WeekConfig() {
   const [local, setLocal] = useState<Shift[]>([])
   const [draftSlots, setDraftSlots] = useState<Record<number, string>>({})
   const [counts, setCounts] = useState<Record<number, { approved: number; pending: number; reserves: number }>>({})
+  const [applicantsByShift, setApplicantsByShift] = useState<Record<number, unknown[]>>({})
   const [openShiftId, setOpenShiftId] = useState<number | null>(null)
   const [openWeekDialog, setOpenWeekDialog] = useState(false)
   const [openWeekSlots, setOpenWeekSlots] = useState<Record<number, string>>({})
@@ -59,7 +60,7 @@ export function WeekConfig() {
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
     const cacheKey = `weeks-${isoYear}-${isoWeek}`
 
-    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[] }) => {
+    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[]; applicantsByShift?: Record<number, unknown[]> }) => {
       setWeekYear(data.weekYear)
       setWeekNumber(data.weekNumber)
       setShifts(data.shifts)
@@ -73,6 +74,7 @@ export function WeekConfig() {
         c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
       })
       setCounts(c)
+      if (data.applicantsByShift) setApplicantsByShift(data.applicantsByShift)
     }
 
     // SWR: serve cached data immediately if available, then revalidate in background.
@@ -376,6 +378,7 @@ export function WeekConfig() {
         onDeleteApplication={handleDeleteApplication}
         onPromoteReserve={handlePromoteReserve}
         onMoveToReserve={handleMoveToReserve}
+        initialApplicants={openShiftId !== null ? applicantsByShift[openShiftId] : undefined}
       />
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />

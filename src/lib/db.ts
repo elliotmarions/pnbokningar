@@ -527,6 +527,31 @@ export const applicationRepo = {
     `
   },
 
+  async forShifts(shiftIds: number[]) {
+    if (shiftIds.length === 0) return []
+    type Row = DbApplication & {
+      user_name: string
+      user_phone: string | null
+      approved: boolean
+      rejected: number
+      rejection_reason: string | null
+      withdrawn: number
+      withdrawal_reason: string | null
+      reserve: number
+    }
+    return sql<Row[]>`
+      SELECT a.id, a.shift_id, a.user_id, (a.applied_at AT TIME ZONE 'Europe/Stockholm')::text AS applied_at,
+             a.rejected, a.rejection_reason, a.withdrawn, a.withdrawal_reason, a.reserve,
+             u.name AS user_name, u.phone AS user_phone,
+             CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS approved
+      FROM applications a
+      JOIN users u ON u.id = a.user_id
+      LEFT JOIN approvals ap ON ap.application_id = a.id
+      WHERE a.shift_id IN ${sql(shiftIds)}
+      ORDER BY a.applied_at ASC
+    `
+  },
+
   async promote(appId: number, adminId: string): Promise<{ user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }> {
     // Move from reserve to regular approved application
     await sql`UPDATE applications SET reserve = 0 WHERE id = ${appId}`
