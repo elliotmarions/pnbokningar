@@ -185,6 +185,12 @@ export function WeekConfig() {
     load()
   }
 
+  const handleDeleteApplication = async (appId: number) => {
+    const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
+    if (!res.ok) { showToast('Fel vid borttagning.', 'error'); throw new Error('delete failed') }
+    load()
+  }
+
   const handleBookDriver = async (shiftId: number, userId: string) => {
     const res = await fetch(`/api/shifts/${shiftId}/book`, {
       method: 'POST',
@@ -343,6 +349,7 @@ export function WeekConfig() {
         onReject={handleReject}
         onUnreject={handleUnreject}
         onUnwithdraw={handleUnwithdraw}
+        onDeleteApplication={handleDeleteApplication}
       />
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />

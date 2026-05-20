@@ -38,6 +38,7 @@ interface Props {
   onReject?: (appId: number, reason?: string) => Promise<void>
   onUnreject?: (appId: number) => Promise<void>
   onUnwithdraw?: (appId: number) => Promise<void>
+  onDeleteApplication?: (appId: number) => Promise<void>
 }
 
 function fmt(dateStr: string) {
@@ -54,7 +55,7 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [slots, setSlots] = useState(shift?.slots ?? 5)
   const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
@@ -178,6 +179,20 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     setApplicants(prev => prev.map(x => x.id === appId ? { ...x, rejected: false, rejection_reason: null } : x))
     try {
       await onUnreject(appId)
+    } catch {
+      setApplicants(snapshot)
+    } finally {
+      removePending(appId)
+    }
+  }
+
+  const handleDeleteApplication = async (appId: number) => {
+    if (!onDeleteApplication) return
+    const snapshot = applicants
+    addPending(appId)
+    setApplicants(prev => prev.filter(a => a.id !== appId))
+    try {
+      await onDeleteApplication(appId)
     } catch {
       setApplicants(snapshot)
     } finally {
@@ -449,8 +464,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   <div className="name" style={{ textDecoration: 'line-through' }}>{a.user_name}</div>
                   {a.rejection_reason && <div className="meta" style={{ color: '#F87171' }}>"{a.rejection_reason}"</div>}
                 </div>
-                {onUnreject && (
-                  <div className="actions">
+                <div className="actions">
+                  {onUnreject && (
                     <button
                       className="btn btn-sm btn-ghost"
                       style={{ fontSize: 11 }}
@@ -459,8 +474,18 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     >
                       Ångra
                     </button>
-                  </div>
-                )}
+                  )}
+                  {onDeleteApplication && (
+                    <button
+                      className="btn btn-sm btn-danger-ghost btn-icon"
+                      title="Ta bort permanent"
+                      disabled={pendingIds.has(a.id)}
+                      onClick={() => handleDeleteApplication(a.id)}
+                    >
+                      <X className="svg-ico svg-ico-sm" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           }
@@ -486,8 +511,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     </div>
                   )}
                 </div>
-                {onUnwithdraw && (
-                  <div className="actions">
+                <div className="actions">
+                  {onUnwithdraw && (
                     <button
                       className="btn btn-sm btn-ghost"
                       style={{ fontSize: 11 }}
@@ -496,8 +521,18 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     >
                       Ångra
                     </button>
-                  </div>
-                )}
+                  )}
+                  {onDeleteApplication && (
+                    <button
+                      className="btn btn-sm btn-danger-ghost btn-icon"
+                      title="Ta bort permanent"
+                      disabled={pendingIds.has(a.id)}
+                      onClick={() => handleDeleteApplication(a.id)}
+                    >
+                      <X className="svg-ico svg-ico-sm" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           }
