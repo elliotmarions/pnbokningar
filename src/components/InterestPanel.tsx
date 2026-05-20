@@ -460,16 +460,14 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     </div>
                   </div>
                   <div className="actions">
-                    {onReject && (
-                      <button
-                        className="btn btn-sm btn-danger-ghost btn-icon"
-                        disabled={pendingIds.has(a.id)}
-                        onClick={() => { setRejectingId(a.id); setRejectReason('') }}
-                        title="Neka"
-                      >
-                        <X className="svg-ico svg-ico-sm" />
-                      </button>
-                    )}
+                    <button
+                      className="btn btn-sm btn-success btn-icon"
+                      disabled={approved.length >= slots || pendingIds.has(a.id)}
+                      onClick={() => handleApprove(a.id)}
+                      title="Godkänn"
+                    >
+                      <Check className="svg-ico svg-ico-sm" />
+                    </button>
                     {onMoveToReserve && (
                       <button
                         className="btn btn-sm btn-ghost ip-reserve-btn"
@@ -480,14 +478,16 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                         Reserv
                       </button>
                     )}
-                    <button
-                      className="btn btn-sm btn-success btn-icon"
-                      disabled={approved.length >= slots || pendingIds.has(a.id)}
-                      onClick={() => handleApprove(a.id)}
-                      title="Godkänn"
-                    >
-                      <Check className="svg-ico svg-ico-sm" />
-                    </button>
+                    {onReject && (
+                      <button
+                        className="btn btn-sm btn-danger-ghost btn-icon"
+                        disabled={pendingIds.has(a.id)}
+                        onClick={() => { setRejectingId(a.id); setRejectReason('') }}
+                        title="Neka"
+                      >
+                        <X className="svg-ico svg-ico-sm" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 {rejectingId === a.id && onReject && (
