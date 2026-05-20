@@ -12,6 +12,7 @@ interface Shift {
   slots: number
   approved: number
   pending: number
+  reserves: number
 }
 interface DayInfo {
   dayIndex: number
@@ -165,7 +166,7 @@ export function AdminWeek() {
           {days.map(day => {
             const shift = shifts.find(s => s.day_index === day.dayIndex)
             if (!shift) return null
-            const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0 }
+            const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0, reserves: shift.reserves ?? 0 }
             const pct = shift.slots > 0 ? Math.min(100, (c.approved / shift.slots) * 100) : 0
             const isFull = c.approved >= shift.slots
             const badgeClass = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
@@ -208,6 +209,9 @@ export function AdminWeek() {
                     <div className={`fill ${isFull ? 'full' : ''}`} style={{ width: `${pct}%` }} />
                   </div>
                   <div className="wk-waiting">{c.pending} väntar på godkännande</div>
+                  {c.reserves > 0 && (
+                    <div className="wk-reserves">{c.reserves} res.</div>
+                  )}
                 </div>
 
                 {/* Expanded driver list — drops straight down inside the column */}
