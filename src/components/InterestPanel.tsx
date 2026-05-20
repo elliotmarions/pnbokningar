@@ -455,19 +455,18 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       {a.user_name}
                     </div>
                     <div className="meta">
-                      {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
-                      <span className="sep">·</span>
-                      anmäld {fmtTime(a.applied_at)}
+                      {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}<span className="sep">·</span></>}
+                      <span className="applied-time">anmäld {fmtTime(a.applied_at)}</span>
                     </div>
                   </div>
                   <div className="actions">
                     <button
-                      className="btn btn-sm btn-success"
+                      className="btn btn-sm btn-success btn-icon"
                       disabled={approved.length >= slots || pendingIds.has(a.id)}
                       onClick={() => handleApprove(a.id)}
+                      title="Godkänn"
                     >
                       <Check className="svg-ico svg-ico-sm" />
-                      Godkänn
                     </button>
                     {onMoveToReserve && (
                       <button
@@ -481,11 +480,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     )}
                     {onReject && (
                       <button
-                        className="btn btn-sm btn-danger-ghost"
+                        className="btn btn-sm btn-danger-ghost btn-icon"
                         disabled={pendingIds.has(a.id)}
                         onClick={() => { setRejectingId(a.id); setRejectReason('') }}
+                        title="Neka"
                       >
-                        Neka
+                        <X className="svg-ico svg-ico-sm" />
                       </button>
                     )}
                   </div>
