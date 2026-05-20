@@ -288,7 +288,7 @@ export const shiftRepo = {
       SELECT s.*,
         COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
         COALESCE(
-          COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 THEN a.id END)
+          COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 AND a.reserve = 0 THEN a.id END)
           - COUNT(DISTINCT ap.id), 0
         )::int AS pending
       FROM shifts s
@@ -359,7 +359,7 @@ export const shiftRepo = {
       SELECT s.*,
         COALESCE(COUNT(DISTINCT ap.id), 0)::int AS approved,
         COALESCE(
-          COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 THEN a.id END)
+          COUNT(DISTINCT CASE WHEN a.rejected = 0 AND a.withdrawn = 0 AND a.reserve = 0 THEN a.id END)
           - COUNT(DISTINCT ap.id), 0
         )::int AS pending
       FROM shifts s
