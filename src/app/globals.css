@@ -426,6 +426,17 @@ a { color: inherit; text-decoration: none; }
   display: flex; align-items: center; gap: 3px;
   font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums;
 }
+.wk-reserves-divider {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text-tertiary); padding: 4px 0 2px;
+  border-top: 1px dashed var(--border); margin-top: 2px;
+}
+.wk-reserve-row { opacity: 0.8; }
+.wk-reserve-avatar {
+  background: var(--bg-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text-secondary) !important;
+}
 
 /* ===== View toggle (Vecka / Månad) ===== */
 .view-toggle {

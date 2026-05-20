@@ -51,7 +51,8 @@ export function AdminWeek() {
   const loadId = useRef(0)
 
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
-  const [driversMap, setDriversMap] = useState<Record<number, Driver[] | 'loading'>>({})
+  const [driversMap,  setDriversMap]  = useState<Record<number, Driver[] | 'loading'>>({})
+  const [reservesMap, setReservesMap] = useState<Record<number, Driver[]>>({})
 
   const load = useCallback(async (offset: number) => {
     const id = ++loadId.current
@@ -88,6 +89,7 @@ export function AdminWeek() {
   useEffect(() => {
     setExpandedIds(new Set())
     setDriversMap({})
+    setReservesMap({})
     load(weekOffset)
   }, [weekOffset, load])
 
@@ -108,8 +110,12 @@ export function AdminWeek() {
         const res = await fetch(`/api/shifts/${shiftId}`)
         if (!res.ok) throw new Error()
         const data = await res.json()
-        const approved: Driver[] = (data.applicants ?? []).filter((a: { approved: number }) => a.approved)
-        setDriversMap(prev => ({ ...prev, [shiftId]: approved }))
+        type Applicant = { approved: number; reserve: number; rejected: number; withdrawn: number; user_name: string; user_phone: string | null; id: number }
+        const applicants: Applicant[] = data.applicants ?? []
+        const approved:  Driver[] = applicants.filter(a => a.approved).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+        const reserves:  Driver[] = applicants.filter(a => a.reserve === 1 && !a.approved && !a.rejected && !a.withdrawn).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+        setDriversMap(prev  => ({ ...prev,  [shiftId]: approved }))
+        setReservesMap(prev => ({ ...prev,  [shiftId]: reserves }))
       } catch {
         setDriversMap(prev => ({ ...prev, [shiftId]: [] }))
       }
@@ -172,7 +178,8 @@ export function AdminWeek() {
             const badgeClass = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
             const badgeLabel = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
             const isExpanded = expandedIds.has(shift.id)
-            const drivers = driversMap[shift.id]
+            const drivers  = driversMap[shift.id]
+            const reserves = reservesMap[shift.id] ?? []
 
             return (
               <button
@@ -244,6 +251,29 @@ export function AdminWeek() {
                           </div>
                         </div>
                       ))
+                    )}
+
+                    {/* Reserve list */}
+                    {reserves.length > 0 && (
+                      <>
+                        <div className="wk-reserves-divider">Reserver</div>
+                        {reserves.map(d => (
+                          <div key={d.id} className="wk-driver-row wk-reserve-row">
+                            <div className="wk-driver-avatar wk-reserve-avatar">{initials(d.user_name)}</div>
+                            <div className="wk-driver-info">
+                              <div className="wk-driver-name">{d.user_name}</div>
+                              {d.user_phone ? (
+                                <div className="wk-driver-phone">
+                                  <Phone className="svg-ico" style={{ width:11, height:11 }} />
+                                  {d.user_phone}
+                                </div>
+                              ) : (
+                                <div className="wk-driver-phone" style={{ opacity: 0.4 }}>Inget nummer</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                 )}
