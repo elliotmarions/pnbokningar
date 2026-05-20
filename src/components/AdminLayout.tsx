@@ -2,14 +2,14 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { signOut, useSession } from 'next-auth/react'
-import { Home, Calendar, Users, Download, Briefcase, LogOut, Sun } from './Icons'
+import { Home, Calendar, Users, BarChart, Briefcase, LogOut, Sun } from './Icons'
 
 const NAV = [
   { href: '/admin',            label: 'Översikt',    icon: Home },
   { href: '/admin/config',     label: 'Schemalägg',  icon: Calendar },
   { href: '/admin/calendar',   label: 'Kalender',    icon: Sun },
   { href: '/admin/drivers',    label: 'Chaufförer',  icon: Users },
-  { href: '/admin/export',     label: 'Export',      icon: Download },
+  { href: '/admin/export',     label: 'Statistik',   icon: BarChart },
 ]
 
 function initials(name?: string | null) {
