@@ -73,6 +73,14 @@ export const authOptions: NextAuthOptions = {
         const oid = (profile as Record<string, unknown>)?.oid as string | undefined
         if (!oid) return true
         try {
+          // If a temp account exists with the same email, merge it into the Azure account
+          if (user.email) {
+            const existing = await userRepo.getByEmail(user.email)
+            if (existing && existing.id.startsWith('temp_') && existing.id !== oid) {
+              await userRepo.migrateTempToAzure(existing.id, oid, user.name ?? existing.name, user.email)
+              return true
+            }
+          }
           await userRepo.upsert({ id: oid, name: user.name ?? 'Okänd', email: user.email })
         } catch { /* best effort */ }
       }

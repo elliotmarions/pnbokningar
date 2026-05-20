@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Phone } from './Icons'
+import { Phone, Plus, X, Check } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 
@@ -26,6 +26,12 @@ export function DriversTable() {
   const [editPhone, setEditPhone] = useState('')
   const [pwUserId, setPwUserId] = useState<string | null>(null)
   const [pwValue, setPwValue] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [creating, setCreating] = useState(false)
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   useEffect(() => {
@@ -67,6 +73,41 @@ export function DriversTable() {
     }
   }
 
+  const handleCreate = async () => {
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 8) {
+      showToast('Fyll i namn, e-post och lösenord (minst 8 tecken).', 'error')
+      return
+    }
+    setCreating(true)
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, email: newEmail, password: newPassword, phone: newPhone || undefined }),
+      })
+      const data = await res.json()
+      if (!res.ok) { showToast(data.error ?? 'Kunde inte skapa.', 'error'); return }
+      setDrivers(prev => [...prev, data])
+      cache.set(CACHE_KEY, [...drivers, data])
+      setShowCreate(false)
+      setNewName(''); setNewEmail(''); setNewPhone(''); setNewPassword('')
+      showToast('Tillfällig chaufför skapad.')
+    } finally { setCreating(false) }
+  }
+
+  const handleDelete = async (d: Driver) => {
+    if (!confirm(`Ta bort ${d.name}?`)) return
+    const res = await fetch('/api/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: d.id }),
+    })
+    if (res.ok) {
+      setDrivers(prev => prev.filter(u => u.id !== d.id))
+      showToast('Borttagen.')
+    } else showToast('Kunde inte ta bort.', 'error')
+  }
+
   const toggleRole = async (d: Driver) => {
     const newRole = d.role === 'admin' ? 'driver' : 'admin'
     const res = await fetch('/api/users', {
@@ -89,6 +130,11 @@ export function DriversTable() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="avatar sm">{initials(d.name)}</div>
           <span style={{ fontWeight: 500 }}>{d.name}</span>
+          {d.id.startsWith('temp_') && (
+            <span className="badge b-pending" style={{ fontSize: 10 }} title="Tillfälligt konto – ej aktiverat i Azure">
+              <span className="pip" />Tillfällig
+            </span>
+          )}
         </div>
       </td>
       <td style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{d.email ?? '—'}</td>
@@ -146,6 +192,11 @@ export function DriversTable() {
               Sätt lösenord
             </button>
           )}
+          {d.id.startsWith('temp_') && (
+            <button className="btn btn-sm btn-danger-ghost" onClick={() => handleDelete(d)}>
+              Ta bort
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -170,8 +221,12 @@ export function DriversTable() {
 
   return (
     <>
-      <div className="drivers-top">
+      <div className="drivers-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Chaufförer ({drivers.length})</h2>
+        <button className="btn btn-sm btn-primary" onClick={() => setShowCreate(true)}>
+          <Plus className="svg-ico svg-ico-sm" />
+          Lägg till tillfällig chaufför
+        </button>
       </div>
 
       <div className="tbl-wrap">
@@ -210,6 +265,45 @@ export function DriversTable() {
           </tbody>
         </table>
       </div>
+
+      {showCreate && (
+        <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
+          <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <div className="modal-title" style={{ marginBottom: 0 }}>Tillfällig chaufför</div>
+              <button className="close-btn" onClick={() => setShowCreate(false)}><X className="svg-ico" /></button>
+            </div>
+            <p className="modal-sub">Skapa konto innan chaufförens Azure-konto är aktiverat. När de loggar in via Azure med samma e-post kopplas allt automatiskt över.</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 22 }}>
+              <div className="field">
+                <label>Namn</label>
+                <input className="modal-input" type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="För- och efternamn" />
+              </div>
+              <div className="field">
+                <label>E-post</label>
+                <input className="modal-input" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="namn@postnord.com" />
+              </div>
+              <div className="field">
+                <label>Telefon (valfritt)</label>
+                <input className="modal-input" type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="+46701234567" />
+              </div>
+              <div className="field">
+                <label>Lösenord (minst 8 tecken)</label>
+                <input className="modal-input" type="text" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Tillfälligt lösenord" />
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-sm btn-ghost" onClick={() => setShowCreate(false)}>Avbryt</button>
+              <button className="btn btn-sm btn-primary" disabled={creating} onClick={handleCreate}>
+                <Check className="svg-ico svg-ico-sm" />
+                {creating ? 'Skapar…' : 'Skapa konto'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
     </>
