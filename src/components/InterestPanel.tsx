@@ -282,7 +282,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   onClick={() => { setShowBooking(b => !b); setDriverSearch('') }}
                 >
                   <Plus className="svg-ico" style={{ width: 11, height: 11 }} />
-                  Boka
+                  Boka manuellt
                 </button>
               )}
             </div>
