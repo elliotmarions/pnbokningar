@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Plus, Trash2, X, Check } from './Icons'
 import { getHolidayMap } from '../lib/holidays'
+import { useAdminCache } from './AdminCacheProvider'
 
 interface Driver { id: string; name: string; phone: string | null; role: string }
 interface CustomClosed { id: number; date: string; reason: string; color: string }
@@ -66,10 +67,18 @@ function buildWeekGroups(
   return groups
 }
 
+const LT_CACHE_KEY = 'long-term-bookings'
+const CC_CACHE_KEY = 'custom-closed'
+const USERS_CACHE_KEY = 'users'
+
 export function LongTermBookings() {
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [drivers, setDrivers] = useState<Driver[]>([])
-  const [loading, setLoading] = useState(true)
+  const cache = useAdminCache()
+  const [bookings, setBookings] = useState<Booking[]>(() => (cache.get(LT_CACHE_KEY) as Booking[]) ?? [])
+  const [drivers, setDrivers] = useState<Driver[]>(() => {
+    const u = cache.get(USERS_CACHE_KEY) as Driver[] | undefined
+    return u ? u.filter(d => d.role === 'driver') : []
+  })
+  const [loading, setLoading] = useState(!cache.get(LT_CACHE_KEY))
   const [showCreate, setShowCreate] = useState(false)
 
   // Create form state
@@ -82,19 +91,26 @@ export function LongTermBookings() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [togglingDate, setTogglingDate] = useState<string | null>(null) // "bookingId:date"
-  const [customClosed, setCustomClosed] = useState<CustomClosed[]>([])
+  const [customClosed, setCustomClosed] = useState<CustomClosed[]>(() => (cache.get(CC_CACHE_KEY) as CustomClosed[]) ?? [])
 
   useEffect(() => {
+    // SWR: serve cached data instantly, revalidate in background.
     Promise.all([
       fetch('/api/long-term').then(r => r.json()),
       fetch('/api/users').then(r => r.json()),
       fetch('/api/custom-closed').then(r => r.json()),
     ]).then(([lt, users, cc]) => {
-      setBookings(lt.bookings ?? [])
-      setDrivers((users as Driver[]).filter(u => u.role === 'driver'))
-      setCustomClosed(cc.days ?? [])
+      const bookingsData: Booking[] = lt.bookings ?? []
+      const driversData: Driver[] = (users as Driver[]).filter(u => u.role === 'driver')
+      const ccData: CustomClosed[] = cc.days ?? []
+      setBookings(bookingsData)
+      setDrivers(driversData)
+      setCustomClosed(ccData)
+      cache.set(LT_CACHE_KEY, bookingsData)
+      cache.set(USERS_CACHE_KEY, users)
+      cache.set(CC_CACHE_KEY, ccData)
     }).finally(() => setLoading(false))
-  }, [])
+  }, [cache])
 
   const handleCreate = async () => {
     if (!selDriver || !fromDate || !toDate) return
