@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useUser, useSignOut } from '@/lib/supabase/use-user'
 import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
@@ -87,19 +87,26 @@ export function DriverHome() {
       .catch(() => {})
   }, [authUser])
 
-  const loadWeek = useCallback(async (offset = 0) => {
-    const now = new Date()
-    const target = new Date(now)
-    target.setDate(now.getDate() + offset * 7)
-    // Compute ISO week year + number
+  // Helper: derive ISO year + week from an offset (weeks from today)
+  const isoFromOffset = (offset: number) => {
+    const target = new Date()
+    target.setDate(target.getDate() + offset * 7)
     const tmp = new Date(target)
     tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    return { isoYear, isoWeek }
+  }
 
-    // SWR: pull cached data from sessionStorage so the UI renders instantly,
-    // then revalidate in the background.
+  const loadId = useRef(0)
+  const loadWeek = useCallback(async (offset = 0) => {
+    const id = ++loadId.current
+    const { isoYear, isoWeek } = isoFromOffset(offset)
     const cacheKey = `driver-week-${isoYear}-${isoWeek}`
+
+    // SWR: pull cached data from sessionStorage so the UI renders the new
+    // week instantly. Background revalidate below replaces the stale data.
+    let hasCache = false
     if (typeof window !== 'undefined') {
       try {
         const raw = sessionStorage.getItem(cacheKey)
@@ -110,17 +117,23 @@ export function DriverHome() {
             const counts: Record<number, number> = {}
             for (const s of week.shifts) counts[s.id] = s.approved ?? 0
             setAllApprovedCounts(counts)
+            hasCache = true
           }
           if (apps) setApplications(apps)
         }
       } catch {}
     }
 
+    // If no cache, blank out previous week's data so we show skeleton instead
+    // of stale shifts from the previous week.
+    if (!hasCache) setWeekData(null)
+
     // Parallel fetch of week + user's applications
     const [res, appRes] = await Promise.all([
       fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
       fetch('/api/applications/mine'),
     ])
+    if (id !== loadId.current) return // stale — newer week clicked
     if (!res.ok) return
     const data: WeekData = await res.json()
     setWeekData(data)
@@ -130,20 +143,37 @@ export function DriverHome() {
       setApplications(apps!)
     }
 
-    // Counts now come inline from /api/weeks
     const counts: Record<number, number> = {}
-    for (const shift of data.shifts) {
-      counts[shift.id] = shift.approved ?? 0
-    }
+    for (const shift of data.shifts) counts[shift.id] = shift.approved ?? 0
     setAllApprovedCounts(counts)
 
-    // Persist for instant reload on next visit
     if (typeof window !== 'undefined') {
       try { sessionStorage.setItem(cacheKey, JSON.stringify({ week: data, apps })) } catch {}
     }
   }, [])
 
   useEffect(() => { loadWeek(weekOffset) }, [weekOffset, loadWeek])
+
+  // Prefetch adjacent weeks in the background so prev/next clicks feel instant.
+  useEffect(() => {
+    const prefetch = (offset: number) => {
+      const { isoYear, isoWeek } = isoFromOffset(offset)
+      const key = `driver-week-${isoYear}-${isoWeek}`
+      if (typeof window === 'undefined') return
+      if (sessionStorage.getItem(key)) return
+      Promise.all([
+        fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`).then(r => r.ok ? r.json() : null),
+        fetch('/api/applications/mine').then(r => r.ok ? r.json() : null),
+      ]).then(([week, apps]) => {
+        if (week) {
+          try { sessionStorage.setItem(key, JSON.stringify({ week, apps })) } catch {}
+        }
+      }).catch(() => {})
+    }
+    prefetch(weekOffset - 1)
+    prefetch(weekOffset + 1)
+    prefetch(weekOffset + 2)
+  }, [weekOffset])
 
   const handleApplyReserve = async (shiftId: number) => {
     const tempId = -Date.now()
