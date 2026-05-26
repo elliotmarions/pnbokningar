@@ -19,7 +19,6 @@ function initials(name: string) {
 const CACHE_KEY = 'users'
 
 type RoleFilter = 'all' | 'admin' | 'driver'
-type PhoneFilter = 'all' | 'with' | 'without'
 
 export function DriversTable() {
   const cache = useAdminCache()
@@ -32,7 +31,6 @@ export function DriversTable() {
   // Search + filter state
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
-  const [phoneFilter, setPhoneFilter] = useState<PhoneFilter>('all')
 
   useEffect(() => {
     fetch('/api/users')
@@ -88,21 +86,19 @@ export function DriversTable() {
     const q = query.trim().toLowerCase()
     return drivers.filter(d => {
       if (roleFilter !== 'all' && d.role !== roleFilter) return false
-      if (phoneFilter === 'with' && !d.phone) return false
-      if (phoneFilter === 'without' && d.phone) return false
       if (q) {
         const hay = `${d.name} ${d.email ?? ''} ${d.phone ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [drivers, query, roleFilter, phoneFilter])
+  }, [drivers, query, roleFilter])
 
   const admins = filtered.filter(d => d.role === 'admin')
   const driverOnly = filtered.filter(d => d.role === 'driver')
-  const hasActiveFilters = query.trim() !== '' || roleFilter !== 'all' || phoneFilter !== 'all'
+  const hasActiveFilters = query.trim() !== '' || roleFilter !== 'all'
 
-  const clearAll = () => { setQuery(''); setRoleFilter('all'); setPhoneFilter('all') }
+  const clearAll = () => { setQuery(''); setRoleFilter('all') }
 
   const renderRows = (list: Driver[]) => list.map(d => (
     <tr key={d.id}>
@@ -204,13 +200,6 @@ export function DriversTable() {
           <button className={`filter-chip ${roleFilter === 'all' ? 'active' : ''}`} onClick={() => setRoleFilter('all')}>Alla</button>
           <button className={`filter-chip ${roleFilter === 'admin' ? 'active' : ''}`} onClick={() => setRoleFilter('admin')}>Trafikledare</button>
           <button className={`filter-chip ${roleFilter === 'driver' ? 'active' : ''}`} onClick={() => setRoleFilter('driver')}>Chaufförer</button>
-        </div>
-
-        <div className="filter-chips">
-          <span className="filter-label">Telefon:</span>
-          <button className={`filter-chip ${phoneFilter === 'all' ? 'active' : ''}`} onClick={() => setPhoneFilter('all')}>Alla</button>
-          <button className={`filter-chip ${phoneFilter === 'with' ? 'active' : ''}`} onClick={() => setPhoneFilter('with')}>Med nummer</button>
-          <button className={`filter-chip ${phoneFilter === 'without' ? 'active' : ''}`} onClick={() => setPhoneFilter('without')}>Saknar nummer</button>
         </div>
 
         {hasActiveFilters && (
