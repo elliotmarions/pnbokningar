@@ -455,10 +455,7 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve 
         </span>
       </div>
       {status === 'open' && day.shift && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button className="day-action is-apply" onClick={() => onApply(day.shift!.id)}>Anmäl intresse</button>
-          <button className="day-action is-reserve" onClick={() => onApplyReserve(day.shift!.id)}>Anmäl som reserv</button>
-        </div>
+        <button className="day-action is-apply" onClick={() => onApply(day.shift!.id)}>Anmäl intresse</button>
       )}
       {status === 'full' && day.shift && (
         <button className="day-action is-reserve" onClick={() => onApplyReserve(day.shift!.id)}>Anmäl som reserv</button>
