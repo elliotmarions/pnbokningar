@@ -45,42 +45,72 @@ export function DriversTable() {
       })
   }, [cache])
 
+  // Helper: persist the new drivers list to AdminCache so other admin tabs see
+  // the updated data instantly too.
+  const writeCache = (next: Driver[]) => cache.set(CACHE_KEY, next)
+
   const savePhone = async (id: string) => {
-    const res = await fetch('/api/users', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: id, phone: editPhone }),
-    })
-    if (res.ok) {
-      setDrivers(prev => prev.map(d => d.id === id ? { ...d, phone: editPhone } : d))
-      setEditId(null)
-      showToast('Telefonnummer uppdaterat')
+    // Optimistic update — close editor + show new number immediately.
+    const snapshot = drivers
+    const next = drivers.map(d => d.id === id ? { ...d, phone: editPhone } : d)
+    setDrivers(next)
+    writeCache(next)
+    setEditId(null)
+    showToast('Telefonnummer uppdaterat')
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id, phone: editPhone }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      // Rollback
+      setDrivers(snapshot)
+      writeCache(snapshot)
+      showToast('Kunde inte uppdatera nummer.', 'error')
     }
   }
 
   const handleDelete = async (d: Driver) => {
     if (!confirm(`Ta bort ${d.name}?`)) return
-    const res = await fetch('/api/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: d.id }),
-    })
-    if (res.ok) {
-      setDrivers(prev => prev.filter(u => u.id !== d.id))
-      showToast('Borttagen.')
-    } else showToast('Kunde inte ta bort.', 'error')
+    const snapshot = drivers
+    const next = drivers.filter(u => u.id !== d.id)
+    setDrivers(next)
+    writeCache(next)
+    showToast('Borttagen.')
+    try {
+      const res = await fetch('/api/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: d.id }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setDrivers(snapshot)
+      writeCache(snapshot)
+      showToast('Kunde inte ta bort.', 'error')
+    }
   }
 
   const toggleRole = async (d: Driver) => {
     const newRole = d.role === 'admin' ? 'driver' : 'admin'
-    const res = await fetch('/api/users', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: d.id, setRole: newRole }),
-    })
-    if (res.ok) {
-      setDrivers(prev => prev.map(u => u.id === d.id ? { ...u, role: newRole } : u))
-      showToast(`${d.name} är nu ${newRole === 'admin' ? 'admin' : 'chaufför'}`)
+    const snapshot = drivers
+    const next = drivers.map(u => u.id === d.id ? { ...u, role: newRole } : u)
+    setDrivers(next)
+    writeCache(next)
+    showToast(`${d.name} är nu ${newRole === 'admin' ? 'admin' : 'chaufför'}`)
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: d.id, setRole: newRole }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setDrivers(snapshot)
+      writeCache(snapshot)
+      showToast('Kunde inte ändra roll.', 'error')
     }
   }
 
