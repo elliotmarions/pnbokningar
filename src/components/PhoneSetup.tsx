@@ -50,7 +50,6 @@ export function PhoneSetup({ userName, redirectTo }: Props) {
       <div className="login-card">
         <div className="login-mark">
           <img src="/pn-logo.png" alt="PostNord" className="brand-logo" />
-          <span className="name">Trafikledning</span>
         </div>
         <h1 className="login-title">Välkommen, {userName.split(' ')[0]}!</h1>
         <p className="login-tagline">

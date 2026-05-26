@@ -29,7 +29,6 @@ export function Login() {
       <div className="login-card">
         <div className="login-mark">
           <img src="/pn-logo.png" alt="PostNord" className="brand-logo" />
-          <span className="name">Trafikledning</span>
         </div>
         <h1 className="login-title">Passbokning</h1>
         <p className="login-tagline">
