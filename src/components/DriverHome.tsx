@@ -78,6 +78,15 @@ export function DriverHome() {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  // Fetch our role from the database — Supabase Auth alone doesn't carry it.
+  useEffect(() => {
+    if (!authUser) return
+    fetch('/api/users/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.role) setRole(d.role) })
+      .catch(() => {})
+  }, [authUser])
+
   const loadWeek = useCallback(async (offset = 0) => {
     const now = new Date()
     const target = new Date(now)
