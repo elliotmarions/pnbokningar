@@ -110,6 +110,50 @@ export function AdminWeek() {
     load(weekOffset)
   }, [weekOffset, load])
 
+  // Live updates: poll the current week every 8 seconds so card counts
+  // ("X väntar", "X res.") and expanded driver lists reflect new
+  // applications in near real-time.
+  useEffect(() => {
+    const refresh = async () => {
+      if (document.hidden) return
+      const { isoYear, isoWeek } = isoFromOffset(weekOffset)
+      try {
+        const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+        if (!res.ok) return
+        const data = await res.json()
+        setShifts(data.shifts)
+        if (data.applicantsByShift) {
+          setApplicantsByShift(data.applicantsByShift)
+          // Update driver/reserve maps for any expanded cards using the fresh data
+          type Applicant = { approved: number; reserve: number; rejected: number; withdrawn: number; user_name: string; user_phone: string | null; id: number }
+          setDriversMap(prev => {
+            const next = { ...prev }
+            for (const idStr of Object.keys(prev)) {
+              const sid = Number(idStr)
+              const apps = (data.applicantsByShift[sid] ?? []) as Applicant[]
+              next[sid] = apps.filter(a => a.approved).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+            }
+            return next
+          })
+          setReservesMap(prev => {
+            const next = { ...prev }
+            for (const idStr of Object.keys(prev)) {
+              const sid = Number(idStr)
+              const apps = (data.applicantsByShift[sid] ?? []) as Applicant[]
+              next[sid] = apps.filter(a => a.reserve === 1 && !a.approved && !a.rejected && !a.withdrawn).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+            }
+            return next
+          })
+        }
+        cache.set(`weeks-${isoYear}-${isoWeek}`, data)
+      } catch {}
+    }
+    const interval = setInterval(refresh, 8000)
+    const onVisible = () => { if (!document.hidden) refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, [weekOffset, cache])
+
   // Prefetch adjacent weeks immediately so prev/next clicks feel instant
   useEffect(() => {
     const prefetch = (offset: number) => {
