@@ -5,6 +5,7 @@ import { AdminCacheProvider } from '@/components/AdminCacheProvider'
 export default async function AdminRootLayout({ children }: { children: React.ReactNode }) {
   const session = await requireAdmin()
   if (!session) redirect('/')
+  if (!session.user.phone || session.user.phone.trim() === '') redirect('/profile/phone')
   // AdminCacheProvider is a Client Component nested inside a Server Component —
   // valid pattern in App Router. The provider stays mounted across all child
   // route changes so its cache survives every tab navigation.
