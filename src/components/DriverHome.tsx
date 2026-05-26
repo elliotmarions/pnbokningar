@@ -301,11 +301,13 @@ export function DriverHome() {
               </div>
             </div>
             <div className="right">
-              <div style={{ textAlign: 'right' }}>
-                <div className="who">{user?.name}</div>
-                <div className="role">{user?.role === 'admin' ? 'Trafikledare' : 'Chaufför'}</div>
-              </div>
-              <div className="avatar">{initials(user?.name)}</div>
+              <Link href="/profile" prefetch className="driver-profile-link" title="Min profil">
+                <div style={{ textAlign: 'right' }}>
+                  <div className="who">{user?.name}</div>
+                  <div className="role">{user?.role === 'admin' ? 'Trafikledare' : 'Chaufför'}</div>
+                </div>
+                <div className="avatar">{initials(user?.name)}</div>
+              </Link>
               {user?.role === 'admin' && (
                 <Link href="/admin" prefetch className="btn btn-sm">Adminvy</Link>
               )}

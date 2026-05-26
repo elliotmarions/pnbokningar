@@ -53,16 +53,16 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
           Chaufförsvy
         </Link>
 
-        <div className="nav-foot">
+        <Link href="/profile" prefetch className="nav-foot nav-foot-link" title="Min profil">
           <div className="avatar">{initials(user?.name)}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="who">{user?.name ?? '—'}</div>
             <div className="role">Trafikledare</div>
           </div>
-          <button className="btn-ghost btn btn-icon" title="Logga ut" onClick={signOut}>
+          <span className="btn-icon btn-ghost btn-sm" onClick={(e) => { e.preventDefault(); e.stopPropagation(); signOut() }} title="Logga ut">
             <LogOut className="svg-ico" />
-          </button>
-        </div>
+          </span>
+        </Link>
 
         <div style={{
           marginTop: 10,
