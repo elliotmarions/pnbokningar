@@ -32,8 +32,8 @@ export function DriversTable() {
   // Search + filter state
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
-  // Default: alphabetical descending (Ö→A) as requested
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  // Default: alphabetical ascending (A→Ö)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   useEffect(() => {
     fetch('/api/users')
