@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { useSession, signOut } from 'next-auth/react'
 import Link from 'next/link'
+import { useUser, useSignOut } from '@/lib/supabase/use-user'
 import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
 import { Toast, useToast } from './Toast'
 
@@ -57,15 +57,18 @@ function statusFor(shift: ShiftDay['shift'], app?: Application, approvedCount = 
 }
 
 export function DriverHome() {
-  const { data: session } = useSession()
+  const authUser = useUser()
+  const signOut = useSignOut()
   const [isDesktop, setIsDesktop] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekData, setWeekData] = useState<WeekData | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [allApprovedCounts, setAllApprovedCounts] = useState<Record<number, number>>({})
+  const [role, setRole] = useState<'driver' | 'admin' | null>(null)
   const [consecutiveWarning, setConsecutiveWarning] = useState<{ shiftId: number; count: number } | null>(null)
   const { toast, show: showToast, clear: clearToast } = useToast()
-  const user = session?.user
+  // Augment auth user with role from our users table (Supabase auth doesn't store it).
+  const user = authUser ? { ...authUser, role } : null
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 900px)')
@@ -267,7 +270,7 @@ export function DriverHome() {
               {user?.role === 'admin' && (
                 <Link href="/admin" prefetch className="btn btn-sm">Adminvy</Link>
               )}
-              <button className="btn-ghost btn btn-icon" onClick={() => signOut({ callbackUrl: '/' })}>
+              <button className="btn-ghost btn btn-icon" onClick={signOut}>
                 <LogOut className="svg-ico" />
               </button>
             </div>
@@ -335,7 +338,7 @@ export function DriverHome() {
             <div className="title">Passbokning</div>
             <div className="who">{user?.name}</div>
           </div>
-          <button className="btn-ghost btn btn-icon" onClick={() => signOut({ callbackUrl: '/' })}>
+          <button className="btn-ghost btn btn-icon" onClick={signOut}>
             <LogOut className="svg-ico" />
           </button>
         </div>

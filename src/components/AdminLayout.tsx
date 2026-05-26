@@ -1,7 +1,7 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { signOut, useSession } from 'next-auth/react'
+import { useUser, useSignOut } from '@/lib/supabase/use-user'
 import { Home, Calendar, Users, BarChart, Briefcase, LogOut, Sun } from './Icons'
 
 const NAV = [
@@ -19,8 +19,8 @@ function initials(name?: string | null) {
 
 export function AdminLayout({ children, title, sub }: { children: React.ReactNode; title: string; sub: string }) {
   const pathname = usePathname()
-  const { data: session } = useSession()
-  const user = session?.user
+  const user = useUser()
+  const signOut = useSignOut()
 
   return (
     <div className="frame">
@@ -59,7 +59,7 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
             <div className="who">{user?.name ?? '—'}</div>
             <div className="role">Trafikledare</div>
           </div>
-          <button className="btn-ghost btn btn-icon" title="Logga ut" onClick={() => signOut({ callbackUrl: '/' })}>
+          <button className="btn-ghost btn btn-icon" title="Logga ut" onClick={signOut}>
             <LogOut className="svg-ico" />
           </button>
         </div>

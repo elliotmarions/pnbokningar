@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
 // ---------------------------------------------------------------------------
 // In-memory sliding-window rate limiter.
@@ -61,67 +62,107 @@ function addSecurityHeaders(res: NextResponse) {
 // Per-route rate limit config.
 // ---------------------------------------------------------------------------
 function getBucket(pathname: string): { bucket: string; limit: number; windowMs: number } {
-  if (pathname.startsWith('/api/auth')) {
+  if (pathname.startsWith('/api/auth') || pathname.startsWith('/auth')) {
     // Strict: brute-force protection for login attempts.
-    return { bucket: 'auth', limit: 10, windowMs: 60_000 }
+    return { bucket: 'auth', limit: 20, windowMs: 60_000 }
   }
   if (pathname.startsWith('/api/setup')) {
     // Very strict: one-time setup endpoint should never be hammered.
     return { bucket: 'setup', limit: 5, windowMs: 3_600_000 }
-  }
-  if (pathname.startsWith('/api/users/password')) {
-    // Password changes are sensitive.
-    return { bucket: 'pw', limit: 5, windowMs: 60_000 }
   }
   // All other authenticated API routes — generous but bounded.
   return { bucket: 'api', limit: 120, windowMs: 60_000 }
 }
 
 // ---------------------------------------------------------------------------
+// Supabase session refresh — must run for every request so cookies stay valid.
+// ---------------------------------------------------------------------------
+async function refreshSupabaseSession(req: NextRequest, res: NextResponse): Promise<NextResponse> {
+  let outRes = res
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
+          // Re-create the response with the mutated request so downstream
+          // handlers see the refreshed cookies.
+          outRes = NextResponse.next({ request: req })
+          // Re-apply security headers since we replaced the response.
+          addSecurityHeaders(outRes)
+          cookiesToSet.forEach(({ name, value, options }) =>
+            outRes.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+  await supabase.auth.getUser()
+  return outRes
+}
+
+// ---------------------------------------------------------------------------
 // Middleware entry point.
 // ---------------------------------------------------------------------------
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Cron routes are authenticated by CRON_SECRET header — skip rate limiting
-  // here but still add security headers.
+  // Cron routes are authenticated by CRON_SECRET header — skip session refresh
+  // and rate limiting but still add security headers.
   if (pathname.startsWith('/api/cron')) {
     const res = NextResponse.next()
     addSecurityHeaders(res)
     return res
   }
 
-  const ip =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    req.headers.get('x-real-ip') ??
-    'unknown'
+  // Rate-limit API + auth routes
+  const isApi = pathname.startsWith('/api/') || pathname.startsWith('/auth/')
+  if (isApi) {
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      req.headers.get('x-real-ip') ??
+      'unknown'
 
-  const { bucket, limit, windowMs } = getBucket(pathname)
-  const { ok, remaining, resetAt } = rateLimit(ip, bucket, limit, windowMs)
+    const { bucket, limit, windowMs } = getBucket(pathname)
+    const { ok, remaining, resetAt } = rateLimit(ip, bucket, limit, windowMs)
 
-  if (!ok) {
-    const retryAfter = Math.ceil((resetAt - Date.now()) / 1000)
-    return NextResponse.json(
-      { error: 'För många förfrågningar. Försök igen om en stund.' },
-      {
-        status: 429,
-        headers: {
-          'Retry-After': String(retryAfter),
-          'X-RateLimit-Limit': String(limit),
-          'X-RateLimit-Remaining': '0',
-          ...SECURITY_HEADERS,
+    if (!ok) {
+      const retryAfter = Math.ceil((resetAt - Date.now()) / 1000)
+      return NextResponse.json(
+        { error: 'För många förfrågningar. Försök igen om en stund.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfter),
+            'X-RateLimit-Limit': String(limit),
+            'X-RateLimit-Remaining': '0',
+            ...SECURITY_HEADERS,
+          },
         },
-      },
-    )
+      )
+    }
+
+    const res = NextResponse.next()
+    addSecurityHeaders(res)
+    res.headers.set('X-RateLimit-Limit', String(limit))
+    res.headers.set('X-RateLimit-Remaining', String(remaining))
+    return refreshSupabaseSession(req, res)
   }
 
+  // All non-API, non-static routes still need Supabase session refresh so
+  // server components see a valid session.
   const res = NextResponse.next()
   addSecurityHeaders(res)
-  res.headers.set('X-RateLimit-Limit', String(limit))
-  res.headers.set('X-RateLimit-Remaining', String(remaining))
-  return res
+  return refreshSupabaseSession(req, res)
 }
 
 export const config = {
-  matcher: ['/api/:path*'],
+  matcher: [
+    // Run for everything EXCEPT static assets and Next.js internals
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+  ],
 }

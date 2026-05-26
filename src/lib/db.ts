@@ -66,10 +66,8 @@ async function migrate() {
       reminder_sent   INTEGER NOT NULL DEFAULT 0
     )
   `
-  // Add password_hash column if it doesn't exist
-  await sql`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT
-  `
+  // Drop legacy password_hash column from the credentials-auth era.
+  await sql`ALTER TABLE users DROP COLUMN IF EXISTS password_hash`
   // Add withdrawn column (admin removed previously-approved driver)
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawn INTEGER NOT NULL DEFAULT 0
@@ -193,56 +191,12 @@ export const userRepo = {
     return sql<DbUser[]>`SELECT * FROM users ORDER BY name`
   },
 
-  async getByEmail(email: string): Promise<DbUser & { password_hash: string | null } | undefined> {
-    await ensureMigrated()
-    const [user] = await sql<(DbUser & { password_hash: string | null })[]>`
-      SELECT * FROM users WHERE email = ${email}
-    `
-    return user
-  },
-
-  async setPasswordHash(id: string, hash: string): Promise<void> {
-    await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${id}`
-  },
-
   async updatePhone(id: string, phone: string): Promise<void> {
     await sql`UPDATE users SET phone = ${phone} WHERE id = ${id}`
   },
 
   async setRole(id: string, role: 'driver' | 'admin'): Promise<void> {
     await sql`UPDATE users SET role = ${role} WHERE id = ${id}`
-  },
-
-  async createTemp(data: { name: string; email: string; phone?: string | null; passwordHash: string }): Promise<DbUser> {
-    await ensureMigrated()
-    const id = `temp_${crypto.randomUUID()}`
-    await sql`
-      INSERT INTO users (id, name, email, phone, role, password_hash)
-      VALUES (${id}, ${data.name}, ${data.email}, ${data.phone ?? null}, 'driver', ${data.passwordHash})
-    `
-    const [user] = await sql<DbUser[]>`SELECT * FROM users WHERE id = ${id}`
-    return user
-  },
-
-  // When an Azure user signs in with an email that matches a temp account,
-  // move all FK references from the temp id to the Azure oid and delete the temp row.
-  async migrateTempToAzure(tempId: string, azureId: string, name: string, email: string): Promise<void> {
-    await ensureMigrated()
-    await sql.begin(async tx => {
-      const [temp] = await tx<DbUser[]>`SELECT * FROM users WHERE id = ${tempId}`
-      if (!temp) return
-      // Insert (or no-op) the Azure user, preserving role and phone
-      await tx`
-        INSERT INTO users (id, name, email, phone, role)
-        VALUES (${azureId}, ${name}, ${email}, ${temp.phone}, ${temp.role})
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email
-      `
-      // Move references
-      await tx`UPDATE applications SET user_id = ${azureId} WHERE user_id = ${tempId}`
-      await tx`UPDATE long_term_bookings SET user_id = ${azureId} WHERE user_id = ${tempId}`
-      // Delete temp user
-      await tx`DELETE FROM users WHERE id = ${tempId}`
-    })
   },
 
   async delete(id: string): Promise<void> {

@@ -1,129 +1,74 @@
-import { NextAuthOptions, getServerSession } from 'next-auth'
-import AzureADProvider from 'next-auth/providers/azure-ad'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import bcrypt from 'bcryptjs'
+/**
+ * Supabase-backed auth helpers.
+ *
+ * Keeps the same public surface (`getSession`, `requireUser`, `requireAdmin`)
+ * as the old NextAuth implementation so existing API routes don't need to
+ * change beyond their import.
+ */
+
+import { createClient } from './supabase/server'
 import { userRepo } from './db'
 
-const providers: NextAuthOptions['providers'] = []
-
-// Azure AD provider (production)
-if (process.env.AZURE_AD_CLIENT_ID && process.env.AZURE_AD_TENANT_ID) {
-  providers.push(
-    AzureADProvider({
-      clientId: process.env.AZURE_AD_CLIENT_ID,
-      clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
-      tenantId: process.env.AZURE_AD_TENANT_ID,
-    })
-  )
-}
-
-// Email + password login (always enabled)
-providers.push(
-  CredentialsProvider({
-    name: 'Credentials',
-    credentials: {
-      email: { label: 'E-post', type: 'email' },
-      password: { label: 'Lösenord', type: 'password' },
-    },
-    async authorize(credentials) {
-      if (!credentials?.email || !credentials?.password) return null
-      try {
-        const user = await userRepo.getByEmail(credentials.email)
-        if (!user || !user.password_hash) return null
-        const valid = await bcrypt.compare(credentials.password, user.password_hash)
-        if (!valid) return null
-        return { id: user.id, name: user.name, email: user.email ?? undefined }
-      } catch {
-        return null
-      }
-    },
-  })
-)
-
-export const authOptions: NextAuthOptions = {
-  providers,
-  callbacks: {
-    async jwt({ token, account, profile, user }) {
-      if (account?.provider === 'azure-ad' && profile) {
-        const oid = (profile as Record<string, unknown>).oid as string | undefined
-        if (oid) token.oid = oid
-      }
-      if (account?.provider === 'credentials' && user?.id) {
-        token.oid = user.id
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (token.oid && session.user) {
-        ;(session.user as Record<string, unknown>).id = token.oid
-        try {
-          const dbUser = await userRepo.getById(token.oid as string)
-          if (dbUser) {
-            ;(session.user as Record<string, unknown>).role = dbUser.role
-            ;(session.user as Record<string, unknown>).phone = dbUser.phone
-          }
-        } catch {
-          // DB not yet available during build
-        }
-      }
-      return session
-    },
-    async signIn({ user, account, profile }) {
-      if (account?.provider === 'azure-ad') {
-        const oid = (profile as Record<string, unknown>)?.oid as string | undefined
-        if (!oid) return true
-        try {
-          // If a temp account exists with the same email, merge it into the Azure account
-          if (user.email) {
-            const existing = await userRepo.getByEmail(user.email)
-            if (existing && existing.id.startsWith('temp_') && existing.id !== oid) {
-              await userRepo.migrateTempToAzure(existing.id, oid, user.name ?? existing.name, user.email)
-              return true
-            }
-          }
-          await userRepo.upsert({ id: oid, name: user.name ?? 'Okänd', email: user.email })
-        } catch { /* best effort */ }
-      }
-      return true
-    },
-  },
-  pages: {
-    signIn: '/',
-    error: '/',
-  },
-  session: { strategy: 'jwt' },
-}
-
-export async function getSession() {
-  return getServerSession(authOptions)
-}
-
-export async function requireAdmin() {
-  const session = await getSession()
-  if (!session?.user) return null
-  const role = (session.user as Record<string, unknown>).role as string | undefined
-  if (role !== 'admin') return null
-  return session
-}
-
-export async function requireUser() {
-  const session = await getSession()
-  if (!session?.user) return null
-  return session
-}
-
-declare module 'next-auth' {
-  interface Session {
-    user: {
-      id?: string
-      name?: string | null
-      email?: string | null
-      image?: string | null
-      role?: 'driver' | 'admin'
-      phone?: string | null
-    }
+export interface AppSession {
+  user: {
+    id: string
+    name?: string | null
+    email?: string | null
+    role?: 'driver' | 'admin'
+    phone?: string | null
   }
 }
-declare module 'next-auth/jwt' {
-  interface JWT { oid?: string }
+
+/**
+ * Returns the current session (Supabase user merged with our `users` row),
+ * or null if no one is logged in.
+ *
+ * Ensures a row exists in our `users` table for first-time Azure logins.
+ */
+export async function getSession(): Promise<AppSession | null> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  // Azure provides name in user_metadata.full_name (or .name depending on claims)
+  const meta = user.user_metadata as Record<string, unknown> | undefined
+  const displayName =
+    (meta?.full_name as string | undefined) ??
+    (meta?.name as string | undefined) ??
+    user.email ??
+    'Okänd användare'
+
+  // Ensure the application's users table has a row for this user.
+  // First login through Azure → create it; later logins → just read the role.
+  let dbUser
+  try {
+    dbUser = await userRepo.getById(user.id)
+    if (!dbUser) {
+      await userRepo.upsert({ id: user.id, name: displayName, email: user.email ?? null })
+      dbUser = await userRepo.getById(user.id)
+    }
+  } catch {
+    // DB not yet available (build-time) — fall back to bare auth user.
+  }
+
+  return {
+    user: {
+      id: user.id,
+      name: dbUser?.name ?? displayName,
+      email: user.email ?? null,
+      role: (dbUser?.role as 'driver' | 'admin' | undefined) ?? 'driver',
+      phone: dbUser?.phone ?? null,
+    },
+  }
+}
+
+export async function requireUser(): Promise<AppSession | null> {
+  return getSession()
+}
+
+export async function requireAdmin(): Promise<AppSession | null> {
+  const session = await getSession()
+  if (!session?.user) return null
+  if (session.user.role !== 'admin') return null
+  return session
 }
