@@ -19,6 +19,7 @@ function initials(name: string) {
 const CACHE_KEY = 'users'
 
 type RoleFilter = 'all' | 'admin' | 'driver'
+type SortDir = 'asc' | 'desc'
 
 export function DriversTable() {
   const cache = useAdminCache()
@@ -31,6 +32,8 @@ export function DriversTable() {
   // Search + filter state
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  // Default: alphabetical descending (Ö→A) as requested
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   useEffect(() => {
     fetch('/api/users')
@@ -81,10 +84,10 @@ export function DriversTable() {
     }
   }
 
-  // Apply search + filters
+  // Apply search + filters + sort
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return drivers.filter(d => {
+    const list = drivers.filter(d => {
       if (roleFilter !== 'all' && d.role !== roleFilter) return false
       if (q) {
         const hay = `${d.name} ${d.email ?? ''} ${d.phone ?? ''}`.toLowerCase()
@@ -92,7 +95,14 @@ export function DriversTable() {
       }
       return true
     })
-  }, [drivers, query, roleFilter])
+    // Locale-aware Swedish sort (handles å/ä/ö correctly)
+    list.sort((a, b) =>
+      sortDir === 'asc'
+        ? a.name.localeCompare(b.name, 'sv')
+        : b.name.localeCompare(a.name, 'sv')
+    )
+    return list
+  }, [drivers, query, roleFilter, sortDir])
 
   const admins = filtered.filter(d => d.role === 'admin')
   const driverOnly = filtered.filter(d => d.role === 'driver')
@@ -200,6 +210,24 @@ export function DriversTable() {
           <button className={`filter-chip ${roleFilter === 'all' ? 'active' : ''}`} onClick={() => setRoleFilter('all')}>Alla</button>
           <button className={`filter-chip ${roleFilter === 'admin' ? 'active' : ''}`} onClick={() => setRoleFilter('admin')}>Trafikledare</button>
           <button className={`filter-chip ${roleFilter === 'driver' ? 'active' : ''}`} onClick={() => setRoleFilter('driver')}>Chaufförer</button>
+        </div>
+
+        <div className="filter-chips">
+          <span className="filter-label">Sortera:</span>
+          <button
+            className={`filter-chip ${sortDir === 'desc' ? 'active' : ''}`}
+            onClick={() => setSortDir('desc')}
+            title="Alfabetisk fallande (Ö → A)"
+          >
+            Ö → A
+          </button>
+          <button
+            className={`filter-chip ${sortDir === 'asc' ? 'active' : ''}`}
+            onClick={() => setSortDir('asc')}
+            title="Alfabetisk stigande (A → Ö)"
+          >
+            A → Ö
+          </button>
         </div>
 
         {hasActiveFilters && (
