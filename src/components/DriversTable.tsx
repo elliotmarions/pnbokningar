@@ -215,18 +215,18 @@ export function DriversTable() {
         <div className="filter-chips">
           <span className="filter-label">Sortera:</span>
           <button
-            className={`filter-chip ${sortDir === 'desc' ? 'active' : ''}`}
-            onClick={() => setSortDir('desc')}
-            title="Alfabetisk fallande (Ö → A)"
-          >
-            Ö → A
-          </button>
-          <button
             className={`filter-chip ${sortDir === 'asc' ? 'active' : ''}`}
             onClick={() => setSortDir('asc')}
             title="Alfabetisk stigande (A → Ö)"
           >
             A → Ö
+          </button>
+          <button
+            className={`filter-chip ${sortDir === 'desc' ? 'active' : ''}`}
+            onClick={() => setSortDir('desc')}
+            title="Alfabetisk fallande (Ö → A)"
+          >
+            Ö → A
           </button>
         </div>
 
