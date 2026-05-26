@@ -94,6 +94,38 @@ export function WeekConfig() {
 
   useEffect(() => { load() }, [weekOffset, load])
 
+  // Live updates: poll the current week every 8 seconds so "X väntar" reflects
+  // new applications in near real-time. Only updates counts/applicants — leaves
+  // shifts and draft slot inputs alone so it doesn't interrupt editing.
+  useEffect(() => {
+    const refresh = async () => {
+      if (document.hidden) return
+      const base = new Date()
+      base.setDate(base.getDate() + weekOffset * 7)
+      const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
+      const isoYear = tmp.getFullYear()
+      const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+      try {
+        const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+        if (!res.ok) return
+        const data = await res.json()
+        // Update counts + applicants only — preserve user's in-progress slot edits.
+        const c: Record<number, { approved: number; pending: number; reserves: number }> = {}
+        ;(data.shifts as Shift[]).forEach(s => {
+          c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
+        })
+        setCounts(c)
+        if (data.applicantsByShift) setApplicantsByShift(data.applicantsByShift)
+        cache.set(`weeks-${isoYear}-${isoWeek}`, data)
+      } catch {}
+    }
+    const interval = setInterval(refresh, 8000)
+    // Refresh immediately when the tab regains focus (no need to wait for tick).
+    const onVisible = () => { if (!document.hidden) refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, [weekOffset, cache])
+
   // Prefetch adjacent weeks for instant navigation
   useEffect(() => {
     const prefetch = (offset: number) => {
