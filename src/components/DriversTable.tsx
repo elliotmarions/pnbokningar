@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { Phone } from './Icons'
+import { useEffect, useMemo, useState } from 'react'
+import { Phone, Search, X } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 
@@ -18,6 +18,9 @@ function initials(name: string) {
 
 const CACHE_KEY = 'users'
 
+type RoleFilter = 'all' | 'admin' | 'driver'
+type PhoneFilter = 'all' | 'with' | 'without'
+
 export function DriversTable() {
   const cache = useAdminCache()
   const [drivers, setDrivers] = useState<Driver[]>(() => (cache.get(CACHE_KEY) as Driver[]) ?? [])
@@ -25,6 +28,11 @@ export function DriversTable() {
   const [editId, setEditId] = useState<string | null>(null)
   const [editPhone, setEditPhone] = useState('')
   const { toast, show: showToast, clear: clearToast } = useToast()
+
+  // Search + filter state
+  const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  const [phoneFilter, setPhoneFilter] = useState<PhoneFilter>('all')
 
   useEffect(() => {
     fetch('/api/users')
@@ -75,8 +83,26 @@ export function DriversTable() {
     }
   }
 
-  const admins = drivers.filter(d => d.role === 'admin')
-  const driverOnly = drivers.filter(d => d.role === 'driver')
+  // Apply search + filters
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return drivers.filter(d => {
+      if (roleFilter !== 'all' && d.role !== roleFilter) return false
+      if (phoneFilter === 'with' && !d.phone) return false
+      if (phoneFilter === 'without' && d.phone) return false
+      if (q) {
+        const hay = `${d.name} ${d.email ?? ''} ${d.phone ?? ''}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [drivers, query, roleFilter, phoneFilter])
+
+  const admins = filtered.filter(d => d.role === 'admin')
+  const driverOnly = filtered.filter(d => d.role === 'driver')
+  const hasActiveFilters = query.trim() !== '' || roleFilter !== 'all' || phoneFilter !== 'all'
+
+  const clearAll = () => { setQuery(''); setRoleFilter('all'); setPhoneFilter('all') }
 
   const renderRows = (list: Driver[]) => list.map(d => (
     <tr key={d.id}>
@@ -156,40 +182,96 @@ export function DriversTable() {
         </div>
       </div>
 
-      <div className="tbl-wrap">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Namn</th>
-              <th>E-post</th>
-              <th>Telefon</th>
-              <th>Roll</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={5}>
-                <div className="list-group-h" style={{ margin: '4px 0 2px' }}>
-                  <span>Trafikledare</span>
-                  <span className="badge b-confirmed"><span className="pip" />{admins.length}</span>
-                </div>
-              </td>
-            </tr>
-            {renderRows(admins)}
+      {/* Search + filter bar */}
+      <div className="drivers-filter">
+        <div className="drivers-search">
+          <Search className="svg-ico svg-ico-sm" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Sök på namn, e-post eller telefon…"
+          />
+          {query && (
+            <button className="drivers-search-clear" onClick={() => setQuery('')} aria-label="Rensa sökning">
+              <X className="svg-ico svg-ico-sm" />
+            </button>
+          )}
+        </div>
 
-            <tr>
-              <td colSpan={5}>
-                <div className="list-group-h" style={{ margin: '12px 0 2px' }}>
-                  <span>Chaufförer</span>
-                  <span>{driverOnly.length}</span>
-                </div>
-              </td>
-            </tr>
-            {renderRows(driverOnly)}
-          </tbody>
-        </table>
+        <div className="filter-chips">
+          <span className="filter-label">Roll:</span>
+          <button className={`filter-chip ${roleFilter === 'all' ? 'active' : ''}`} onClick={() => setRoleFilter('all')}>Alla</button>
+          <button className={`filter-chip ${roleFilter === 'admin' ? 'active' : ''}`} onClick={() => setRoleFilter('admin')}>Trafikledare</button>
+          <button className={`filter-chip ${roleFilter === 'driver' ? 'active' : ''}`} onClick={() => setRoleFilter('driver')}>Chaufförer</button>
+        </div>
+
+        <div className="filter-chips">
+          <span className="filter-label">Telefon:</span>
+          <button className={`filter-chip ${phoneFilter === 'all' ? 'active' : ''}`} onClick={() => setPhoneFilter('all')}>Alla</button>
+          <button className={`filter-chip ${phoneFilter === 'with' ? 'active' : ''}`} onClick={() => setPhoneFilter('with')}>Med nummer</button>
+          <button className={`filter-chip ${phoneFilter === 'without' ? 'active' : ''}`} onClick={() => setPhoneFilter('without')}>Saknar nummer</button>
+        </div>
+
+        {hasActiveFilters && (
+          <button className="btn btn-sm btn-ghost" onClick={clearAll} style={{ marginLeft: 'auto' }}>
+            <X className="svg-ico svg-ico-sm" />
+            Rensa filter
+          </button>
+        )}
       </div>
+
+      {filtered.length === 0 ? (
+        <div className="drivers-empty">
+          Inga chaufförer matchar dina filter.
+          {hasActiveFilters && (
+            <button className="btn btn-sm btn-ghost" onClick={clearAll} style={{ marginLeft: 10 }}>Rensa filter</button>
+          )}
+        </div>
+      ) : (
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Namn</th>
+                <th>E-post</th>
+                <th>Telefon</th>
+                <th>Roll</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {admins.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="list-group-h" style={{ margin: '4px 0 2px' }}>
+                        <span>Trafikledare</span>
+                        <span className="badge b-confirmed"><span className="pip" />{admins.length}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {renderRows(admins)}
+                </>
+              )}
+
+              {driverOnly.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="list-group-h" style={{ margin: '12px 0 2px' }}>
+                        <span>Chaufförer</span>
+                        <span>{driverOnly.length}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {renderRows(driverOnly)}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
     </>
