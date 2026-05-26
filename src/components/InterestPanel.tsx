@@ -80,16 +80,27 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const addPending = (id: number) => setPendingIds(prev => new Set([...prev, id]))
   const removePending = (id: number) => setPendingIds(prev => { const s = new Set(prev); s.delete(id); return s })
 
+  // Stable ref to initialApplicants so we can read it inside the effect without retriggering on every parent refresh.
+  const initialApplicantsRef = useRef(initialApplicants)
+  initialApplicantsRef.current = initialApplicants
+
   useEffect(() => {
     if (!shift) return
     setSlots(shift.slots)
     setSlotsInput(String(shift.slots))
-    // Show prefetched applicants immediately if available, then revalidate in background (SWR pattern).
-    if (initialApplicants) setApplicants(initialApplicants as Applicant[])
+    // Sync applicants only when the panel opens for a (new) shift — NOT when the parent refetches
+    // and pushes a new initialApplicants reference. Otherwise an optimistic update gets clobbered
+    // mid-action which causes the visible "hopping" behavior.
+    const prefetched = initialApplicantsRef.current as Applicant[] | undefined
+    if (prefetched) {
+      setApplicants(prefetched)
+      // No need to refetch — parent's data is already fresh.
+      return
+    }
     fetch(`/api/shifts/${shift.id}`)
       .then(r => r.json())
       .then(d => setApplicants(d.applicants ?? []))
-  }, [shift, open, initialApplicants])
+  }, [shift?.id, open])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return
