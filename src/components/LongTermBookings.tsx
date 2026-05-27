@@ -114,20 +114,54 @@ export function LongTermBookings() {
 
   const handleCreate = async () => {
     if (!selDriver || !fromDate || !toDate) return
+    const driver = drivers.find(d => d.id === selDriver)
+    if (!driver) return
+
+    // Optimistic: prepend a temp-id booking using local driver info, close the
+    // dialog and reset the form immediately. Replace temp with real id from
+    // POST response. On failure, remove + show error.
+    const tempId = -Date.now()
+    const optimistic: Booking = {
+      id: tempId,
+      user_id: driver.id,
+      user_name: driver.name,
+      user_phone: driver.phone,
+      from_date: fromDate,
+      to_date: toDate,
+      excluded_dates: '[]',
+      notes: notes || null,
+      created_at: new Date().toISOString(),
+    }
+    const snapshot = bookings
+    const next = [...bookings, optimistic].sort((a, b) =>
+      a.from_date.localeCompare(b.from_date) || a.user_name.localeCompare(b.user_name)
+    )
+    setBookings(next)
+    cache.set(LT_CACHE_KEY, next)
+    setShowCreate(false)
+    const savedDriverId = selDriver
+    setSelDriver(''); setFromDate(today); setToDate(today); setNotes('')
     setSaving(true)
+
     try {
       const res = await fetch('/api/long-term', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: selDriver, fromDate, toDate, notes: notes || undefined }),
+        body: JSON.stringify({ userId: savedDriverId, fromDate: optimistic.from_date, toDate: optimistic.to_date, notes: optimistic.notes ?? undefined }),
       })
-      if (!res.ok) return
-      // Reload
-      const lt = await fetch('/api/long-term').then(r => r.json())
-      setBookings(lt.bookings ?? [])
-      setShowCreate(false)
-      setSelDriver(''); setFromDate(today); setToDate(today); setNotes('')
-    } finally { setSaving(false) }
+      if (!res.ok) throw new Error('create failed')
+      const { id } = await res.json() as { id: number }
+      setBookings(prev => {
+        const replaced = prev.map(b => b.id === tempId ? { ...b, id } : b)
+        cache.set(LT_CACHE_KEY, replaced)
+        return replaced
+      })
+    } catch {
+      setBookings(snapshot)
+      cache.set(LT_CACHE_KEY, snapshot)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: number) => {
