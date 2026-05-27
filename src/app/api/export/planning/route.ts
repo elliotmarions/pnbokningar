@@ -55,10 +55,12 @@ export async function GET(req: NextRequest) {
     reservesByDay.get(r.day_index)!.push(r.name)
   }
 
-  // Surname, firstname formatter (matches existing convention)
+  // Surname, firstname formatter. Strips any "..., Company" suffix that
+  // Azure / Microsoft 365 may append (e.g. "Elliot Marions, PostNord").
   const formatName = (n: string) => {
-    const parts = n.trim().split(/\s+/)
-    if (parts.length < 2) return n
+    const clean = n.split(',')[0].trim()
+    const parts = clean.split(/\s+/)
+    if (parts.length < 2) return clean
     const lastName = parts[parts.length - 1]
     const firstNames = parts.slice(0, -1).join(' ')
     return `${lastName}, ${firstNames}`
@@ -89,15 +91,16 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Reserve section — appended with a blank row + bold "Reserver" header
+    // Reserve section — appended with a blank row + "Reserver" header.
+    // Names use the same Calibri size 14 styling as approved drivers.
     if (reserves.length > 0) {
       if (approved.length > 0) ws.addRow([]) // blank separator
       const header = ws.addRow(['Reserver'])
-      header.getCell(1).font = { name: 'Calibri', size: 14, bold: true, italic: true }
+      header.getCell(1).font = { name: 'Calibri', size: 14, bold: true }
       const formatted = reserves.map(formatName).sort((a, b) => a.localeCompare(b, 'sv'))
       formatted.forEach(name => {
         const row = ws.addRow([name])
-        row.getCell(1).font = { name: 'Calibri', size: 14, italic: true }
+        row.getCell(1).font = { name: 'Calibri', size: 14 }
       })
     }
   }
