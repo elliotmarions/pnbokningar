@@ -34,13 +34,19 @@ function writeCached(u: AppUser | null) {
  * changes so signing in/out in another tab updates the UI.
  */
 export function useUser() {
-  // Read cache synchronously on first render — no `undefined` flash between
-  // pages within the same session.
-  const [user, setUser] = useState<AppUser | null | undefined>(() => readCached() ?? undefined)
+  // Initial render must match the server (which has no sessionStorage),
+  // so start as `undefined`. The effect below hydrates from cache + Supabase
+  // immediately after mount — fast enough that no visible flash occurs.
+  const [user, setUser] = useState<AppUser | null | undefined>(undefined)
 
   useEffect(() => {
     const supabase = createClient()
     let mounted = true
+
+    // Synchronously seed from cache so navigations within the session don't
+    // flash an empty header before Supabase responds.
+    const cached = readCached()
+    if (cached) setUser(cached)
 
     const apply = (raw: { id: string; email?: string | null; user_metadata?: unknown } | null) => {
       if (!mounted) return
