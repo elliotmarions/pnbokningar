@@ -299,12 +299,29 @@ export function WeekConfig() {
   }
 
   const handleUpdateSlots = async (shiftId: number, slots: number) => {
-    await fetch('/api/shifts', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ id: shiftId, slots }]),
-    })
-    await load()
+    // Optimistic — update local state instantly, no full week reload.
+    const prevLocal = local
+    const prevShifts = shifts
+    const prevDrafts = draftSlots
+    setLocal(prev => prev.map(s => s.id === shiftId ? { ...s, slots } : s))
+    setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, slots } : s))
+    setDraftSlots(prev => ({ ...prev, [shiftId]: String(slots) }))
+
+    try {
+      const res = await fetch('/api/shifts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([{ id: shiftId, slots }]),
+      })
+      if (!res.ok) throw new Error('update slots failed')
+      // Background refresh in case slot change cascades (long-term bookings etc).
+      refreshCounts()
+    } catch {
+      setLocal(prevLocal)
+      setShifts(prevShifts)
+      setDraftSlots(prevDrafts)
+      showToast('Kunde inte uppdatera platser.', 'error')
+    }
   }
 
   const handleOpenWeek = async () => {
