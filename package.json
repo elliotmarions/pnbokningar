@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "seed": "tsx scripts/seed.ts",
-    "remind": "tsx scripts/remind.ts"
+    "remind": "tsx scripts/remind.ts",
+    "gen-vapid": "node scripts/gen-vapid.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -19,7 +20,8 @@
     "postgres": "^3.4.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "twilio": "^5.4.5"
+    "twilio": "^5.4.5",
+    "web-push": "^3.6.7"
   },
   "engines": {
     "node": ">=20"
@@ -28,6 +30,7 @@
     "@types/node": "^20.17.57",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.5",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   }

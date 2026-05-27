@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Phone, Mail, User, LogOut, ChevronLeft, Check } from './Icons'
 import { useSignOut } from '@/lib/supabase/use-user'
+import { PushNotificationToggle } from './PushNotificationToggle'
 
 interface Props {
   name: string
@@ -140,6 +141,8 @@ export function ProfilePage({ name, email, role, phone: initialPhone }: Props) {
               )}
             </div>
           </div>
+
+          <PushNotificationToggle />
         </div>
 
         <button onClick={signOut} className="profile-signout">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, approvalRepo, getDb } from '@/lib/db'
 import { sendConfirmationSms } from '@/lib/sms'
+import { sendPushToUserAsync } from '@/lib/push'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +47,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     JOIN users u ON u.id = a.user_id
     WHERE a.id = ${appId}
   `
+
+  // Push notification (fire-and-forget)
+  if (info) {
+    const { start, end } = shiftHours(info.day_index)
+    sendPushToUserAsync(userId, {
+      title: 'Pass godkänt ✅',
+      body: `${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)}, ${start}–${end}`,
+      url: '/',
+      tag: `book-${appId}`,
+    })
+  }
 
   if (info?.user_phone) {
     const { start, end } = shiftHours(info.day_index)

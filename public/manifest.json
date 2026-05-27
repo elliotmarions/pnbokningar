@@ -1,0 +1,23 @@
+{
+  "name": "PostNord Passbokning",
+  "short_name": "Passbokning",
+  "description": "Schemaläggningssystem för extraanställda chaufförer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#0033A0",
+  "icons": [
+    {
+      "src": "/pn-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pn-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { approvalRepo, getDb } from '@/lib/db'
 import { sendConfirmationSms } from '@/lib/sms'
+import { sendPushToUserAsync } from '@/lib/push'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { int, fieldError } from '@/lib/validate'
 
@@ -32,6 +33,17 @@ export async function POST(req: NextRequest) {
   if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 })
 
   const approval = await approvalRepo.approve(applicationId, adminId)
+
+  // Push notification (fire-and-forget)
+  {
+    const { start, end } = shiftHours(app.day_index)
+    sendPushToUserAsync(app.user_id, {
+      title: 'Pass godkänt ✅',
+      body: `${dayLabelFull(app.day_index)} ${formatSwedishDate(app.date)}, ${start}–${end}`,
+      url: '/',
+      tag: `approval-${applicationId}`,
+    })
+  }
 
   if (app.user_phone) {
     const { start, end } = shiftHours(app.day_index)

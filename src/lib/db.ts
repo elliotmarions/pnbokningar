@@ -106,6 +106,31 @@ async function migrate() {
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
+  // Web Push subscriptions (per-device)
+  await sql`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id         SERIAL PRIMARY KEY,
+      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint   TEXT NOT NULL UNIQUE,
+      p256dh     TEXT NOT NULL,
+      auth       TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`
+  await sql`ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY`
+  await sql.unsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE tablename = 'push_subscriptions' AND policyname = 'service_role_all'
+      ) THEN
+        EXECUTE 'CREATE POLICY service_role_all ON push_subscriptions FOR ALL TO service_role USING (true) WITH CHECK (true)';
+      END IF;
+    END $$
+  `)
+
   // Custom closed days (admin-defined, with reason + color)
   await sql`
     CREATE TABLE IF NOT EXISTS custom_closed_days (
@@ -517,12 +542,12 @@ export const applicationRepo = {
     `
   },
 
-  async promote(appId: number, adminId: string): Promise<{ user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }> {
+  async promote(appId: number, adminId: string): Promise<{ user_id: string; user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }> {
     // Move from reserve to regular approved application
     await sql`UPDATE applications SET reserve = 0 WHERE id = ${appId}`
     await approvalRepo.approve(appId, adminId)
-    const [info] = await sql<{ user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }[]>`
-      SELECT u.name AS user_name, u.phone AS user_phone, s.day_index AS shift_day_index, s.date AS shift_date
+    const [info] = await sql<{ user_id: string; user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }[]>`
+      SELECT u.id AS user_id, u.name AS user_name, u.phone AS user_phone, s.day_index AS shift_day_index, s.date AS shift_date
       FROM applications a
       JOIN users u ON u.id = a.user_id
       JOIN shifts s ON s.id = a.shift_id
@@ -662,5 +687,55 @@ export const approvalRepo = {
         AND (s.date || 'T' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END || ':00')::timestamptz
             > NOW()
     `
+  },
+}
+
+// --------------- Push Subscriptions ---------------
+
+export interface DbPushSubscription {
+  id: number
+  user_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  user_agent: string | null
+  created_at: string
+}
+
+export const pushSubscriptionRepo = {
+  async upsert(s: {
+    userId: string
+    endpoint: string
+    p256dh: string
+    auth: string
+    userAgent?: string | null
+  }): Promise<void> {
+    await ensureMigrated()
+    await sql`
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+      VALUES (${s.userId}, ${s.endpoint}, ${s.p256dh}, ${s.auth}, ${s.userAgent ?? null})
+      ON CONFLICT (endpoint) DO UPDATE
+        SET user_id = EXCLUDED.user_id,
+            p256dh  = EXCLUDED.p256dh,
+            auth    = EXCLUDED.auth,
+            user_agent = EXCLUDED.user_agent
+    `
+  },
+
+  async forUser(userId: string): Promise<DbPushSubscription[]> {
+    await ensureMigrated()
+    return sql<DbPushSubscription[]>`
+      SELECT * FROM push_subscriptions WHERE user_id = ${userId}
+    `
+  },
+
+  async deleteByEndpoint(endpoint: string): Promise<void> {
+    await ensureMigrated()
+    await sql`DELETE FROM push_subscriptions WHERE endpoint = ${endpoint}`
+  },
+
+  async deleteForUser(userId: string): Promise<void> {
+    await ensureMigrated()
+    await sql`DELETE FROM push_subscriptions WHERE user_id = ${userId}`
   },
 }

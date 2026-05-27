@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, getDb } from '@/lib/db'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { sendConfirmationSms } from '@/lib/sms'
+import { sendPushToUserAsync } from '@/lib/push'
 import { approvalRepo } from '@/lib/db'
 
 export async function POST(
@@ -25,6 +26,17 @@ export async function POST(
   if (!app.reserve) return NextResponse.json({ error: 'Not a reserve' }, { status: 400 })
 
   const info = await applicationRepo.promote(appId, adminId)
+
+  // Push notification (fire-and-forget)
+  if (info) {
+    const { start, end } = shiftHours(info.shift_day_index)
+    sendPushToUserAsync(info.user_id, {
+      title: 'Pass godkänt ✅',
+      body: `${dayLabelFull(info.shift_day_index)} ${formatSwedishDate(info.shift_date)}, ${start}–${end}`,
+      url: '/',
+      tag: `promote-${appId}`,
+    })
+  }
 
   // Send SMS if phone available
   if (info?.user_phone) {
