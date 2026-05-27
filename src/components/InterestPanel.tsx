@@ -201,6 +201,15 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const withdrawn = applicants.filter(a => a.withdrawn && !a.approved && !a.reserve)
   const reserves = applicants.filter(a => a.reserve === 1 && !a.approved)
 
+  // Stable applied-order rank: #1 is the first to apply, #2 the second, etc.
+  // Computed across the entire shift (any status) so approving/rejecting one
+  // applicant does NOT renumber everyone below them.
+  const appliedRank: Record<number, number> = {}
+  ;[...applicants]
+    .filter(a => a.id > 0) // skip optimistic temp entries
+    .sort((a, b) => a.applied_at.localeCompare(b.applied_at))
+    .forEach((a, i) => { appliedRank[a.id] = i + 1 })
+
   const handleApprove = async (appId: number) => {
     const snapshot = applicants
     addPending(appId)
@@ -529,13 +538,13 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </div>
           {pending.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga väntande sökande.</p>
-            : pending.map((a, i) => (
+            : pending.map(a => (
               <div key={a.id}>
                 <div className="applicant-row">
                   <div className="avatar lg">{initials(a.user_name)}</div>
                   <div className="info">
                     <div className="name">
-                      <span className="order-tag">#{i + 1}</span>
+                      <span className="order-tag">#{appliedRank[a.id] ?? '–'}</span>
                       {a.user_name}
                     </div>
                     <div className="meta">
