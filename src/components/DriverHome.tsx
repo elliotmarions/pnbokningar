@@ -144,16 +144,24 @@ export function DriverHome() {
     ])
     if (id !== loadId.current) return // stale — newer week clicked
     if (!res.ok) return
-    const data: WeekData = await res.json()
-    setWeekData(data)
-    let apps: Application[] | null = null
-    if (appRes.ok) {
-      apps = await appRes.json()
-      setApplications(apps!)
-    }
+
+    // Parse BOTH bodies up front so we can apply weekData + applications in
+    // the same synchronous tick. If we set weekData first and then awaited
+    // appRes.json(), React would render once with new shifts but stale (empty)
+    // applications — causing a brief flash of "Anmäl intresse" on already-
+    // confirmed days after a hard refresh.
+    const [data, apps] = await Promise.all([
+      res.json() as Promise<WeekData>,
+      appRes.ok ? (appRes.json() as Promise<Application[]>) : Promise.resolve(null),
+    ])
+    if (id !== loadId.current) return
 
     const counts: Record<number, number> = {}
     for (const shift of data.shifts) counts[shift.id] = shift.approved ?? 0
+
+    // Set together — React 18 batches these into one render.
+    setWeekData(data)
+    if (apps) setApplications(apps)
     setAllApprovedCounts(counts)
 
     if (typeof window !== 'undefined') {
@@ -188,16 +196,22 @@ export function DriverHome() {
       // Re-check inflight after the await — a mutation may have started while
       // we were fetching; if so, drop this snapshot rather than overwrite it.
       if (inflightRef.current > 0) return
-      if (weekRes.ok) {
-        const data: WeekData = await weekRes.json()
+
+      // Parse both bodies together so we can apply state in one tick — avoids
+      // a momentary mismatch between fresh shifts and stale applications.
+      const [data, next] = await Promise.all([
+        weekRes.ok ? (weekRes.json() as Promise<WeekData>) : Promise.resolve(null),
+        appRes.ok ? (appRes.json() as Promise<Application[]>) : Promise.resolve(null),
+      ])
+      if (inflightRef.current > 0) return
+
+      if (data) {
         const counts: Record<number, number> = {}
         for (const s of data.shifts) counts[s.id] = s.approved ?? 0
         setAllApprovedCounts(counts)
-        // Refresh weekData too in case slots/closed-state changed
         setWeekData(prev => prev ? { ...prev, shifts: data.shifts, days: data.days } : data)
       }
-      if (appRes.ok) {
-        const next: Application[] = await appRes.json()
+      if (next) {
         setApplications(prev => {
           // Detect status transitions on apps that already existed locally,
           // toast the meaningful ones.
