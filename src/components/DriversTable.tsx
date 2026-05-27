@@ -94,9 +94,9 @@ export function DriversTable() {
   }
 
   const toggleRole = async (d: Driver) => {
-    const newRole = d.role === 'admin' ? 'driver' : 'admin'
+    const newRole: 'driver' | 'admin' = d.role === 'admin' ? 'driver' : 'admin'
     const snapshot = drivers
-    const next = drivers.map(u => u.id === d.id ? { ...u, role: newRole } : u)
+    const next: Driver[] = drivers.map(u => u.id === d.id ? { ...u, role: newRole } : u)
     setDrivers(next)
     writeCache(next)
     showToast(`${d.name} är nu ${newRole === 'admin' ? 'admin' : 'chaufför'}`)
