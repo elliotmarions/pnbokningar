@@ -94,37 +94,41 @@ export function WeekConfig() {
 
   useEffect(() => { load() }, [weekOffset, load])
 
-  // Live updates: poll the current week every 8 seconds so "X väntar" reflects
-  // new applications in near real-time. Only updates counts/applicants — leaves
-  // shifts and draft slot inputs alone so it doesn't interrupt editing.
+  // Lightweight refresh — only updates counts + applicantsByShift, leaves
+  // shifts/draft slot edits alone. Used both by polling and after admin actions
+  // so the day cards' "X väntar" badges stay in sync without re-rendering the
+  // whole week.
+  const refreshCounts = useCallback(async () => {
+    const base = new Date()
+    base.setDate(base.getDate() + weekOffset * 7)
+    const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
+    const isoYear = tmp.getFullYear()
+    const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    try {
+      const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const c: Record<number, { approved: number; pending: number; reserves: number }> = {}
+      ;(data.shifts as Shift[]).forEach(s => {
+        c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
+      })
+      setCounts(c)
+      if (data.applicantsByShift) setApplicantsByShift(data.applicantsByShift)
+      cache.set(`weeks-${isoYear}-${isoWeek}`, data)
+    } catch {}
+  }, [weekOffset, cache])
+
+  // Live updates: poll the current week every 8s so counts reflect new
+  // applications in near real-time. Pauses while the InterestPanel is open
+  // so the user's interaction isn't disturbed by a mid-action refresh.
   useEffect(() => {
-    const refresh = async () => {
-      if (document.hidden) return
-      const base = new Date()
-      base.setDate(base.getDate() + weekOffset * 7)
-      const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-      const isoYear = tmp.getFullYear()
-      const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
-      try {
-        const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
-        if (!res.ok) return
-        const data = await res.json()
-        // Update counts + applicants only — preserve user's in-progress slot edits.
-        const c: Record<number, { approved: number; pending: number; reserves: number }> = {}
-        ;(data.shifts as Shift[]).forEach(s => {
-          c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
-        })
-        setCounts(c)
-        if (data.applicantsByShift) setApplicantsByShift(data.applicantsByShift)
-        cache.set(`weeks-${isoYear}-${isoWeek}`, data)
-      } catch {}
-    }
+    if (openShiftId !== null) return
+    const refresh = () => { if (!document.hidden) refreshCounts() }
     const interval = setInterval(refresh, 8000)
-    // Refresh immediately when the tab regains focus (no need to wait for tick).
-    const onVisible = () => { if (!document.hidden) refresh() }
+    const onVisible = () => { if (!document.hidden) refreshCounts() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
-  }, [weekOffset, cache])
+  }, [refreshCounts, openShiftId])
 
   // Prefetch adjacent weeks for instant navigation
   useEffect(() => {
@@ -171,7 +175,7 @@ export function WeekConfig() {
     })
     if (res.ok) {
       showToast('Chaufför godkänd. SMS skickat.')
-      load() // fire-and-forget — don't block the optimistic UI
+      refreshCounts()
     } else {
       showToast('Fel vid godkännande.', 'error')
       throw new Error('approve failed')
@@ -186,7 +190,7 @@ export function WeekConfig() {
     })
     if (res.ok) {
       showToast('Chaufför avbokad.')
-      load()
+      refreshCounts()
     } else {
       showToast('Fel.', 'error')
       throw new Error('unapprove failed')
@@ -201,7 +205,7 @@ export function WeekConfig() {
     })
     if (res.ok) {
       showToast('Ansökan nekad.')
-      load()
+      refreshCounts()
     } else {
       showToast('Fel vid nekande.', 'error')
       throw new Error('reject failed')
@@ -211,33 +215,33 @@ export function WeekConfig() {
   const handleUnreject = async (appId: number) => {
     const res = await fetch(`/api/applications/${appId}/reject`, { method: 'DELETE' })
     if (!res.ok) throw new Error('unreject failed')
-    load()
+    refreshCounts()
   }
 
   const handleUnwithdraw = async (appId: number) => {
     const res = await fetch(`/api/applications/${appId}/withdraw`, { method: 'DELETE' })
     if (!res.ok) throw new Error('unwithdraw failed')
-    load()
+    refreshCounts()
   }
 
   const handleDeleteApplication = async (appId: number) => {
     const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
     if (!res.ok) { showToast('Fel vid borttagning.', 'error'); throw new Error('delete failed') }
-    load()
+    refreshCounts()
   }
 
   const handlePromoteReserve = async (appId: number) => {
     const res = await fetch(`/api/applications/${appId}/promote`, { method: 'POST' })
     if (!res.ok) { showToast('Fel vid uppflyttning.', 'error'); throw new Error('promote failed') }
     showToast('Reserv bokad in.')
-    load()
+    refreshCounts()
   }
 
   const handleMoveToReserve = async (appId: number) => {
     const res = await fetch(`/api/applications/${appId}/reserve`, { method: 'POST' })
     if (!res.ok) { showToast('Fel vid flytt till reserv.', 'error'); throw new Error('move to reserve failed') }
     showToast('Flyttad till reservlistan.')
-    load()
+    refreshCounts()
   }
 
   const handleBookDriver = async (shiftId: number, userId: string) => {
@@ -248,7 +252,7 @@ export function WeekConfig() {
     })
     if (!res.ok) { showToast('Fel vid bokning.', 'error'); throw new Error('book failed') }
     showToast('Chaufför bokad. SMS skickat.')
-    load()
+    refreshCounts()
   }
 
   const handleUpdateSlots = async (shiftId: number, slots: number) => {
