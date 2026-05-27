@@ -165,26 +165,60 @@ export function LongTermBookings() {
   }
 
   const handleDelete = async (id: number) => {
+    // Optimistic: remove instantly, rollback on failure.
+    const snapshot = bookings
     setDeletingId(id)
+    setBookings(prev => {
+      const next = prev.filter(b => b.id !== id)
+      cache.set(LT_CACHE_KEY, next)
+      return next
+    })
     try {
-      await fetch(`/api/long-term/${id}`, { method: 'DELETE' })
-      setBookings(prev => prev.filter(b => b.id !== id))
+      const res = await fetch(`/api/long-term/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+    } catch {
+      setBookings(snapshot)
+      cache.set(LT_CACHE_KEY, snapshot)
     } finally { setDeletingId(null) }
   }
 
   const handleToggleDate = async (bookingId: number, date: string) => {
     const key = `${bookingId}:${date}`
+    const booking = bookings.find(b => b.id === bookingId)
+    if (!booking) return
+
+    // Optimistic toggle — compute next excluded set locally, apply now.
+    let excludedArr: string[]
+    try { excludedArr = JSON.parse(booking.excluded_dates || '[]') as string[] } catch { excludedArr = [] }
+    const has = excludedArr.includes(date)
+    const nextExcluded = has ? excludedArr.filter(d => d !== date) : [...excludedArr, date]
+    const snapshot = bookings
+    const optimisticBookings = bookings.map(b =>
+      b.id === bookingId ? { ...b, excluded_dates: JSON.stringify(nextExcluded) } : b
+    )
+    setBookings(optimisticBookings)
+    cache.set(LT_CACHE_KEY, optimisticBookings)
     setTogglingDate(key)
+
     try {
       const res = await fetch(`/api/long-term/${bookingId}/toggle-date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date }),
       })
-      const { excluded } = await res.json()
-      setBookings(prev => prev.map(b =>
-        b.id === bookingId ? { ...b, excluded_dates: JSON.stringify(excluded) } : b
-      ))
+      if (!res.ok) throw new Error('toggle failed')
+      // Reconcile with canonical excluded list from server.
+      const { excluded } = await res.json() as { excluded: string[] }
+      setBookings(prev => {
+        const next = prev.map(b =>
+          b.id === bookingId ? { ...b, excluded_dates: JSON.stringify(excluded) } : b
+        )
+        cache.set(LT_CACHE_KEY, next)
+        return next
+      })
+    } catch {
+      setBookings(snapshot)
+      cache.set(LT_CACHE_KEY, snapshot)
     } finally { setTogglingDate(null) }
   }
 
