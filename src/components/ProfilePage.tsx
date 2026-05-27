@@ -35,7 +35,15 @@ export function ProfilePage({ name, email, role, phone: initialPhone }: Props) {
       setError('Ange ett giltigt telefonnummer, t.ex. +46701234567.')
       return
     }
+
+    // Optimistic: flash "Sparat!" instantly, treat as saved. If the server
+    // rejects, restore previous savedPhone and surface the error.
+    const previousSaved = savedPhone
+    setSavedPhone(trimmed)
+    setSavedFlash(true)
+    setTimeout(() => setSavedFlash(false), 2000)
     setSaving(true)
+
     try {
       const res = await fetch('/api/users', {
         method: 'PATCH',
@@ -44,12 +52,14 @@ export function ProfilePage({ name, email, role, phone: initialPhone }: Props) {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+        setSavedPhone(previousSaved)
+        setSavedFlash(false)
         setError(data?.error ?? 'Kunde inte spara.')
-        return
       }
-      setSavedPhone(trimmed)
-      setSavedFlash(true)
-      setTimeout(() => setSavedFlash(false), 2000)
+    } catch {
+      setSavedPhone(previousSaved)
+      setSavedFlash(false)
+      setError('Kunde inte spara.')
     } finally {
       setSaving(false)
     }
