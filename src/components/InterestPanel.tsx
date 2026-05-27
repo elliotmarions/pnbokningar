@@ -223,7 +223,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     if (!onMoveToReserve) return
     const snapshot = applicants
     addPending(appId)
-    setApplicants(prev => prev.map(a => a.id === appId ? { ...a, reserve: 1 } : a))
+    // When moving an approved driver to reserve we also clear the approval
+    // and any prior rejection/withdrawal — mirrors the server-side change.
+    setApplicants(prev => prev.map(a => a.id === appId
+      ? { ...a, reserve: 1, approved: false, rejected: false, withdrawn: false, withdrawal_reason: null, rejection_reason: null }
+      : a
+    ))
     try {
       await onMoveToReserve(appId)
     } catch {
@@ -420,6 +425,16 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     </div>
                   </div>
                   <div className="actions">
+                    {onMoveToReserve && (
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        title="Flytta till reservlistan"
+                        disabled={pendingIds.has(a.id)}
+                        onClick={() => handleMoveToReserve(a.id)}
+                      >
+                        Reserv
+                      </button>
+                    )}
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Avboka"
