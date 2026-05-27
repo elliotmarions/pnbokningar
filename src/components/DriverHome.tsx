@@ -254,15 +254,7 @@ export function DriverHome() {
   }
 
   if (!weekData) {
-    return (
-      <div className="driver-shell">
-        <div className="driver-frame">
-          <div className="driver-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: 'var(--text-tertiary)' }}>Laddar…</span>
-          </div>
-        </div>
-      </div>
-    )
+    return <DriverSkeleton isDesktop={isDesktop} userName={user?.name ?? null} />
   }
 
   const days: ShiftDay[] = weekData.days.map(d => ({
@@ -430,6 +422,94 @@ export function DriverHome() {
       </div>
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
       {consecutiveWarning && <ConsecutiveWarning count={consecutiveWarning.count} onConfirm={() => { const id = consecutiveWarning.shiftId; setConsecutiveWarning(null); handleApply(id, true) }} onCancel={() => setConsecutiveWarning(null)} />}
+    </div>
+  )
+}
+
+function DriverSkeleton({ isDesktop, userName }: { isDesktop: boolean; userName: string | null }) {
+  // 6 skeleton day-cards (Mon-Sat) matching the real DayCard layout so the
+  // page doesn't jump when real data arrives.
+  const days = Array.from({ length: 6 })
+
+  const skeletonCard = (i: number) => (
+    <div key={i} className="day-card skel-day">
+      <div className="day-row1">
+        <div>
+          <div className="skel skel-line w-60" />
+          <div className="skel skel-line w-40 mt-6" />
+        </div>
+        <div className="skel skel-badge" />
+      </div>
+      <div className="day-row2">
+        <div className="skel skel-line w-80" />
+      </div>
+      <div className="skel skel-action" />
+    </div>
+  )
+
+  if (isDesktop) {
+    return (
+      <div className="driver-shell desktop">
+        <div className="driver-desktop">
+          <div className="driver-desktop-header">
+            <div className="brand">
+              <img src="/pn-logo.png" alt="PostNord" className="brand-logo" />
+              <div>
+                <div className="name">Passbokning</div>
+                <div className="sub">Chaufför · Mina pass</div>
+              </div>
+            </div>
+            <div className="right">
+              <div style={{ textAlign: 'right' }}>
+                <div className="who" style={{ minHeight: 16 }}>{userName ?? ''}</div>
+                <div className="role">Chaufför</div>
+              </div>
+              <div className="skel skel-avatar" />
+            </div>
+          </div>
+
+          <div className="driver-summary">
+            {[0,1,2].map(i => (
+              <div key={i} className="driver-stat">
+                <div className="skel skel-line w-50" />
+                <div className="skel skel-line w-30 mt-10" style={{ height: 22 }} />
+              </div>
+            ))}
+          </div>
+
+          <div className="section-h" style={{ marginTop: 28 }}>
+            <span className="t"><div className="skel skel-line w-120" style={{ display: 'inline-block', height: 14 }} /></span>
+          </div>
+          <div className="driver-grid">
+            {days.map((_, i) => skeletonCard(i))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Mobile
+  return (
+    <div className="driver-shell">
+      <div className="driver-frame">
+        <div className="driver-header">
+          <div>
+            <div className="title">Passbokning</div>
+            <div className="who" style={{ minHeight: 14 }}>{userName ?? ''}</div>
+          </div>
+          <div className="skel skel-icon-btn" />
+        </div>
+        <div className="driver-body">
+          <div className="section-h">
+            <span className="t"><div className="skel skel-line w-120" style={{ display: 'inline-block', height: 14 }} /></span>
+          </div>
+          {days.map((_, i) => skeletonCard(i))}
+        </div>
+        <nav className="tabbar">
+          <div className="tab"><div className="skel skel-tab-dot" /></div>
+          <div className="tab"><div className="skel skel-tab-dot" /></div>
+        </nav>
+      </div>
     </div>
   )
 }
