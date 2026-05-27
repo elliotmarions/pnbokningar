@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Clock, Plus, Users } from './Icons'
+import { ChevronLeft, ChevronRight, Clock, Plus, Users, X } from './Icons'
 import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
@@ -54,6 +54,7 @@ export function WeekConfig() {
   const [openShiftId, setOpenShiftId] = useState<number | null>(null)
   const [openWeekDialog, setOpenWeekDialog] = useState(false)
   const [openWeekSlots, setOpenWeekSlots] = useState<Record<number, string>>({})
+  const [closeWeekDialog, setCloseWeekDialog] = useState(false)
   // Custom-closed days (sommarstängt, midsommar, jul etc) — keyed by date string
   const [customClosed, setCustomClosed] = useState<Record<string, { reason: string; color: string }>>({})
   const { toast, show: showToast, clear: clearToast } = useToast()
@@ -476,6 +477,41 @@ export function WeekConfig() {
     })
   }
 
+  const handleCloseWeek = async () => {
+    const toClose = local.filter(s => s.is_open === 1)
+    if (toClose.length === 0) {
+      showToast('Inga öppna pass att stänga den här veckan.', 'error')
+      setCloseWeekDialog(false)
+      return
+    }
+    const updates = toClose.map(s => ({ id: s.id, is_open: 0 }))
+
+    // Optimistic: close instantly, dismiss dialog, show toast.
+    const previousLocal = local
+    const previousShifts = shifts
+    const closeIds = new Set(toClose.map(s => s.id))
+    setLocal(prev => prev.map(s => closeIds.has(s.id) ? { ...s, is_open: 0 } : s))
+    setShifts(prev => prev.map(s => closeIds.has(s.id) ? { ...s, is_open: 0 } : s))
+    setCloseWeekDialog(false)
+    showToast(`${toClose.length} pass stängda.`)
+
+    withInflight(async () => {
+      try {
+        const res = await fetch('/api/shifts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+        if (!res.ok) throw new Error('close week failed')
+        refreshCounts()
+      } catch {
+        setLocal(previousLocal)
+        setShifts(previousShifts)
+        showToast('Fel vid stängning. Försök igen.', 'error')
+      }
+    })
+  }
+
   return (
     <>
       <div className="cfg-top">
@@ -490,6 +526,10 @@ export function WeekConfig() {
             <span className="week-label">Vecka {weekNumber} · {weekYear}</span>
             <button className="arrow" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="svg-ico" /></button>
           </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setCloseWeekDialog(true)}>
+            <X className="svg-ico svg-ico-sm" />
+            Stäng vecka
+          </button>
           <button className="btn btn-sm btn-primary" onClick={() => {
             const today = new Date()
             const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -700,6 +740,36 @@ export function WeekConfig() {
           </div>
         </div>
       )}
+
+      {closeWeekDialog && (() => {
+        const openShifts = local.filter(s => s.is_open === 1)
+        const approvedTotal = openShifts.reduce((sum, s) => sum + (counts[s.id]?.approved ?? 0), 0)
+        return (
+          <div className="modal-backdrop" onClick={() => setCloseWeekDialog(false)}>
+            <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Stäng vecka {weekNumber}</div>
+              <p className="modal-sub">
+                {openShifts.length === 0
+                  ? 'Inga öppna pass att stänga den här veckan.'
+                  : <>Det här stänger <strong>{openShifts.length}</strong> öppna pass i vecka {weekNumber}.
+                     {approvedTotal > 0 && <> Redan godkända chaufförer ({approvedTotal} st) påverkas inte — de behåller sin bokning.</>}
+                     <br />Nya anmälningar kan inte göras tills veckan öppnas igen.</>}
+              </p>
+              <div className="modal-actions">
+                <button className="btn btn-sm btn-ghost" onClick={() => setCloseWeekDialog(false)}>Avbryt</button>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: 'var(--red, #DC2626)', color: '#fff', fontWeight: 600 }}
+                  onClick={handleCloseWeek}
+                  disabled={openShifts.length === 0}
+                >
+                  Stäng pass
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 }
