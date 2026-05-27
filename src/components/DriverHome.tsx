@@ -107,6 +107,12 @@ export function DriverHome() {
     return { isoYear, isoWeek }
   }
 
+  // Cache TTL — slightly above the polling interval (10s) so cache from a
+  // recent poll is still trusted, but anything older falls through to skeleton
+  // + fresh fetch. This avoids painting stale "Sökt" / "Anmäl intresse" state
+  // for a moment after refresh when admin already approved/rejected.
+  const CACHE_MAX_AGE_MS = 12000
+
   const loadId = useRef(0)
   const loadWeek = useCallback(async (offset = 0) => {
     const id = ++loadId.current
@@ -114,27 +120,29 @@ export function DriverHome() {
     const cacheKey = `driver-week-${isoYear}-${isoWeek}`
 
     // SWR: pull cached data from sessionStorage so the UI renders the new
-    // week instantly. Background revalidate below replaces the stale data.
+    // week instantly. Skip if older than CACHE_MAX_AGE_MS so we don't paint
+    // a stale status (e.g. "Sökt" when the admin has since approved).
     let hasCache = false
     if (typeof window !== 'undefined') {
       try {
         const raw = sessionStorage.getItem(cacheKey)
         if (raw) {
-          const { week, apps } = JSON.parse(raw)
-          if (week) {
-            setWeekData(week)
+          const parsed = JSON.parse(raw) as { week?: WeekData; apps?: Application[]; ts?: number }
+          const fresh = typeof parsed.ts === 'number' && (Date.now() - parsed.ts) < CACHE_MAX_AGE_MS
+          if (fresh && parsed.week) {
+            setWeekData(parsed.week)
             const counts: Record<number, number> = {}
-            for (const s of week.shifts) counts[s.id] = s.approved ?? 0
+            for (const s of parsed.week.shifts) counts[s.id] = s.approved ?? 0
             setAllApprovedCounts(counts)
+            if (parsed.apps) setApplications(parsed.apps)
             hasCache = true
           }
-          if (apps) setApplications(apps)
         }
       } catch {}
     }
 
-    // If no cache, blank out previous week's data so we show skeleton instead
-    // of stale shifts from the previous week.
+    // If no fresh cache, blank out previous week's data so we show the skeleton
+    // instead of stale shifts.
     if (!hasCache) setWeekData(null)
 
     // Parallel fetch of week + user's applications
@@ -165,7 +173,7 @@ export function DriverHome() {
     setAllApprovedCounts(counts)
 
     if (typeof window !== 'undefined') {
-      try { sessionStorage.setItem(cacheKey, JSON.stringify({ week: data, apps })) } catch {}
+      try { sessionStorage.setItem(cacheKey, JSON.stringify({ week: data, apps, ts: Date.now() })) } catch {}
     }
   }, [])
 
@@ -246,6 +254,15 @@ export function DriverHome() {
           return [...next, ...tempEntries]
         })
       }
+
+      // Keep the SWR cache fresh so a refresh between ticks doesn't paint
+      // stale status. Only writes when we have data for the current week.
+      if (data && next && typeof window !== 'undefined') {
+        try {
+          const cacheKey = `driver-week-${isoYear}-${isoWeek}`
+          sessionStorage.setItem(cacheKey, JSON.stringify({ week: data, apps: next, ts: Date.now() }))
+        } catch {}
+      }
     } catch {
       // Network blip — just try again next tick.
     }
@@ -264,13 +281,20 @@ export function DriverHome() {
       const { isoYear, isoWeek } = isoFromOffset(offset)
       const key = `driver-week-${isoYear}-${isoWeek}`
       if (typeof window === 'undefined') return
-      if (sessionStorage.getItem(key)) return
+      // Skip if we have a still-fresh prefetch for this week.
+      const existing = sessionStorage.getItem(key)
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing) as { ts?: number }
+          if (typeof parsed.ts === 'number' && (Date.now() - parsed.ts) < CACHE_MAX_AGE_MS) return
+        } catch {}
+      }
       Promise.all([
         fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`).then(r => r.ok ? r.json() : null),
         fetch('/api/applications/mine').then(r => r.ok ? r.json() : null),
       ]).then(([week, apps]) => {
         if (week) {
-          try { sessionStorage.setItem(key, JSON.stringify({ week, apps })) } catch {}
+          try { sessionStorage.setItem(key, JSON.stringify({ week, apps, ts: Date.now() })) } catch {}
         }
       }).catch(() => {})
     }
