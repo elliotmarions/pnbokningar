@@ -3,7 +3,7 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
-  title: 'Passbokning · PostNord Trafikledning',
+  title: 'Passbokning · PostNord',
   description: 'Schemaläggningssystem för extraanställda chaufförer',
 }
 
