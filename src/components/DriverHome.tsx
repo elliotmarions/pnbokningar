@@ -24,6 +24,15 @@ interface Application {
   withdrawn: boolean
   reserve: number
   applied_at: string
+  // From /api/applications/mine (forUser). Optional because optimistic
+  // entries built locally don't have shift metadata yet.
+  shift_date?: string
+  shift_day_index?: number
+}
+
+function dayLabelFromIndex(idx?: number) {
+  if (idx === undefined) return ''
+  return ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'][idx] ?? ''
 }
 interface WeekData {
   weekYear: number
@@ -154,6 +163,87 @@ export function DriverHome() {
 
   useEffect(() => { loadWeek(weekOffset) }, [weekOffset, loadWeek])
 
+  // --- Live updates ---
+  // Poll my applications (+ current week's approved counts) every 10s so the
+  // driver sees approvals/rejections/withdrawals the moment trafikledningen
+  // makes them — no manual refresh needed. Pauses on hidden tabs and while an
+  // optimistic mutation is in flight so we don't overwrite local state with
+  // a stale snapshot.
+  const inflightRef = useRef(0)
+  const withInflight = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    inflightRef.current++
+    try { return await fn() }
+    finally { inflightRef.current = Math.max(0, inflightRef.current - 1) }
+  }, [])
+
+  const liveTick = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return
+    if (inflightRef.current > 0) return
+    const { isoYear, isoWeek } = isoFromOffset(weekOffset)
+    try {
+      const [weekRes, appRes] = await Promise.all([
+        fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
+        fetch('/api/applications/mine'),
+      ])
+      // Re-check inflight after the await — a mutation may have started while
+      // we were fetching; if so, drop this snapshot rather than overwrite it.
+      if (inflightRef.current > 0) return
+      if (weekRes.ok) {
+        const data: WeekData = await weekRes.json()
+        const counts: Record<number, number> = {}
+        for (const s of data.shifts) counts[s.id] = s.approved ?? 0
+        setAllApprovedCounts(counts)
+        // Refresh weekData too in case slots/closed-state changed
+        setWeekData(prev => prev ? { ...prev, shifts: data.shifts, days: data.days } : data)
+      }
+      if (appRes.ok) {
+        const next: Application[] = await appRes.json()
+        setApplications(prev => {
+          // Detect status transitions on apps that already existed locally,
+          // toast the meaningful ones.
+          const prevById = new Map(prev.map(a => [a.id, a]))
+          for (const n of next) {
+            const p = prevById.get(n.id)
+            if (!p) continue
+            const dayName = dayLabelFromIndex(n.shift_day_index)
+            const dateLabel = n.shift_date ? fmt(n.shift_date) : ''
+            const when = dayName && dateLabel ? `${dayName} ${dateLabel}` : dayName || dateLabel
+            const suffix = when ? ` (${when})` : ''
+            // pending → approved
+            if (!p.approved && n.approved && !p.rejected && !n.rejected) {
+              showToast(`Ditt pass${suffix} är godkänt! 🎉`)
+            }
+            // pending/approved → rejected
+            else if (!p.rejected && n.rejected) {
+              showToast(`Ditt pass${suffix} nekades.`, 'error')
+            }
+            // approved → withdrawn (admin removed approval)
+            else if (p.approved && !n.approved && n.withdrawn) {
+              showToast(`Trafikledning avbokade ditt pass${suffix}.`, 'error')
+            }
+            // reserve → approved (promoted)
+            else if (p.reserve === 1 && n.approved && !n.reserve) {
+              showToast(`Du har blivit uppflyttad från reserv${suffix}! 🎉`)
+            }
+          }
+          // Preserve any optimistic temp entries (negative ids) that the
+          // server doesn't know about yet (no matching shift_id in `next`).
+          const tempEntries = prev.filter(a => a.id < 0 && !next.some(n => n.shift_id === a.shift_id))
+          return [...next, ...tempEntries]
+        })
+      }
+    } catch {
+      // Network blip — just try again next tick.
+    }
+  }, [weekOffset, showToast])
+
+  useEffect(() => {
+    const interval = setInterval(liveTick, 10000)
+    const onVisible = () => { if (!document.hidden) liveTick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+  }, [liveTick])
+
   // Prefetch adjacent weeks in the background so prev/next clicks feel instant.
   useEffect(() => {
     const prefetch = (offset: number) => {
@@ -185,20 +275,22 @@ export function DriverHome() {
     setApplications(prev => [...prev, optimisticApp])
     showToast('Du är tillagd på reservlistan!')
 
-    try {
-      const res = await fetch('/api/applications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shiftId, reserve: true }),
-      })
-      if (!res.ok) throw new Error('reserve failed')
-      const data = await res.json()
-      setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
-    } catch {
-      setApplications(prev => prev.filter(a => a.id !== tempId))
-      clearToast()
-      showToast('Något gick fel.', 'error')
-    }
+    await withInflight(async () => {
+      try {
+        const res = await fetch('/api/applications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shiftId, reserve: true }),
+        })
+        if (!res.ok) throw new Error('reserve failed')
+        const data = await res.json()
+        setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
+      } catch {
+        setApplications(prev => prev.filter(a => a.id !== tempId))
+        clearToast()
+        showToast('Något gick fel.', 'error')
+      }
+    })
   }
 
   const handleApply = async (shiftId: number, force = false) => {
@@ -219,29 +311,31 @@ export function DriverHome() {
     setApplications(prev => [...prev, optimisticApp])
     showToast('Intresseanmälan skickad!')
 
-    try {
-      const res = await fetch('/api/applications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shiftId, force }),
-      })
-      if (!res.ok) throw new Error('apply failed')
-      const data = await res.json()
+    await withInflight(async () => {
+      try {
+        const res = await fetch('/api/applications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shiftId, force }),
+        })
+        if (!res.ok) throw new Error('apply failed')
+        const data = await res.json()
 
-      if (data.warning === 'CONSECUTIVE_DAYS') {
-        // Warning needs confirmation — revert optimistic and pull back the toast.
+        if (data.warning === 'CONSECUTIVE_DAYS') {
+          // Warning needs confirmation — revert optimistic and pull back the toast.
+          setApplications(prev => prev.filter(a => a.id !== tempId))
+          clearToast()
+          setConsecutiveWarning({ shiftId, count: data.count })
+          return
+        }
+        // Replace temp with real id
+        setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
+      } catch {
         setApplications(prev => prev.filter(a => a.id !== tempId))
         clearToast()
-        setConsecutiveWarning({ shiftId, count: data.count })
-        return
+        showToast('Något gick fel.', 'error')
       }
-      // Replace temp with real id
-      setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
-    } catch {
-      setApplications(prev => prev.filter(a => a.id !== tempId))
-      clearToast()
-      showToast('Något gick fel.', 'error')
-    }
+    })
   }
 
   const handleWithdraw = async (appId: number) => {
@@ -250,20 +344,22 @@ export function DriverHome() {
     setApplications(prev => prev.filter(a => a.id !== appId))
     showToast('Anmälan återkallad.')
 
-    try {
-      const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+    await withInflight(async () => {
+      try {
+        const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          setApplications(previous)
+          clearToast()
+          if (data.error === 'ALREADY_APPROVED') showToast('Du är redan godkänd — kontakta trafikledningen.', 'error')
+          else showToast('Något gick fel.', 'error')
+        }
+      } catch {
         setApplications(previous)
         clearToast()
-        if (data.error === 'ALREADY_APPROVED') showToast('Du är redan godkänd — kontakta trafikledningen.', 'error')
-        else showToast('Något gick fel.', 'error')
+        showToast('Något gick fel.', 'error')
       }
-    } catch {
-      setApplications(previous)
-      clearToast()
-      showToast('Något gick fel.', 'error')
-    }
+    })
   }
 
   if (!weekData) {
