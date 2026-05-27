@@ -556,10 +556,17 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve 
   onApplyReserve: (id: number) => void
 }) {
   const status = statusFor(day.shift, app, approvedCount)
-  const cardClass = `day-card is-${status}`
+  const isHoliday = status === 'closed' && day.holiday?.type === 'holiday'
+  const isEve     = status === 'closed' && day.holiday?.type === 'eve'
+  const cardClass = `day-card is-${status}${isHoliday ? ' is-holiday' : ''}${isEve ? ' is-eve' : ''}`
 
   const badgeLabel: Record<DayStatus, string> = { closed: 'Stängd', open: 'Öppen', pending: 'Sökt', confirmed: 'Bekräftad', full: 'Fullbokad', rejected: 'Nekad', withdrawn: 'Avbokad', reserve: 'Reserv' }
   const badgeClass: Record<DayStatus, string> = { closed: 'b-closed', open: 'b-open', pending: 'b-pending', confirmed: 'b-confirmed', full: 'b-full', rejected: 'b-rejected', withdrawn: 'b-closed', reserve: 'b-reserve' }
+
+  // Override badge for holidays/eves so the day's nature is the headline,
+  // not a generic "Stängd" pill.
+  const effectiveBadgeLabel = isHoliday ? 'Röd dag' : isEve ? 'Afton' : badgeLabel[status]
+  const effectiveBadgeClass = isHoliday ? 'b-holiday' : isEve ? 'b-eve' : badgeClass[status]
 
   return (
     <div className={cardClass}>
@@ -569,16 +576,25 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve 
           <div className="day-label">{day.label}</div>
           <div className="day-date">{fmt(day.date)}</div>
         </div>
-        <span className={`badge ${badgeClass[status]}`}>
-          <span className="pip" />{badgeLabel[status]}
+        <span className={`badge ${effectiveBadgeClass}`}>
+          <span className="pip" />{effectiveBadgeLabel}
         </span>
       </div>
-      <div className="day-row2">
-        <span className="hours">
-          <Clock className="svg-ico svg-ico-sm" />
-          {day.startTime}–{day.endTime}
-        </span>
-      </div>
+
+      {day.holiday && (isHoliday || isEve) ? (
+        <div className={`day-holiday-banner ${isEve ? 'eve' : ''}`}>
+          <span className="day-holiday-name">{day.holiday.name}</span>
+          <span className="day-holiday-sub">{isHoliday ? 'Inget pass denna dag' : 'Inget pass — afton'}</span>
+        </div>
+      ) : (
+        <div className="day-row2">
+          <span className="hours">
+            <Clock className="svg-ico svg-ico-sm" />
+            {day.startTime}–{day.endTime}
+          </span>
+        </div>
+      )}
+
       {status === 'open' && day.shift && (
         <button className="day-action is-apply" onClick={() => onApply(day.shift!.id)}>Anmäl intresse</button>
       )}
@@ -594,10 +610,11 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve 
           <button className="day-action-sub-cancel" onClick={() => onWithdraw(app.id)}>Ta bort mig</button>
         </div>
       )}
-      {(status === 'closed' || status === 'confirmed') && (
-        <button className="day-action is-disabled" disabled>
-          {status === 'closed' ? 'Stängd för anmälan' : 'Bekräftad ✓'}
-        </button>
+      {status === 'closed' && !day.holiday && (
+        <button className="day-action is-disabled" disabled>Stängd för anmälan</button>
+      )}
+      {status === 'confirmed' && (
+        <button className="day-action is-disabled" disabled>Bekräftad ✓</button>
       )}
       {status === 'rejected' && (
         <div className="day-action is-rejected">
@@ -609,11 +626,6 @@ function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve 
         <div className="day-action is-rejected">
           <span>Avbokad av trafikledning</span>
         </div>
-      )}
-      {status === 'closed' && day.holiday && (
-        <p className="day-holiday-reason">
-          {day.holiday.type === 'holiday' ? 'Röd dag' : 'Afton'} · {day.holiday.name}
-        </p>
       )}
     </div>
   )

@@ -279,6 +279,55 @@ a { color: inherit; text-decoration: none; }
 .day-cancel-note { margin: 6px 0 0; font-size: 11px; color: var(--text-tertiary); line-height: 1.4; }
 .day-holiday-reason { margin: 6px 0 0; font-size: 11px; color: var(--text-tertiary); text-align: center; }
 
+/* Holiday / eve day-cards — make the day's nature obvious instead of a
+   generic grey "Stängd" pill. */
+.day-card.is-holiday {
+  opacity: 1;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: linear-gradient(180deg, rgba(248, 113, 113, 0.06), var(--bg-card) 40%);
+}
+.day-card.is-holiday .accent-bar { background: #F87171; }
+.day-card.is-eve {
+  opacity: 1;
+  border-color: rgba(251, 191, 36, 0.32);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.05), var(--bg-card) 40%);
+}
+.day-card.is-eve .accent-bar { background: #FBBF24; }
+
+/* Coloured badge variants — replace the neutral "Stängd" pill on these days. */
+.badge.b-holiday {
+  background: rgba(248, 113, 113, 0.18);
+  color: #FCA5A5;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+.badge.b-holiday .pip { background: #F87171; }
+.badge.b-eve {
+  background: rgba(251, 191, 36, 0.16);
+  color: #FCD34D;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.badge.b-eve .pip { background: #FBBF24; }
+
+/* Prominent banner replacing the tiny holiday reason text. */
+.day-holiday-banner {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: 6px;
+  background: rgba(248, 113, 113, 0.10);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  margin-bottom: 4px;
+}
+.day-holiday-banner .day-holiday-name {
+  font-size: 13.5px; font-weight: 600; color: #FCA5A5; letter-spacing: -0.1px;
+}
+.day-holiday-banner .day-holiday-sub {
+  font-size: 11.5px; color: var(--text-secondary);
+}
+.day-holiday-banner.eve {
+  background: rgba(251, 191, 36, 0.09);
+  border-color: rgba(251, 191, 36, 0.28);
+}
+.day-holiday-banner.eve .day-holiday-name { color: #FCD34D; }
+
 /* Admin week card holiday tag */
 .wk-holiday-tag { display: block; margin-top: 5px; font-size: 10.5px; font-weight: 500; }
 .wk-holiday-tag.holiday { color: #F87171; }
