@@ -522,7 +522,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       <button
                         className="btn btn-sm btn-ghost ip-reserve-btn"
                         title="Flytta till reservlistan"
-                        disabled={pendingIds.has(a.id)}
                         onClick={() => handleMoveToReserve(a.id)}
                       >
                         Reserv
@@ -531,7 +530,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Avboka"
-                      disabled={pendingIds.has(a.id)}
                       onClick={() => { setWithdrawingId(a.id); setWithdrawReason('') }}
                     >
                       <X className="svg-ico svg-ico-sm" />
@@ -550,7 +548,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     />
                     <div className="reject-form-actions">
                       <button className="btn btn-sm btn-ghost" onClick={() => setWithdrawingId(null)}>Avbryt</button>
-                      <button className="btn btn-sm btn-danger" disabled={pendingIds.has(a.id)} onClick={() => handleUnapprove(a.id, withdrawReason || undefined)}>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleUnapprove(a.id, withdrawReason || undefined)}>
                         Avboka
                       </button>
                     </div>
@@ -584,7 +582,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   <div className="actions">
                     <button
                       className="btn btn-sm btn-success btn-icon"
-                      disabled={approved.length >= slots || pendingIds.has(a.id)}
+                      disabled={approved.length >= slots}
                       onClick={() => handleApprove(a.id)}
                       title="Godkänn"
                     >
@@ -593,7 +591,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     {onReject && (
                       <button
                         className="btn btn-sm btn-danger-ghost btn-icon"
-                        disabled={pendingIds.has(a.id)}
                         onClick={() => { setRejectingId(a.id); setRejectReason('') }}
                         title="Neka"
                       >
@@ -603,7 +600,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     {onMoveToReserve && (
                       <button
                         className="btn btn-sm btn-ghost ip-reserve-btn"
-                        disabled={pendingIds.has(a.id)}
                         onClick={() => handleMoveToReserve(a.id)}
                         title="Flytta till reservlista"
                       >
@@ -626,7 +622,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       <button className="btn btn-sm btn-ghost" onClick={() => setRejectingId(null)}>Avbryt</button>
                       <button
                         className="btn btn-sm btn-danger"
-                        disabled={pendingIds.has(a.id)}
                         onClick={() => handleReject(a.id, rejectReason)}
                       >
                         Neka
@@ -657,7 +652,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-ghost"
                       style={{ fontSize: 11 }}
-                      disabled={pendingIds.has(a.id)}
+
                       onClick={() => handleUnreject(a.id)}
                     >
                       Ångra
@@ -667,7 +662,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Ta bort permanent"
-                      disabled={pendingIds.has(a.id)}
+
                       onClick={() => handleDeleteApplication(a.id)}
                     >
                       <X className="svg-ico svg-ico-sm" />
@@ -704,7 +699,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-ghost"
                       style={{ fontSize: 11 }}
-                      disabled={pendingIds.has(a.id)}
+
                       onClick={() => handleUnwithdraw(a.id)}
                     >
                       Ångra
@@ -714,7 +709,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Ta bort permanent"
-                      disabled={pendingIds.has(a.id)}
+
                       onClick={() => handleDeleteApplication(a.id)}
                     >
                       <X className="svg-ico svg-ico-sm" />
@@ -750,7 +745,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   {onPromoteReserve && (
                     <button
                       className="btn btn-sm btn-success"
-                      disabled={pendingIds.has(a.id)}
+
                       onClick={() => handlePromoteReserve(a.id)}
                       title="Flytta till godkänd"
                     >
@@ -762,7 +757,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-danger-ghost btn-icon"
                       title="Ta bort från reservlista"
-                      disabled={pendingIds.has(a.id)}
+
                       onClick={() => handleDeleteApplication(a.id)}
                     >
                       <X className="svg-ico svg-ico-sm" />
