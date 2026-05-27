@@ -422,10 +422,10 @@ export function DriverHome() {
               Admin
             </Link>
           )}
-          <button className="tab">
+          <Link href="/profile" prefetch className="tab">
             <User className="svg-ico ico" />
             Profil
-          </button>
+          </Link>
         </nav>
       </div>
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
