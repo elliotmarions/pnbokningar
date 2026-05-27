@@ -50,6 +50,8 @@ export function WeekConfig() {
   const [openShiftId, setOpenShiftId] = useState<number | null>(null)
   const [openWeekDialog, setOpenWeekDialog] = useState(false)
   const [openWeekSlots, setOpenWeekSlots] = useState<Record<number, string>>({})
+  // Custom-closed days (sommarstängt, midsommar, jul etc) — keyed by date string
+  const [customClosed, setCustomClosed] = useState<Record<string, { reason: string; color: string }>>({})
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   const load = useCallback(async () => {
@@ -93,6 +95,40 @@ export function WeekConfig() {
   }, [weekOffset, cache])
 
   useEffect(() => { load() }, [weekOffset, load])
+
+  // Load custom-closed days once — used to show why a day is locked and to
+  // disable the "open" toggle on those days.
+  useEffect(() => {
+    const fromCache = cache.get('custom-closed') as { date: string; reason: string; color: string }[] | undefined
+    if (fromCache) {
+      const map: Record<string, { reason: string; color: string }> = {}
+      for (const c of fromCache) map[c.date] = { reason: c.reason, color: c.color }
+      setCustomClosed(map)
+    }
+    fetch('/api/custom-closed')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const list = (d?.days ?? []) as { date: string; reason: string; color: string }[]
+        const map: Record<string, { reason: string; color: string }> = {}
+        for (const c of list) map[c.date] = { reason: c.reason, color: c.color }
+        setCustomClosed(map)
+        cache.set('custom-closed', list)
+      })
+      .catch(() => {})
+  }, [cache])
+
+  // Returns a lock reason for a day, or null if the day can be freely opened/closed.
+  const getLockReason = (day: DayInfo): { label: string; detail: string; color?: string } | null => {
+    if (day.holiday) {
+      return {
+        label: day.holiday.type === 'holiday' ? 'Röd dag' : 'Afton',
+        detail: day.holiday.name,
+      }
+    }
+    const cc = customClosed[day.date]
+    if (cc) return { label: 'Stängd', detail: cc.reason, color: cc.color }
+    return null
+  }
 
   // Lightweight refresh — only updates counts + applicantsByShift, leaves
   // shifts/draft slot edits alone. Used both by polling and after admin actions
@@ -155,6 +191,13 @@ export function WeekConfig() {
   const update = async (id: number, field: 'is_open' | 'slots', value: number) => {
     const currentShift = local.find(s => s.id === id)
     if (!currentShift) return
+    // Block opening a day that's locked by holiday/eve/custom-closed
+    const day = days.find(d => d.dayIndex === currentShift.day_index)
+    if (day && field === 'is_open' && value === 1 && getLockReason(day)) {
+      const reason = getLockReason(day)!
+      showToast(`Den här dagen kan inte öppnas — ${reason.label.toLowerCase()} (${reason.detail}).`, 'error')
+      return
+    }
     const updatedShift = { ...currentShift, [field]: value }
     setLocal(prev => prev.map(s => s.id === id ? updatedShift : s))
     if (field === 'slots') setDraftSlots(prev => ({ ...prev, [id]: String(value) }))
@@ -304,7 +347,8 @@ export function WeekConfig() {
             const init: Record<number, string> = {}
             shifts.filter(s => {
               const d = days.find(d => d.dayIndex === s.day_index)
-              return d && d.date >= todayStr && !d.holiday
+              // Skip past days, holidays/eves, and custom-closed days
+              return d && d.date >= todayStr && !d.holiday && !customClosed[d.date]
             }).forEach(s => { init[s.id] = '5' })
             setOpenWeekSlots(init)
             setOpenWeekDialog(true)
@@ -320,9 +364,14 @@ export function WeekConfig() {
           const shift = local.find(s => s.day_index === day.dayIndex)
           if (!shift) return null
           const isOpen = !!shift.is_open
+          const lock = getLockReason(day)
+          const isLocked = lock !== null
 
           return (
-            <div key={day.dayIndex} className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'}`}>
+            <div
+              key={day.dayIndex}
+              className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'} ${isLocked ? 'is-locked' : ''}`}
+            >
               <div className="top">
                 <div>
                   <div className="day-name">{day.label}</div>
@@ -333,6 +382,17 @@ export function WeekConfig() {
                   <span className="pip" />{isOpen ? 'Öppen' : 'Stängd'}
                 </span>
               </div>
+
+              {/* Lock reason banner — shown when day cannot be opened */}
+              {isLocked && (
+                <div
+                  className={`cfg-lock-banner ${day.holiday?.type === 'eve' ? 'eve' : day.holiday ? 'holiday' : 'custom'}`}
+                  style={lock.color && !day.holiday ? { borderLeftColor: lock.color } : undefined}
+                >
+                  <div className="cfg-lock-label">{lock.label}</div>
+                  <div className="cfg-lock-detail">{lock.detail}</div>
+                </div>
+              )}
 
               {/* Applicants button */}
               {(() => {
@@ -362,17 +422,25 @@ export function WeekConfig() {
               <div className="cfg-field">
                 <label>Öppen för anmälan</label>
                 <div
-                  className={`tg ${isOpen ? 'on' : ''}`}
-                  onClick={() => update(shift.id, 'is_open', isOpen ? 0 : 1)}
+                  className={`tg ${isOpen ? 'on' : ''} ${isLocked ? 'tg-locked' : ''}`}
+                  onClick={() => {
+                    if (isLocked) {
+                      showToast(`Den här dagen kan inte öppnas — ${lock.label.toLowerCase()} (${lock.detail}).`, 'error')
+                      return
+                    }
+                    update(shift.id, 'is_open', isOpen ? 0 : 1)
+                  }}
                   role="switch"
                   aria-checked={isOpen}
+                  aria-disabled={isLocked}
+                  title={isLocked ? `Låst — ${lock.label}: ${lock.detail}` : undefined}
                 />
               </div>
 
               <div className="cfg-field">
                 <label>Antal platser</label>
                 <div className="num-input">
-                  <button disabled={!isOpen} onClick={() => update(shift.id, 'slots', Math.max(1, shift.slots - 1))}>
+                  <button disabled={!isOpen || isLocked} onClick={() => update(shift.id, 'slots', Math.max(1, shift.slots - 1))}>
                     −
                   </button>
                   <input
@@ -380,8 +448,8 @@ export function WeekConfig() {
                     value={draftSlots[shift.id] ?? shift.slots}
                     min={1}
                     max={50}
-                    disabled={!isOpen}
-                    style={{ opacity: isOpen ? 1 : 0.5 }}
+                    disabled={!isOpen || isLocked}
+                    style={{ opacity: (!isOpen || isLocked) ? 0.5 : 1 }}
                     onChange={e => setDraftSlots(prev => ({ ...prev, [shift.id]: e.target.value }))}
                     onBlur={e => {
                       const val = parseInt(e.target.value)
@@ -389,7 +457,7 @@ export function WeekConfig() {
                       update(shift.id, 'slots', clamped)
                     }}
                   />
-                  <button disabled={!isOpen} onClick={() => update(shift.id, 'slots', Math.min(50, shift.slots + 1))}>
+                  <button disabled={!isOpen || isLocked} onClick={() => update(shift.id, 'slots', Math.min(50, shift.slots + 1))}>
                     +
                   </button>
                 </div>

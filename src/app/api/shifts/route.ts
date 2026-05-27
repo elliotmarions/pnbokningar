@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { shiftRepo, getDb } from '@/lib/db'
+import { shiftRepo, customClosedRepo, getDb } from '@/lib/db'
 import { int, fieldError } from '@/lib/validate'
+import { getHolidayInfo } from '@/lib/holidays'
 
 export async function PUT(req: NextRequest) {
   const session = await requireAdmin()
@@ -24,6 +25,21 @@ export async function PUT(req: NextRequest) {
     if (r.is_open !== undefined && is_open_val === null) return NextResponse.json(fieldError('is_open'), { status: 400 })
     if (r.slots !== undefined && slots_val === null) return NextResponse.json(fieldError('slots'), { status: 400 })
     body.push({ id, is_open: is_open_val ?? undefined, slots: slots_val ?? undefined })
+  }
+
+  // Block opening shifts that fall on a holiday/eve or custom-closed day
+  const sqlPre = getDb()
+  for (const s of body) {
+    if (s.is_open !== 1) continue
+    const [shift] = await sqlPre<{ date: string }[]>`SELECT date FROM shifts WHERE id = ${s.id}`
+    if (!shift) continue
+    const holiday = getHolidayInfo(shift.date)
+    const customClosed = await customClosedRepo.forDate(shift.date)
+    if (holiday || customClosed) {
+      return NextResponse.json({
+        error: 'Den här dagen är låst (röd dag, afton eller stängd dag) och kan inte öppnas.',
+      }, { status: 400 })
+    }
   }
 
   for (const s of body) {
