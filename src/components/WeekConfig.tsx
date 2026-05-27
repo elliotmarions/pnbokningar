@@ -226,92 +226,174 @@ export function WeekConfig() {
     else showToast('Fel vid sparande', 'error')
   }
 
-  const handleApprove = async (appId: number) => {
-    const res = await fetch('/api/approvals', {
+  // --- Optimistic helpers for admin actions inside InterestPanel ---
+  // counts in WeekConfig are what drive the day-card badges ("3 väntar" etc.).
+  // The panel handles its own applicants state; we mirror the mutation onto
+  // applicantsByShift so reopening the panel doesn't show stale data, and we
+  // recompute the day-card count from the mutated applicant list.
+
+  type Mutable = {
+    id: number
+    approved: boolean | number
+    rejected: number
+    withdrawn: number
+    reserve: number
+    [key: string]: unknown
+  }
+
+  const computeCounts = (apps: Mutable[]) => {
+    let approved = 0, pending = 0, reserves = 0
+    for (const a of apps) {
+      const isApproved = Boolean(a.approved)
+      if (isApproved) approved++
+      if (a.rejected === 0 && a.withdrawn === 0 && a.reserve === 0 && !isApproved) pending++
+      if (a.reserve === 1 && a.rejected === 0 && a.withdrawn === 0) reserves++
+    }
+    return { approved, pending, reserves }
+  }
+
+  // Apply a per-applicant mutation; returns null to delete the applicant.
+  const applyAppMutation = async (
+    appId: number,
+    mutator: (a: Mutable) => Mutable | null,
+    fetcher: () => Promise<Response>,
+    successToast?: string,
+    errorToast = 'Något gick fel.',
+  ) => {
+    // Locate which shift this applicant belongs to.
+    let foundShiftId: number | null = null
+    for (const [sidStr, list] of Object.entries(applicantsByShift)) {
+      if ((list as Mutable[]).some(a => a.id === appId)) { foundShiftId = Number(sidStr); break }
+    }
+
+    const snapCounts = counts
+    const snapApps = applicantsByShift
+
+    if (foundShiftId !== null) {
+      const shiftId = foundShiftId
+      const nextList = (applicantsByShift[shiftId] as Mutable[])
+        .map(a => a.id === appId ? mutator(a) : a)
+        .filter((a): a is Mutable => a !== null)
+      setApplicantsByShift(prev => ({ ...prev, [shiftId]: nextList }))
+      setCounts(prev => ({ ...prev, [shiftId]: computeCounts(nextList) }))
+    }
+
+    return withInflight(async () => {
+      try {
+        const res = await fetcher()
+        if (!res.ok) throw new Error('action failed')
+        if (successToast) showToast(successToast)
+        refreshCounts()
+      } catch (err) {
+        setCounts(snapCounts)
+        setApplicantsByShift(snapApps)
+        showToast(errorToast, 'error')
+        throw err
+      }
+    })
+  }
+
+  const handleApprove = (appId: number) => applyAppMutation(
+    appId,
+    a => ({ ...a, approved: true, withdrawn: 0 }),
+    () => fetch('/api/approvals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ applicationId: appId }),
-    })
-    if (res.ok) {
-      showToast('Chaufför godkänd. SMS skickat.')
-      refreshCounts()
-    } else {
-      showToast('Fel vid godkännande.', 'error')
-      throw new Error('approve failed')
-    }
-  }
+    }),
+    'Chaufför godkänd. SMS skickat.',
+    'Fel vid godkännande.',
+  )
 
-  const handleUnapprove = async (appId: number, reason?: string) => {
-    const res = await fetch(`/api/approvals/${appId}`, {
+  const handleUnapprove = (appId: number, reason?: string) => applyAppMutation(
+    appId,
+    a => ({ ...a, approved: false, withdrawn: 1, withdrawal_reason: reason ?? null }),
+    () => fetch(`/api/approvals/${appId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
-    })
-    if (res.ok) {
-      showToast('Chaufför avbokad.')
-      refreshCounts()
-    } else {
-      showToast('Fel.', 'error')
-      throw new Error('unapprove failed')
-    }
-  }
+    }),
+    'Chaufför avbokad.',
+  )
 
-  const handleReject = async (appId: number, reason?: string) => {
-    const res = await fetch(`/api/applications/${appId}/reject`, {
+  const handleReject = (appId: number, reason?: string) => applyAppMutation(
+    appId,
+    a => ({ ...a, rejected: 1, rejection_reason: reason ?? null }),
+    () => fetch(`/api/applications/${appId}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
-    })
-    if (res.ok) {
-      showToast('Ansökan nekad.')
-      refreshCounts()
-    } else {
-      showToast('Fel vid nekande.', 'error')
-      throw new Error('reject failed')
-    }
-  }
+    }),
+    'Ansökan nekad.',
+    'Fel vid nekande.',
+  )
 
-  const handleUnreject = async (appId: number) => {
-    const res = await fetch(`/api/applications/${appId}/reject`, { method: 'DELETE' })
-    if (!res.ok) throw new Error('unreject failed')
-    refreshCounts()
-  }
+  const handleUnreject = (appId: number) => applyAppMutation(
+    appId,
+    a => ({ ...a, rejected: 0, rejection_reason: null }),
+    () => fetch(`/api/applications/${appId}/reject`, { method: 'DELETE' }),
+  )
 
-  const handleUnwithdraw = async (appId: number) => {
-    const res = await fetch(`/api/applications/${appId}/withdraw`, { method: 'DELETE' })
-    if (!res.ok) throw new Error('unwithdraw failed')
-    refreshCounts()
-  }
+  const handleUnwithdraw = (appId: number) => applyAppMutation(
+    appId,
+    a => ({ ...a, withdrawn: 0, withdrawal_reason: null }),
+    () => fetch(`/api/applications/${appId}/withdraw`, { method: 'DELETE' }),
+  )
 
-  const handleDeleteApplication = async (appId: number) => {
-    const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
-    if (!res.ok) { showToast('Fel vid borttagning.', 'error'); throw new Error('delete failed') }
-    refreshCounts()
-  }
+  const handleDeleteApplication = (appId: number) => applyAppMutation(
+    appId,
+    () => null,
+    () => fetch(`/api/applications/${appId}`, { method: 'DELETE' }),
+    undefined,
+    'Fel vid borttagning.',
+  )
 
-  const handlePromoteReserve = async (appId: number) => {
-    const res = await fetch(`/api/applications/${appId}/promote`, { method: 'POST' })
-    if (!res.ok) { showToast('Fel vid uppflyttning.', 'error'); throw new Error('promote failed') }
-    showToast('Reserv bokad in.')
-    refreshCounts()
-  }
+  const handlePromoteReserve = (appId: number) => applyAppMutation(
+    appId,
+    a => ({ ...a, reserve: 0, approved: true }),
+    () => fetch(`/api/applications/${appId}/promote`, { method: 'POST' }),
+    'Reserv bokad in.',
+    'Fel vid uppflyttning.',
+  )
 
-  const handleMoveToReserve = async (appId: number) => {
-    const res = await fetch(`/api/applications/${appId}/reserve`, { method: 'POST' })
-    if (!res.ok) { showToast('Fel vid flytt till reserv.', 'error'); throw new Error('move to reserve failed') }
-    showToast('Flyttad till reservlistan.')
-    refreshCounts()
-  }
+  const handleMoveToReserve = (appId: number) => applyAppMutation(
+    appId,
+    a => ({ ...a, reserve: 1, approved: false }),
+    () => fetch(`/api/applications/${appId}/reserve`, { method: 'POST' }),
+    'Flyttad till reservlistan.',
+    'Fel vid flytt till reserv.',
+  )
 
+  // Book driver: we don't have the new applicant's full data upfront, so we
+  // optimistically bump the approved count for the badge and let refreshCounts
+  // sync applicantsByShift in the background.
   const handleBookDriver = async (shiftId: number, userId: string) => {
-    const res = await fetch(`/api/shifts/${shiftId}/book`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
+    const snapCounts = counts
+    setCounts(prev => ({
+      ...prev,
+      [shiftId]: {
+        approved: (prev[shiftId]?.approved ?? 0) + 1,
+        pending: prev[shiftId]?.pending ?? 0,
+        reserves: prev[shiftId]?.reserves ?? 0,
+      },
+    }))
+
+    return withInflight(async () => {
+      try {
+        const res = await fetch(`/api/shifts/${shiftId}/book`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        })
+        if (!res.ok) throw new Error('book failed')
+        showToast('Chaufför bokad. SMS skickat.')
+        refreshCounts()
+      } catch (err) {
+        setCounts(snapCounts)
+        showToast('Fel vid bokning.', 'error')
+        throw err
+      }
     })
-    if (!res.ok) { showToast('Fel vid bokning.', 'error'); throw new Error('book failed') }
-    showToast('Chaufför bokad. SMS skickat.')
-    refreshCounts()
   }
 
   const handleUpdateSlots = async (shiftId: number, slots: number) => {
@@ -323,21 +405,23 @@ export function WeekConfig() {
     setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, slots } : s))
     setDraftSlots(prev => ({ ...prev, [shiftId]: String(slots) }))
 
-    try {
-      const res = await fetch('/api/shifts', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{ id: shiftId, slots }]),
-      })
-      if (!res.ok) throw new Error('update slots failed')
-      // Background refresh in case slot change cascades (long-term bookings etc).
-      refreshCounts()
-    } catch {
-      setLocal(prevLocal)
-      setShifts(prevShifts)
-      setDraftSlots(prevDrafts)
-      showToast('Kunde inte uppdatera platser.', 'error')
-    }
+    await withInflight(async () => {
+      try {
+        const res = await fetch('/api/shifts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify([{ id: shiftId, slots }]),
+        })
+        if (!res.ok) throw new Error('update slots failed')
+        // Background refresh in case slot change cascades (long-term bookings etc).
+        refreshCounts()
+      } catch {
+        setLocal(prevLocal)
+        setShifts(prevShifts)
+        setDraftSlots(prevDrafts)
+        showToast('Kunde inte uppdatera platser.', 'error')
+      }
+    })
   }
 
   const handleOpenWeek = async () => {
@@ -373,26 +457,22 @@ export function WeekConfig() {
     setOpenWeekDialog(false)
     showToast(`${updates.length} pass öppnade.`)
 
-    // Fire-and-forget — refresh in background so counts/long-term apps catch up.
-    fetch('/api/shifts', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    }).then(res => {
-      if (!res.ok) {
-        // Rollback optimistic state on failure
+    // Fire-and-forget under inflight gate so polling doesn't race the response.
+    withInflight(async () => {
+      try {
+        const res = await fetch('/api/shifts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+        if (!res.ok) throw new Error('open week failed')
+        refreshCounts()
+      } catch {
         setLocal(previousLocal)
         setShifts(previousShifts)
         setDraftSlots(previousDrafts)
         showToast('Fel vid öppning. Försök igen.', 'error')
-        return
       }
-      refreshCounts()
-    }).catch(() => {
-      setLocal(previousLocal)
-      setShifts(previousShifts)
-      setDraftSlots(previousDrafts)
-      showToast('Fel vid öppning. Försök igen.', 'error')
     })
   }
 
