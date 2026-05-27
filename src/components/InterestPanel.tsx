@@ -121,7 +121,39 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       const temps = prev.filter(a => a.id < 0)
       return [...merged, ...temps]
     })
+
+    // Clear pendingIds for entries where the server has caught up with our
+    // optimistic state. Without this, removing pendingIds immediately after
+    // the API call would let a stale poll snapshot (in flight from before
+    // the mutation) briefly revert the row's status — the "name jumps back
+    // for a moment" behavior.
+    setPendingIds(prev => {
+      if (prev.size === 0) return prev
+      const next = new Set(prev)
+      let changed = false
+      for (const id of prev) {
+        const server = incoming.find(a => a.id === id)
+        const local = applicantsRef.current.find(a => a.id === id)
+        if (!server || !local) continue
+        if (
+          server.approved === local.approved &&
+          server.rejected === local.rejected &&
+          server.withdrawn === local.withdrawn &&
+          server.reserve === local.reserve
+        ) {
+          next.delete(id)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
   }, [initialApplicants, open, shift?.id, pendingIds])
+
+  // Ref mirror of applicants for use inside the merge effect without putting
+  // `applicants` in the dependency array (which would re-run the merge
+  // unnecessarily on every state change).
+  const applicantsRef = useRef(applicants)
+  applicantsRef.current = applicants
 
   useEffect(() => {
     if (!open) return
@@ -210,6 +242,11 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     .sort((a, b) => a.applied_at.localeCompare(b.applied_at))
     .forEach((a, i) => { appliedRank[a.id] = i + 1 })
 
+  // For all mutations below, we DON'T clear pendingIds in `finally`. Instead
+  // the merge effect clears it once the server's next poll confirms our
+  // optimistic state — that way a stale poll snapshot from before the
+  // mutation can't briefly revert the row.
+
   const handleApprove = async (appId: number) => {
     const snapshot = applicants
     addPending(appId)
@@ -218,7 +255,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onApprove(appId)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -235,7 +271,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onUnapprove(appId, reason)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -250,7 +285,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onReject(appId, reason || undefined)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -264,7 +298,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onUnreject(appId)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -278,7 +311,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onPromoteReserve(appId)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -297,7 +329,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onMoveToReserve(appId)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -311,7 +342,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onDeleteApplication(appId)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
@@ -325,7 +355,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       await onUnwithdraw(appId)
     } catch {
       setApplicants(snapshot)
-    } finally {
       removePending(appId)
     }
   }
