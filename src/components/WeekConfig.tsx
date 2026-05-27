@@ -317,14 +317,50 @@ export function WeekConfig() {
       setOpenWeekDialog(false)
       return
     }
-    await fetch('/api/shifts', {
+
+    // Optimistic UI: close dialog, apply changes locally, show toast immediately.
+    // The user gets instant feedback while the request + revalidation flies off.
+    const updateMap = new Map(updates.map(u => [u.id, u]))
+    const previousLocal = local
+    const previousShifts = shifts
+    const previousDrafts = draftSlots
+    setLocal(prev => prev.map(s => {
+      const u = updateMap.get(s.id)
+      return u ? { ...s, is_open: 1, slots: u.slots } : s
+    }))
+    setShifts(prev => prev.map(s => {
+      const u = updateMap.get(s.id)
+      return u ? { ...s, is_open: 1, slots: u.slots } : s
+    }))
+    setDraftSlots(prev => {
+      const next = { ...prev }
+      for (const u of updates) next[u.id] = String(u.slots)
+      return next
+    })
+    setOpenWeekDialog(false)
+    showToast(`${updates.length} pass öppnade.`)
+
+    // Fire-and-forget — refresh in background so counts/long-term apps catch up.
+    fetch('/api/shifts', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
+    }).then(res => {
+      if (!res.ok) {
+        // Rollback optimistic state on failure
+        setLocal(previousLocal)
+        setShifts(previousShifts)
+        setDraftSlots(previousDrafts)
+        showToast('Fel vid öppning. Försök igen.', 'error')
+        return
+      }
+      refreshCounts()
+    }).catch(() => {
+      setLocal(previousLocal)
+      setShifts(previousShifts)
+      setDraftSlots(previousDrafts)
+      showToast('Fel vid öppning. Försök igen.', 'error')
     })
-    setOpenWeekDialog(false)
-    await load()
-    showToast(`${updates.length} pass öppnade.`)
   }
 
   return (

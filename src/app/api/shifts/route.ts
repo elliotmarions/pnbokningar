@@ -27,35 +27,46 @@ export async function PUT(req: NextRequest) {
     body.push({ id, is_open: is_open_val ?? undefined, slots: slots_val ?? undefined })
   }
 
-  // Block opening shifts that fall on a holiday/eve or custom-closed day
-  const sqlPre = getDb()
-  for (const s of body) {
-    if (s.is_open !== 1) continue
-    const [shift] = await sqlPre<{ date: string }[]>`SELECT date FROM shifts WHERE id = ${s.id}`
-    if (!shift) continue
-    const holiday = getHolidayInfo(shift.date)
-    const customClosed = await customClosedRepo.forDate(shift.date)
-    if (holiday || customClosed) {
-      return NextResponse.json({
-        error: 'Den här dagen är låst (röd dag, afton eller stängd dag) och kan inte öppnas.',
-      }, { status: 400 })
+  // Batch-fetch all shift dates in one round-trip
+  const sql = getDb()
+  const ids = body.map(b => b.id)
+  const rows = await sql<{ id: number; date: string }[]>`
+    SELECT id, date FROM shifts WHERE id IN ${sql(ids)}
+  `
+  const dateById = new Map(rows.map(r => [r.id, r.date]))
+
+  // Block opening shifts that fall on a holiday/eve or custom-closed day.
+  // Check holidays locally + batch-fetch custom-closed for all relevant dates.
+  const openingDates = body
+    .filter(s => s.is_open === 1)
+    .map(s => dateById.get(s.id))
+    .filter((d): d is string => !!d)
+
+  if (openingDates.length > 0) {
+    const closedDates = await customClosedRepo.forDates(openingDates)
+    for (const d of openingDates) {
+      if (getHolidayInfo(d) || closedDates.has(d)) {
+        return NextResponse.json({
+          error: 'Den här dagen är låst (röd dag, afton eller stängd dag) och kan inte öppnas.',
+        }, { status: 400 })
+      }
     }
   }
 
-  for (const s of body) {
-    await shiftRepo.update(s.id, { is_open: s.is_open, slots: s.slots })
-  }
+  // Run all updates in parallel
+  await Promise.all(body.map(s => shiftRepo.update(s.id, { is_open: s.is_open, slots: s.slots })))
 
-  // Auto-apply long-term bookings to shifts being opened
+  // Auto-apply long-term bookings to opened shifts (in parallel)
   const { applyLongTermToShift } = await import('@/lib/apply-long-term')
   const adminId = (session.user as Record<string, unknown>).id as string
-  const sql = getDb()
-  for (const s of body) {
-    if (s.is_open === 1) {
-      const [shift] = await sql<{ date: string }[]>`SELECT date FROM shifts WHERE id = ${s.id}`
-      if (shift) await applyLongTermToShift(s.id, shift.date, adminId)
-    }
-  }
+  await Promise.all(
+    body
+      .filter(s => s.is_open === 1)
+      .map(s => {
+        const date = dateById.get(s.id)
+        return date ? applyLongTermToShift(s.id, date, adminId) : Promise.resolve()
+      })
+  )
 
   return NextResponse.json({ ok: true })
 }

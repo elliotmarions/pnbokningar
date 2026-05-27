@@ -426,6 +426,17 @@ export const customClosedRepo = {
     const [row] = await sql<DbCustomClosedDay[]>`SELECT * FROM custom_closed_days WHERE date = ${date}`
     return row ?? null
   },
+
+  // Batch version — returns a Set of dates (YYYY-MM-DD) that are custom-closed.
+  // Avoids N+1 queries when checking many dates at once.
+  async forDates(dates: string[]): Promise<Set<string>> {
+    if (dates.length === 0) return new Set()
+    await ensureMigrated()
+    const rows = await sql<{ date: string }[]>`
+      SELECT date FROM custom_closed_days WHERE date IN ${sql(dates)}
+    `
+    return new Set(rows.map(r => r.date))
+  },
 }
 
 // --------------- Applications ---------------
