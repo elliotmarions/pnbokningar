@@ -212,7 +212,7 @@ export function DriversTable() {
   return (
     <>
       <div className="drivers-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Chaufförer ({drivers.length})</h2>
+        <h2>Personal ({drivers.length})</h2>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
           Konton skapas automatiskt när chauffören loggar in med Microsoft första gången.
         </div>

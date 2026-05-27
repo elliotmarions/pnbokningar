@@ -8,7 +8,7 @@ const NAV = [
   { href: '/admin',            label: 'Översikt',    icon: Home },
   { href: '/admin/config',     label: 'Schemalägg',  icon: Calendar },
   { href: '/admin/calendar',   label: 'Kalender',    icon: Sun },
-  { href: '/admin/drivers',    label: 'Chaufförer',  icon: Users },
+  { href: '/admin/drivers',    label: 'Personal',    icon: Users },
   { href: '/admin/export',     label: 'Statistik',   icon: BarChart },
 ]
 
