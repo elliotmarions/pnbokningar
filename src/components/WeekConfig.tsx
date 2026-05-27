@@ -37,6 +37,10 @@ export function WeekConfig() {
   const isMounted = useRef(false)
   // loadId: race-condition guard — stale fetch responses are discarded.
   const loadId = useRef(0)
+  // inflightRef: number of optimistic mutations currently flying. Polling
+  // skips while > 0 so a stale server response doesn't overwrite optimistic
+  // state. See withInflight() helper below.
+  const inflightRef = useRef(0)
 
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
@@ -156,15 +160,27 @@ export function WeekConfig() {
 
   // Live updates: poll the current week every 8s so counts reflect new
   // applications in near real-time. Pauses while the InterestPanel is open
-  // so the user's interaction isn't disturbed by a mid-action refresh.
+  // OR while an optimistic mutation is in-flight so a stale server response
+  // doesn't overwrite optimistic state.
   useEffect(() => {
     if (openShiftId !== null) return
-    const refresh = () => { if (!document.hidden) refreshCounts() }
+    const refresh = () => {
+      if (document.hidden) return
+      if (inflightRef.current > 0) return
+      refreshCounts()
+    }
     const interval = setInterval(refresh, 8000)
-    const onVisible = () => { if (!document.hidden) refreshCounts() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
+    document.addEventListener('visibilitychange', refresh)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', refresh) }
   }, [refreshCounts, openShiftId])
+
+  // Helper: wrap an async optimistic action so the polling pause covers it.
+  // Counter-based (not boolean) so concurrent mutations all properly hold the gate.
+  const withInflight = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
+    inflightRef.current++
+    try { return await fn() }
+    finally { inflightRef.current = Math.max(0, inflightRef.current - 1) }
+  }, [])
 
   // Prefetch adjacent weeks for instant navigation
   useEffect(() => {
