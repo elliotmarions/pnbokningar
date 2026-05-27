@@ -52,7 +52,13 @@ export async function GET(req: NextRequest) {
   const shifts = await shiftRepo.getWeekWithCounts(weekYear, weekNumber)
   const days = info.days.map(d => ({ ...d, holiday: getHolidayInfo(d.date) }))
 
-  // Prefetch applicants for all shifts in one query so the InterestPanel opens instantly
+  // Drivers never use applicantsByShift — skip the heavy join entirely for them.
+  // Admins get it prefetched so InterestPanel opens instantly.
+  const userRole = (session.user as Record<string, unknown>).role as string | undefined
+  if (userRole !== 'admin') {
+    return NextResponse.json({ weekYear, weekNumber, shifts, days, applicantsByShift: {} })
+  }
+
   const shiftIds = shifts.map(s => s.id)
   const allApplicants = await applicationRepo.forShifts(shiftIds)
   type Applicant = typeof allApplicants[number]
