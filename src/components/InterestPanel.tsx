@@ -69,6 +69,10 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
   const [withdrawReason, setWithdrawReason] = useState('')
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
+  // Ids the user just optimistically removed ("Ta bort helt"). Prevents an
+  // in-flight server poll — which still has the row — from re-introducing it.
+  // Cleared once the server's poll also stops returning that id.
+  const [deletedIds, setDeletedIds] = useState<Set<number>>(new Set())
 
   // Book driver state
   const [showBooking, setShowBooking] = useState(false)
@@ -108,7 +112,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   // in the pending list instantly when chaufförer click "Anmäl intresse".
   useEffect(() => {
     if (!open || !shift || !initialApplicants) return
-    const incoming = initialApplicants as Applicant[]
+    const incomingRaw = initialApplicants as Applicant[]
+    // Filter out entries we just optimistically deleted so an in-flight poll
+    // can't re-add them before the server's DELETE finishes processing.
+    const incoming = incomingRaw.filter(n => !deletedIds.has(n.id))
+    const incomingIds = new Set(incomingRaw.map(a => a.id))
+
     setApplicants(prev => {
       const byId = new Map(prev.map(a => [a.id, a]))
       const merged = incoming.map(n => {
@@ -126,14 +135,22 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     // optimistic state. Without this, removing pendingIds immediately after
     // the API call would let a stale poll snapshot (in flight from before
     // the mutation) briefly revert the row's status — the "name jumps back
-    // for a moment" behavior.
+    // for a moment" behavior. Also clears pendingIds for entries that no
+    // longer exist on the server (deletion confirmed).
     setPendingIds(prev => {
       if (prev.size === 0) return prev
       const next = new Set(prev)
       let changed = false
       for (const id of prev) {
-        const server = incoming.find(a => a.id === id)
+        const server = incomingRaw.find(a => a.id === id)
         const local = applicantsRef.current.find(a => a.id === id)
+        // Server has deleted (id no longer in poll) AND local is also gone —
+        // mutation completed end-to-end, drop from pending.
+        if (!server && !local) {
+          next.delete(id)
+          changed = true
+          continue
+        }
         if (!server || !local) continue
         if (
           server.approved === local.approved &&
@@ -147,7 +164,22 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       }
       return changed ? next : prev
     })
-  }, [initialApplicants, open, shift?.id, pendingIds])
+
+    // Drop deletedIds for entries the server has now also removed — server
+    // caught up with the optimistic delete.
+    setDeletedIds(prev => {
+      if (prev.size === 0) return prev
+      const next = new Set(prev)
+      let changed = false
+      for (const id of prev) {
+        if (!incomingIds.has(id)) {
+          next.delete(id)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [initialApplicants, open, shift?.id, pendingIds, deletedIds])
 
   // Ref mirror of applicants for use inside the merge effect without putting
   // `applicants` in the dependency array (which would re-run the merge
@@ -335,13 +367,15 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
 
   const handleDeleteApplication = async (appId: number) => {
     if (!onDeleteApplication) return
-    const snapshot = applicants
     addPending(appId)
+    setDeletedIds(prev => new Set([...prev, appId]))
     setApplicants(prev => prev.filter(a => a.id !== appId))
     try {
       await onDeleteApplication(appId)
     } catch {
-      setApplicants(snapshot)
+      // Don't try to restore a stale snapshot — the user may have chained
+      // other actions before this delete. The next poll will reconcile.
+      setDeletedIds(prev => { const s = new Set(prev); s.delete(appId); return s })
       removePending(appId)
     }
   }
