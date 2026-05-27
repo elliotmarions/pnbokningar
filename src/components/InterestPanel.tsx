@@ -127,14 +127,48 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
 
   const handleBookDriver = async (userId: string, userName: string) => {
     if (!shift || !onBookDriver) return
+    const driver = allDrivers.find(d => d.id === userId)
     setBookingId(userId)
+
+    // Optimistic: close the booking UI, drop an approved applicant into the list
+    // immediately. Temp negative id; replaced by canonical data once the
+    // background refetch resolves.
+    const tempId = -Date.now()
+    const optimisticEntry: Applicant = {
+      id: tempId,
+      user_id: userId,
+      user_name: userName,
+      user_phone: driver?.phone ?? null,
+      applied_at: new Date().toISOString(),
+      approved: true,
+      rejected: false,
+      rejection_reason: null,
+      withdrawn: false,
+      withdrawal_reason: null,
+      reserve: 0,
+    }
+    const snapshot = applicants
+    // If the driver already has an application (e.g. previously withdrawn),
+    // mutate it instead of duplicating. Otherwise append.
+    const existingIdx = applicants.findIndex(a => a.user_id === userId)
+    if (existingIdx >= 0) {
+      setApplicants(prev => prev.map(a => a.user_id === userId
+        ? { ...a, approved: true, rejected: false, withdrawn: false, rejection_reason: null, withdrawal_reason: null, reserve: 0 }
+        : a))
+    } else {
+      setApplicants(prev => [...prev, optimisticEntry])
+    }
+    setShowBooking(false)
+    setDriverSearch('')
+
     try {
       await onBookDriver(shift.id, userId)
-      // Refresh applicants list
+      // Reconcile with canonical data — replaces temp id, fixes any field drift.
       const d = await fetch(`/api/shifts/${shift.id}`).then(r => r.json())
       setApplicants(d.applicants ?? [])
-      setShowBooking(false)
-      setDriverSearch('')
+    } catch {
+      // Parent handler already shows error toast + rolled back its counts.
+      setApplicants(snapshot)
     } finally {
       setBookingId(null)
     }
