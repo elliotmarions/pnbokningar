@@ -15,7 +15,13 @@ export function getDb() {
 
 let _migrationPromise: Promise<void> | null = null
 export function ensureMigrated(): Promise<void> {
-  if (!_migrationPromise) _migrationPromise = migrate()
+  if (!_migrationPromise) {
+    _migrationPromise = migrate().catch((err) => {
+      // Don't permanently cache a failure — allow retry on the next request.
+      _migrationPromise = null
+      throw err
+    })
+  }
   return _migrationPromise
 }
 
@@ -106,30 +112,35 @@ async function migrate() {
       created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
-  // Web Push subscriptions (per-device)
-  await sql`
-    CREATE TABLE IF NOT EXISTS push_subscriptions (
-      id         SERIAL PRIMARY KEY,
-      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      endpoint   TEXT NOT NULL UNIQUE,
-      p256dh     TEXT NOT NULL,
-      auth       TEXT NOT NULL,
-      user_agent TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `
-  await sql`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`
-  await sql`ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY`
-  await sql.unsafe(`
-    DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_policies
-        WHERE tablename = 'push_subscriptions' AND policyname = 'service_role_all'
-      ) THEN
-        EXECUTE 'CREATE POLICY service_role_all ON push_subscriptions FOR ALL TO service_role USING (true) WITH CHECK (true)';
-      END IF;
-    END $$
-  `)
+  // Web Push subscriptions (per-device) — wrapped in try/catch so a failure
+  // here can never block other migrations or app functionality.
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id         SERIAL PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint   TEXT NOT NULL UNIQUE,
+        p256dh     TEXT NOT NULL,
+        auth       TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+    await sql`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`
+    await sql`ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY`
+    await sql.unsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = 'push_subscriptions' AND policyname = 'service_role_all'
+        ) THEN
+          EXECUTE 'CREATE POLICY service_role_all ON push_subscriptions FOR ALL TO service_role USING (true) WITH CHECK (true)';
+        END IF;
+      END $$
+    `)
+  } catch (err) {
+    console.error('[migrate] push_subscriptions migration failed (non-fatal):', err)
+  }
 
   // Custom closed days (admin-defined, with reason + color)
   await sql`
