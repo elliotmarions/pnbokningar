@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useUser, useSignOut } from '@/lib/supabase/use-user'
 import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
 import { Toast, useToast } from './Toast'
+import { PushNudge } from './PushNudge'
 
 interface ShiftDay {
   shift: { id: number; is_open: number; slots: number; day_index: number; date: string } | null
@@ -462,6 +463,8 @@ export function DriverHome() {
             </div>
           </div>
 
+          <PushNudge />
+
           {/* KPI strip */}
           <div className="driver-summary">
             <div className="driver-stat">
@@ -530,6 +533,7 @@ export function DriverHome() {
         </div>
 
         <div className="driver-body">
+          <PushNudge />
           <div className="section-h">
             <span className="t" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <button className="arrow" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="svg-ico" /></button>
