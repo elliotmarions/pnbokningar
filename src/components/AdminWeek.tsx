@@ -148,7 +148,7 @@ export function AdminWeek() {
         cache.set(`weeks-${isoYear}-${isoWeek}`, data)
       } catch {}
     }
-    const interval = setInterval(refresh, 8000)
+    const interval = setInterval(refresh, 3000)
     const onVisible = () => { if (!document.hidden) refresh() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }

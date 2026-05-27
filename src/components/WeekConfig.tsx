@@ -159,21 +159,21 @@ export function WeekConfig() {
     } catch {}
   }, [weekOffset, cache])
 
-  // Live updates: poll the current week every 8s so counts reflect new
-  // applications in near real-time. Pauses while the InterestPanel is open
-  // OR while an optimistic mutation is in-flight so a stale server response
-  // doesn't overwrite optimistic state.
+  // Live updates: poll the current week every 3s so badges + InterestPanel
+  // reflect new applications in near real-time. Pauses while an optimistic
+  // mutation is in-flight so a stale server response doesn't overwrite
+  // optimistic state. Polling continues while the InterestPanel is open so
+  // new applicants appear live (the panel merges them in non-destructively).
   useEffect(() => {
-    if (openShiftId !== null) return
     const refresh = () => {
       if (document.hidden) return
       if (inflightRef.current > 0) return
       refreshCounts()
     }
-    const interval = setInterval(refresh, 8000)
+    const interval = setInterval(refresh, 3000)
     document.addEventListener('visibilitychange', refresh)
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', refresh) }
-  }, [refreshCounts, openShiftId])
+  }, [refreshCounts])
 
   // Helper: wrap an async optimistic action so the polling pause covers it.
   // Counter-based (not boolean) so concurrent mutations all properly hold the gate.

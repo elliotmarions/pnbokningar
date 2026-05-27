@@ -102,6 +102,27 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       .then(d => setApplicants(d.applicants ?? []))
   }, [shift?.id, open])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Live merge: while the panel is open and the parent re-polls, add any
+  // newly-arrived applications without touching entries the user is in the
+  // middle of mutating (those are tracked in pendingIds). New entries appear
+  // in the pending list instantly when chaufförer click "Anmäl intresse".
+  useEffect(() => {
+    if (!open || !shift || !initialApplicants) return
+    const incoming = initialApplicants as Applicant[]
+    setApplicants(prev => {
+      const byId = new Map(prev.map(a => [a.id, a]))
+      const merged = incoming.map(n => {
+        const local = byId.get(n.id)
+        // Preserve local state for entries with in-flight mutations.
+        if (local && pendingIds.has(n.id)) return local
+        return n
+      })
+      // Keep any optimistic temp entries (negative ids) — server doesn't know them yet.
+      const temps = prev.filter(a => a.id < 0)
+      return [...merged, ...temps]
+    })
+  }, [initialApplicants, open, shift?.id, pendingIds])
+
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
