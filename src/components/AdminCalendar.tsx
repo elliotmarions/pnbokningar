@@ -238,31 +238,56 @@ export function AdminCalendar() {
 
   async function handleAdd() {
     if (!newDate || !newReason.trim()) return
+
+    // Optimistic insert with temp id; replaced by canonical day from response.
+    const tempId = -Date.now()
+    const optimistic: CustomClosedDay = {
+      id: tempId,
+      date: newDate,
+      reason: newReason.trim(),
+      color: newColor,
+    }
+    const snapshot = customClosed
+    // The server upserts on (date) — mirror that locally by replacing any
+    // existing entry for the same date.
+    setCustomClosed(prev =>
+      [...prev.filter(d => d.date !== optimistic.date), optimistic]
+        .sort((a, b) => a.date.localeCompare(b.date))
+    )
+    setNewDate('')
+    setNewReason('')
+    setNewColor('#EF4444')
     setSaving(true)
+
     try {
       const res = await fetch('/api/custom-closed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: newDate, reason: newReason.trim(), color: newColor }),
+        body: JSON.stringify({ date: optimistic.date, reason: optimistic.reason, color: optimistic.color }),
       })
-      if (res.ok) {
-        const data = await res.json()
-        setCustomClosed(prev =>
-          [...prev.filter(d => d.date !== data.day.date), data.day]
-            .sort((a, b) => a.date.localeCompare(b.date))
-        )
-        setNewDate('')
-        setNewReason('')
-        setNewColor('#EF4444')
-      }
+      if (!res.ok) throw new Error('add failed')
+      const data = await res.json()
+      setCustomClosed(prev =>
+        [...prev.filter(d => d.id !== tempId && d.date !== data.day.date), data.day]
+          .sort((a, b) => a.date.localeCompare(b.date))
+      )
+    } catch {
+      setCustomClosed(snapshot)
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: number) {
-    await fetch(`/api/custom-closed/${id}`, { method: 'DELETE' })
+    // Optimistic delete, rollback on failure.
+    const snapshot = customClosed
     setCustomClosed(prev => prev.filter(d => d.id !== id))
+    try {
+      const res = await fetch(`/api/custom-closed/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+    } catch {
+      setCustomClosed(snapshot)
+    }
   }
 
   return (
