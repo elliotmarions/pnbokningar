@@ -183,23 +183,28 @@ export function DriverHome() {
       withdrawn: false, reserve: 1, applied_at: new Date().toISOString(),
     }
     setApplications(prev => [...prev, optimisticApp])
-    const res = await fetch('/api/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shiftId, reserve: true }),
-    })
-    const data = await res.json()
-    if (res.ok) {
+    showToast('Du är tillagd på reservlistan!')
+
+    try {
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shiftId, reserve: true }),
+      })
+      if (!res.ok) throw new Error('reserve failed')
+      const data = await res.json()
       setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
-      showToast('Du är tillagd på reservlistan!')
-    } else {
+    } catch {
       setApplications(prev => prev.filter(a => a.id !== tempId))
+      clearToast()
       showToast('Något gick fel.', 'error')
     }
   }
 
   const handleApply = async (shiftId: number, force = false) => {
-    // Optimistic: add a pending app immediately so the UI reacts instantly
+    // Optimistic: add a pending app + show toast immediately so the UI reacts
+    // instantly. If the server flags a consecutive-days warning we dismiss the
+    // toast and surface the modal instead.
     const tempId = -Date.now()
     const optimisticApp: Application = {
       id: tempId,
@@ -212,44 +217,52 @@ export function DriverHome() {
       applied_at: new Date().toISOString(),
     }
     setApplications(prev => [...prev, optimisticApp])
+    showToast('Intresseanmälan skickad!')
 
-    const res = await fetch('/api/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shiftId, force }),
-    })
-    const data = await res.json()
+    try {
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shiftId, force }),
+      })
+      if (!res.ok) throw new Error('apply failed')
+      const data = await res.json()
 
-    if (res.ok && data.warning === 'CONSECUTIVE_DAYS') {
-      // Revert optimistic — warning needs confirmation
-      setApplications(prev => prev.filter(a => a.id !== tempId))
-      setConsecutiveWarning({ shiftId, count: data.count })
-      return
-    }
-    if (res.ok) {
-      // Replace temp with real
+      if (data.warning === 'CONSECUTIVE_DAYS') {
+        // Warning needs confirmation — revert optimistic and pull back the toast.
+        setApplications(prev => prev.filter(a => a.id !== tempId))
+        clearToast()
+        setConsecutiveWarning({ shiftId, count: data.count })
+        return
+      }
+      // Replace temp with real id
       setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
-      showToast('Intresseanmälan skickad!')
-    } else {
+    } catch {
       setApplications(prev => prev.filter(a => a.id !== tempId))
+      clearToast()
       showToast('Något gick fel.', 'error')
     }
   }
 
   const handleWithdraw = async (appId: number) => {
-    // Optimistic: remove from local state instantly
+    // Optimistic: remove from local state + show toast instantly
     const previous = applications
     setApplications(prev => prev.filter(a => a.id !== appId))
+    showToast('Anmälan återkallad.')
 
-    const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
-    if (res.ok) {
-      showToast('Anmälan återkallad.')
-    } else {
-      // Revert
+    try {
+      const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setApplications(previous)
+        clearToast()
+        if (data.error === 'ALREADY_APPROVED') showToast('Du är redan godkänd — kontakta trafikledningen.', 'error')
+        else showToast('Något gick fel.', 'error')
+      }
+    } catch {
       setApplications(previous)
-      const data = await res.json().catch(() => ({}))
-      if (data.error === 'ALREADY_APPROVED') showToast('Du är redan godkänd — kontakta trafikledningen.', 'error')
-      else showToast('Något gick fel.', 'error')
+      clearToast()
+      showToast('Något gick fel.', 'error')
     }
   }
 
