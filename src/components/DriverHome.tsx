@@ -423,8 +423,14 @@ export function DriverHome() {
     return app && !app.approved && !app.rejected && !app.withdrawn
   })
 
-  // All confirmed (including past weeks from applications list)
-  const allConfirmed = applications.filter(a => a.approved)
+  // Confirmed pass for the week currently being viewed. Each week should be
+  // self-contained — a confirmation from an earlier/later week shouldn't bump
+  // this week's count or appear here. We use shift_date (returned by
+  // /api/applications/mine) and the dates of the viewed week to scope.
+  const weekDateSet = new Set(weekData.days.map(d => d.date))
+  const confirmedThisWeekApps = applications.filter(a =>
+    a.approved && a.shift_date && weekDateSet.has(a.shift_date)
+  )
 
   if (isDesktop) {
     return (
@@ -489,15 +495,15 @@ export function DriverHome() {
             ))}
           </div>
 
-          {/* Confirmed strip */}
+          {/* Confirmed strip — scoped to the week being viewed */}
           <div className="section-h">
-            <span className="t">Mina bekräftade pass</span>
-            <span className="count">{allConfirmed.length} st</span>
+            <span className="t">Mina bekräftade pass denna vecka</span>
+            <span className="count">{confirmedThisWeekApps.length} st</span>
           </div>
-          {allConfirmed.length === 0
-            ? <div className="empty-state">Inga bekräftade pass än. Anmäl intresse ovan.</div>
+          {confirmedThisWeekApps.length === 0
+            ? <div className="empty-state">Inga bekräftade pass denna vecka.</div>
             : <div className="confirmed-strip">
-                {allConfirmed.map(a => (
+                {confirmedThisWeekApps.map(a => (
                   <ConfirmedRow key={a.id} app={a} shifts={weekData.shifts} days={weekData.days} />
                 ))}
               </div>
@@ -540,12 +546,12 @@ export function DriverHome() {
           ))}
 
           <div className="section-h">
-            <span className="t">Mina bekräftade pass</span>
-            <span className="count">{allConfirmed.length}</span>
+            <span className="t">Mina bekräftade pass denna vecka</span>
+            <span className="count">{confirmedThisWeekApps.length}</span>
           </div>
-          {allConfirmed.length === 0
-            ? <div className="empty-state">Inga bekräftade pass än. Anmäl intresse ovan.</div>
-            : allConfirmed.map(a => <ConfirmedRow key={a.id} app={a} shifts={weekData.shifts} days={weekData.days} />)
+          {confirmedThisWeekApps.length === 0
+            ? <div className="empty-state">Inga bekräftade pass denna vecka.</div>
+            : confirmedThisWeekApps.map(a => <ConfirmedRow key={a.id} app={a} shifts={weekData.shifts} days={weekData.days} />)
           }
         </div>
 
