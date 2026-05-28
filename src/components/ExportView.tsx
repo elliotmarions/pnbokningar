@@ -51,13 +51,15 @@ export function ExportView() {
   const [wTo,   setWTo]   = useState(todayStr())
   const [expandedDrivers, setExpandedDrivers] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  const [wSearch, setWSearch] = useState('')
   // Sort the per-driver preview by number of shifts. 'desc' = most first.
   const [shiftSort, setShiftSort] = useState<'desc' | 'asc'>('desc')
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   const q = search.trim().toLowerCase()
-  // Filter the per-driver preview + withdrawal history by name. The week
-  // grouping isn't name-based so it's left unfiltered.
+  const wq = wSearch.trim().toLowerCase()
+  // Filter the per-driver preview by name. The week grouping isn't name-based
+  // so it's left unfiltered.
   const filteredPreview = (() => {
     if (group !== 'driver') return preview
     let rows = preview as DriverRow[]
@@ -65,8 +67,9 @@ export function ExportView() {
     rows = [...rows].sort((a, b) => shiftSort === 'desc' ? b.shifts - a.shifts : a.shifts - b.shifts)
     return rows
   })()
-  const filteredWithdrawals = q
-    ? withdrawals.filter(g => g.name.toLowerCase().includes(q))
+  // Withdrawal history has its own independent search field.
+  const filteredWithdrawals = wq
+    ? withdrawals.filter(g => g.name.toLowerCase().includes(wq))
     : withdrawals
 
   useEffect(() => {
@@ -208,6 +211,13 @@ export function ExportView() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <input
+              type="text"
+              placeholder="Sök chaufför…"
+              value={wSearch}
+              onChange={e => setWSearch(e.target.value)}
+              style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)', minWidth: 160 }}
+            />
+            <input
               type="date" value={wFrom}
               onChange={e => setWFrom(e.target.value)}
               style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)', colorScheme: 'dark' }}
@@ -223,7 +233,7 @@ export function ExportView() {
 
         {filteredWithdrawals.length === 0 ? (
           <div style={{ padding: '24px 20px', color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center' }}>
-            {q ? 'Ingen chaufför matchar sökningen' : 'Inga avbokningar under vald period'}
+            {wq ? 'Ingen chaufför matchar sökningen' : 'Inga avbokningar under vald period'}
           </div>
         ) : (
           <table className="tbl">
