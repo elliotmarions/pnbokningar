@@ -41,6 +41,12 @@ export function WeekConfig() {
   // skips while > 0 so a stale server response doesn't overwrite optimistic
   // state. See withInflight() helper below.
   const inflightRef = useRef(0)
+  // mutationGen: bumped at the start of every optimistic mutation. A poll that
+  // was already in flight when a mutation begins must discard its (now-stale)
+  // result, otherwise it briefly reverts the row the user just changed — the
+  // "name jumps back up for a moment" flicker. inflightRef only blocks NEW
+  // polls from starting; this guards in-flight ones from clobbering on return.
+  const mutationGen = useRef(0)
 
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
@@ -145,10 +151,15 @@ export function WeekConfig() {
     const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
     const isoYear = tmp.getFullYear()
     const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    const gen = mutationGen.current
     try {
       const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
       if (!res.ok) return
       const data = await res.json()
+      // A mutation started while this fetch was in flight — its optimistic
+      // state is newer than this (now-stale) snapshot. Discard to avoid the
+      // flicker of reverting and re-applying the change.
+      if (mutationGen.current !== gen) return
       const c: Record<number, { approved: number; pending: number; reserves: number }> = {}
       ;(data.shifts as Shift[]).forEach(s => {
         c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
@@ -261,6 +272,10 @@ export function WeekConfig() {
     successToast?: string,
     errorToast = 'Något gick fel.',
   ) => {
+    // Invalidate any poll that's currently in flight — its snapshot predates
+    // this mutation and would otherwise revert our optimistic change on return.
+    mutationGen.current++
+
     // Locate which shift this applicant belongs to.
     let foundShiftId: number | null = null
     for (const [sidStr, list] of Object.entries(applicantsByShift)) {
