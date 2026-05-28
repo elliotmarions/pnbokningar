@@ -273,6 +273,17 @@ export function LongTermBookings() {
             const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
             const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
             const isExpanded = expandedIds.has(b.id)
+
+            // Month of the bookable day at (week row r, weekday column dayIdx),
+            // or null if there's no day there or it's a closed/locked day. Used
+            // to draw a border that traces the outline of each month's days.
+            const monthAt = (r: number, dayIdx: number): string | null => {
+              const wk = groups[r]
+              if (!wk) return null
+              const day = wk.days.find(dd => dd.dayIdx === dayIdx)
+              if (!day || day.locked) return null
+              return day.date.slice(0, 7)
+            }
             return (
               <div key={b.id} className="lt-card">
                 {/* Card header — click to expand/collapse the day chips */}
@@ -306,66 +317,67 @@ export function LongTermBookings() {
                   </button>
                 </div>
 
-                {/* Day chips by week — only when expanded */}
+                {/* Day grid with a border tracing each month's outline — only when expanded */}
                 {isExpanded && (
-                <div className="lt-weeks">
-                  {groups.map((group, gi) => {
-                    // New-month line between week rows: this row's first day is a
-                    // different month than the previous row's last day.
-                    const prevGroup = groups[gi - 1]
-                    const monthStart = !!prevGroup &&
-                      prevGroup.days[prevGroup.days.length - 1].date.slice(5, 7) !== group.days[0].date.slice(5, 7)
-                    return (
-                    <div key={group.wk} className={`lt-week-row${monthStart ? ' month-start' : ''}`}>
-                      <span className="lt-week-label">v{group.wk}</span>
-                      <div className="lt-chips">
-                        {group.days.map((d, i) => {
-                          const isExcluded = excluded.includes(d.date)
-                          const isToggling = togglingDate === `${b.id}:${d.date}`
-                          const isPast = d.date < today
-                          // Vertical line when the month changes mid-week.
-                          const monthChanged = i > 0 &&
-                            group.days[i - 1].date.slice(5, 7) !== d.date.slice(5, 7)
+                <div className="lt-grid">
+                  {groups.map((group, r) => {
+                    const cells: import('react').ReactElement[] = [
+                      <span key={`lbl-${group.wk}`} className="lt-week-label" style={{ gridColumn: 1, gridRow: r + 1 }}>v{group.wk}</span>,
+                    ]
+                    for (const d of group.days) {
+                      const month = d.date.slice(0, 7)
+                      const isExcluded = excluded.includes(d.date)
+                      const isToggling = togglingDate === `${b.id}:${d.date}`
+                      const isPast = d.date < today
 
-                          let chip
-                          if (isPast && !d.locked && !isExcluded) {
-                            // Passed day that was booked → show red, not editable.
-                            chip = (
-                              <div className="lt-chip past" style={{ cursor: 'default' }} title="Datumet har passerat">
-                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
-                                <span className="lt-chip-n">{d.n}</span>
-                              </div>
-                            )
-                          } else if (d.locked) {
-                            chip = (
-                              <div className="lt-chip excluded" style={{ opacity: 0.4, cursor: 'not-allowed' }} title="Stängd dag – kan ej bokas">
-                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
-                                <span className="lt-chip-n">{d.n}</span>
-                              </div>
-                            )
-                          } else {
-                            chip = (
-                              <button
-                                className={`lt-chip ${isExcluded ? 'excluded' : 'active'}`}
-                                onClick={() => handleToggleDate(b.id, d.date)}
-                                disabled={isToggling}
-                                title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
-                              >
-                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
-                                <span className="lt-chip-n">{d.n}</span>
-                              </button>
-                            )
-                          }
-                          return (
-                            <Fragment key={d.date}>
-                              {monthChanged && <span className="lt-month-sep" aria-hidden="true" />}
-                              {chip}
-                            </Fragment>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    )
+                      // Month-outline border edges (only for bookable days).
+                      const edges = d.locked ? '' : [
+                        monthAt(r - 1, d.dayIdx) !== month ? 'b-top' : '',
+                        monthAt(r + 1, d.dayIdx) !== month ? 'b-bottom' : '',
+                        monthAt(r, d.dayIdx - 1) !== month ? 'b-left' : '',
+                        monthAt(r, d.dayIdx + 1) !== month ? 'b-right' : '',
+                      ].filter(Boolean).join(' ')
+
+                      let chip
+                      if (isPast && !d.locked && !isExcluded) {
+                        chip = (
+                          <div className="lt-chip past" style={{ cursor: 'default' }} title="Datumet har passerat">
+                            <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                            <span className="lt-chip-n">{d.n}</span>
+                          </div>
+                        )
+                      } else if (d.locked) {
+                        chip = (
+                          <div className="lt-chip excluded" style={{ opacity: 0.4, cursor: 'not-allowed' }} title="Stängd dag – kan ej bokas">
+                            <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                            <span className="lt-chip-n">{d.n}</span>
+                          </div>
+                        )
+                      } else {
+                        chip = (
+                          <button
+                            className={`lt-chip ${isExcluded ? 'excluded' : 'active'}`}
+                            onClick={() => handleToggleDate(b.id, d.date)}
+                            disabled={isToggling}
+                            title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
+                          >
+                            <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                            <span className="lt-chip-n">{d.n}</span>
+                          </button>
+                        )
+                      }
+
+                      cells.push(
+                        <div
+                          key={d.date}
+                          className={`lt-cell ${edges}`}
+                          style={{ gridColumn: d.dayIdx + 2, gridRow: r + 1 }}
+                        >
+                          {chip}
+                        </div>
+                      )
+                    }
+                    return <Fragment key={group.wk}>{cells}</Fragment>
                   })}
                 </div>
                 )}
