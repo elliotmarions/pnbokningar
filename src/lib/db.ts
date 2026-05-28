@@ -214,6 +214,31 @@ async function migrate() {
   } catch (err) {
     console.error('[migrate] phone backfill failed (non-fatal):', err)
   }
+
+  // One-time backfill: clear bookings on dates that were excluded from a
+  // long-term booking before the toggle-date fix removed them automatically.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1002`
+    if (!done) {
+      const bookings = await sql<{ user_id: string; excluded_dates: string }[]>`
+        SELECT user_id, excluded_dates FROM long_term_bookings
+      `
+      for (const b of bookings) {
+        let excluded: string[] = []
+        try { excluded = JSON.parse(b.excluded_dates) } catch { excluded = [] }
+        for (const d of excluded) {
+          await sql`
+            DELETE FROM applications
+            WHERE user_id = ${b.user_id}
+              AND shift_id IN (SELECT id FROM shifts WHERE date = ${d})
+          `
+        }
+      }
+      await sql`INSERT INTO schema_migrations (version) VALUES (1002) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] long-term excluded-date cleanup failed (non-fatal):', err)
+  }
 }
 
 // --------------- Users ---------------
