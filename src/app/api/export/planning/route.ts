@@ -113,6 +113,30 @@ export async function GET(req: NextRequest) {
         row.getCell(1).border = cellBorder
       })
     }
+
+    // Duplicate highlighting: turn any name that appears more than once in the
+    // column red (classic Excel "highlight duplicates" look — light-red fill,
+    // dark-red text). Baked into the file so a normal Ctrl+V carries the rule
+    // into the planning sheet, where duplicates keep getting flagged. The
+    // COUNTIF uses a relative full-column ref (A:A) so it adapts to whatever
+    // column the names are pasted into. AND(...<>"") skips blanks and the
+    // "Reserver" header.
+    if (ws.rowCount > 0) {
+      ws.addConditionalFormatting({
+        ref: `A1:A${ws.rowCount}`,
+        rules: [
+          {
+            type: 'expression',
+            priority: 1,
+            formulae: ['AND(A1<>"",A1<>"Reserver",COUNTIF(A:A,A1)>1)'],
+            style: {
+              font: { name: 'Calibri', size: 14, color: { argb: 'FF9C0006' } },
+              fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
+            },
+          },
+        ],
+      })
+    }
   }
 
   if (wb.worksheets.length === 0) {
