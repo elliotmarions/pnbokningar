@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, approvalRepo, getDb } from '@/lib/db'
 import { sendConfirmationSms } from '@/lib/sms'
@@ -59,17 +60,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
   }
 
+  // Send SMS after the response so Twilio latency never blocks the booking
+  // (already committed above). `after()` keeps the function alive on Vercel.
   if (info?.user_phone) {
-    const { start, end } = shiftHours(info.day_index)
-    const result = await sendConfirmationSms({
-      to: info.user_phone,
-      name: info.user_name,
-      dayLabel: dayLabelFull(info.day_index),
-      date: formatSwedishDate(info.date),
-      startTime: start,
-      endTime: end,
+    const phone = info.user_phone
+    after(async () => {
+      const { start, end } = shiftHours(info.day_index)
+      const result = await sendConfirmationSms({
+        to: phone,
+        name: info.user_name,
+        dayLabel: dayLabelFull(info.day_index),
+        date: formatSwedishDate(info.date),
+        startTime: start,
+        endTime: end,
+      })
+      if (result.success) await approvalRepo.markSmsSent(appId)
     })
-    if (result.success) await approvalRepo.markSmsSent(appId)
   }
 
   return NextResponse.json({ ok: true })
