@@ -28,6 +28,9 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+/* Dark background on <html> so a PWA cold-launch paints dark immediately
+   instead of flashing white before the body/app CSS kicks in. */
+html { background: #0D1117; }
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-deep);
