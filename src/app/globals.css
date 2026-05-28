@@ -494,6 +494,12 @@ a { color: inherit; text-decoration: none; }
   border-color: var(--border) !important;
   color: var(--text-secondary) !important;
 }
+.wk-pending-row { opacity: 0.9; }
+.wk-pending-avatar {
+  background: rgba(245, 158, 11, 0.18) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  color: #F59E0B !important;
+}
 
 /* ===== View toggle (Vecka / Månad) ===== */
 .view-toggle {

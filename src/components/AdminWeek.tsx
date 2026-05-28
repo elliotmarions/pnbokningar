@@ -53,6 +53,7 @@ export function AdminWeek() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [driversMap,  setDriversMap]  = useState<Record<number, Driver[] | 'loading'>>({})
   const [reservesMap, setReservesMap] = useState<Record<number, Driver[]>>({})
+  const [pendingMap,  setPendingMap]  = useState<Record<number, Driver[]>>({})
   const [applicantsByShift, setApplicantsByShift] = useState<Record<number, unknown[]>>({})
 
   // Helper: derive ISO year+week from an offset (in weeks from today)
@@ -144,6 +145,15 @@ export function AdminWeek() {
             }
             return next
           })
+          setPendingMap(prev => {
+            const next = { ...prev }
+            for (const idStr of Object.keys(prev)) {
+              const sid = Number(idStr)
+              const apps = (data.applicantsByShift[sid] ?? []) as Applicant[]
+              next[sid] = apps.filter(a => !a.approved && !a.rejected && !a.withdrawn && a.reserve !== 1).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+            }
+            return next
+          })
         }
         cache.set(`weeks-${isoYear}-${isoWeek}`, data)
       } catch {}
@@ -191,8 +201,10 @@ export function AdminWeek() {
       if (prefetched) {
         const approved: Driver[] = prefetched.filter(a => a.approved).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
         const reserves: Driver[] = prefetched.filter(a => a.reserve === 1 && !a.approved && !a.rejected && !a.withdrawn).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+        const pending:  Driver[] = prefetched.filter(a => !a.approved && !a.rejected && !a.withdrawn && a.reserve !== 1).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
         setDriversMap(prev  => ({ ...prev, [shiftId]: approved }))
         setReservesMap(prev => ({ ...prev, [shiftId]: reserves }))
+        setPendingMap(prev  => ({ ...prev, [shiftId]: pending }))
         return
       }
 
@@ -204,8 +216,10 @@ export function AdminWeek() {
         const applicants: Applicant[] = data.applicants ?? []
         const approved:  Driver[] = applicants.filter(a => a.approved).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
         const reserves:  Driver[] = applicants.filter(a => a.reserve === 1 && !a.approved && !a.rejected && !a.withdrawn).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
+        const pending:   Driver[] = applicants.filter(a => !a.approved && !a.rejected && !a.withdrawn && a.reserve !== 1).map(a => ({ id: a.id, user_name: a.user_name, user_phone: a.user_phone }))
         setDriversMap(prev  => ({ ...prev,  [shiftId]: approved }))
         setReservesMap(prev => ({ ...prev,  [shiftId]: reserves }))
+        setPendingMap(prev  => ({ ...prev,  [shiftId]: pending }))
       } catch {
         setDriversMap(prev => ({ ...prev, [shiftId]: [] }))
       }
@@ -271,6 +285,7 @@ export function AdminWeek() {
             const isExpanded = expandedIds.has(shift.id)
             const drivers  = driversMap[shift.id]
             const reserves = reservesMap[shift.id] ?? []
+            const pending  = pendingMap[shift.id] ?? []
 
             return (
               <button
@@ -343,6 +358,29 @@ export function AdminWeek() {
                           </div>
                         </div>
                       ))
+                    )}
+
+                    {/* Pending list — waiting for approval */}
+                    {pending.length > 0 && (
+                      <>
+                        <div className="wk-reserves-divider">Väntar på godkännande</div>
+                        {pending.map(d => (
+                          <div key={d.id} className="wk-driver-row wk-pending-row">
+                            <div className="wk-driver-avatar wk-pending-avatar">{initials(d.user_name)}</div>
+                            <div className="wk-driver-info">
+                              <div className="wk-driver-name">{d.user_name}</div>
+                              {d.user_phone ? (
+                                <div className="wk-driver-phone">
+                                  <Phone className="svg-ico" style={{ width:11, height:11 }} />
+                                  {d.user_phone}
+                                </div>
+                              ) : (
+                                <div className="wk-driver-phone" style={{ opacity: 0.4 }}>Inget nummer</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </>
                     )}
 
                     {/* Reserve list */}
