@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useUser, useSignOut } from '@/lib/supabase/use-user'
-import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
+import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight, Calendar } from './Icons'
 import { Toast, useToast } from './Toast'
 import { PushNudge } from './PushNudge'
 import { CurrentWeekBadge } from './CurrentWeekBadge'
@@ -465,6 +465,7 @@ export function DriverHome() {
             </div>
             <div className="right">
               <CurrentWeekBadge />
+              <Link href="/driver/schema" prefetch className="btn btn-sm btn-ghost">Mitt schema</Link>
               <Link href="/profile" prefetch className="driver-profile-link" title="Min profil">
                 <div style={{ textAlign: 'right' }}>
                   <div className="who">{user?.name}</div>
@@ -586,6 +587,10 @@ export function DriverHome() {
             <Home className="svg-ico ico" />
             Pass
           </button>
+          <Link href="/driver/schema" prefetch className="tab">
+            <Calendar className="svg-ico ico" />
+            Schema
+          </Link>
           {user?.role === 'admin' && (
             <Link href="/admin" prefetch className="tab">
               <Settings className="svg-ico ico" />
