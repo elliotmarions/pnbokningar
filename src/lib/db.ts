@@ -1,5 +1,6 @@
 import postgres from 'postgres'
 import { isHolidayOrEve } from './holidays'
+import { formatSwedishPhone } from './phone'
 
 const sql = postgres(process.env.DATABASE_URL!, {
   ssl: 'require',
@@ -192,6 +193,26 @@ async function migrate() {
         END IF;
       END $$
     `)
+  }
+
+  // One-time backfill: normalize all existing phone numbers to the canonical
+  // "070 966 98 55" format. Gated by a schema_migrations marker so it runs once.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1001`
+    if (!done) {
+      const rows = await sql<{ id: string; phone: string }[]>`
+        SELECT id, phone FROM users WHERE phone IS NOT NULL AND phone <> ''
+      `
+      for (const r of rows) {
+        const formatted = formatSwedishPhone(r.phone)
+        if (formatted !== r.phone) {
+          await sql`UPDATE users SET phone = ${formatted} WHERE id = ${r.id}`
+        }
+      }
+      await sql`INSERT INTO schema_migrations (version) VALUES (1001) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] phone backfill failed (non-fatal):', err)
   }
 }
 
