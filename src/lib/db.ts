@@ -663,42 +663,6 @@ export const approvalRepo = {
   async unapprove(applicationId: number): Promise<void> {
     await sql`DELETE FROM approvals WHERE application_id = ${applicationId}`
   },
-
-  async markSmsSent(applicationId: number): Promise<void> {
-    await sql`UPDATE approvals SET sms_sent = 1 WHERE application_id = ${applicationId}`
-  },
-
-  async markReminderSent(applicationId: number): Promise<void> {
-    await sql`UPDATE approvals SET reminder_sent = 1 WHERE application_id = ${applicationId}`
-  },
-
-  async pendingReminders() {
-    type Row = {
-      application_id: number
-      user_name: string
-      user_phone: string | null
-      shift_date: string
-      shift_day_index: number
-      start_time: string
-      end_time: string
-    }
-    return sql<Row[]>`
-      SELECT ap.application_id, u.name AS user_name, u.phone AS user_phone,
-             s.date AS shift_date, s.day_index AS shift_day_index,
-             CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END AS start_time,
-             CASE WHEN s.day_index = 5 THEN '16:30' ELSE '22:00' END AS end_time
-      FROM approvals ap
-      JOIN applications a ON a.id = ap.application_id
-      JOIN shifts s ON s.id = a.shift_id
-      JOIN users u ON u.id = a.user_id
-      WHERE ap.reminder_sent = 0
-        AND u.phone IS NOT NULL
-        AND (s.date || 'T' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END || ':00')::timestamptz
-            <= NOW() + INTERVAL '2 hours'
-        AND (s.date || 'T' || CASE WHEN s.day_index = 5 THEN '09:45' ELSE '16:00' END || ':00')::timestamptz
-            > NOW()
-    `
-  },
 }
 
 // --------------- Push Subscriptions ---------------

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { after } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { approvalRepo, getDb } from '@/lib/db'
-import { sendConfirmationSms } from '@/lib/sms'
 import { sendPushToUserAsync } from '@/lib/push'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { int, fieldError } from '@/lib/validate'
@@ -43,25 +41,6 @@ export async function POST(req: NextRequest) {
       body: `${dayLabelFull(app.day_index)} ${formatSwedishDate(app.date)}, ${start}–${end}`,
       url: '/',
       tag: `approval-${applicationId}`,
-    })
-  }
-
-  // Send confirmation SMS after the response is returned so Twilio latency
-  // never blocks the approval (which is already committed above). `after()`
-  // keeps the serverless function alive until this finishes.
-  if (app.user_phone) {
-    const phone = app.user_phone
-    after(async () => {
-      const { start, end } = shiftHours(app.day_index)
-      const result = await sendConfirmationSms({
-        to: phone,
-        name: app.user_name,
-        dayLabel: dayLabelFull(app.day_index),
-        date: formatSwedishDate(app.date),
-        startTime: start,
-        endTime: end,
-      })
-      if (result.success) await approvalRepo.markSmsSent(applicationId)
     })
   }
 

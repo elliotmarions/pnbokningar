@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, getDb } from '@/lib/db'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
-import { sendConfirmationSms } from '@/lib/sms'
 import { sendPushToUserAsync } from '@/lib/push'
-import { approvalRepo } from '@/lib/db'
 
 export async function POST(
   _req: NextRequest,
@@ -36,20 +34,6 @@ export async function POST(
       url: '/',
       tag: `promote-${appId}`,
     })
-  }
-
-  // Send SMS if phone available
-  if (info?.user_phone) {
-    const { start, end } = shiftHours(info.shift_day_index)
-    const result = await sendConfirmationSms({
-      to: info.user_phone,
-      name: info.user_name,
-      dayLabel: dayLabelFull(info.shift_day_index),
-      date: formatSwedishDate(info.shift_date),
-      startTime: start,
-      endTime: end,
-    })
-    if (result.success) await approvalRepo.markSmsSent(appId)
   }
 
   return NextResponse.json({ ok: true })

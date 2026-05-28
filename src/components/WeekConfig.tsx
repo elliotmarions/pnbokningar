@@ -302,7 +302,7 @@ export function WeekConfig() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ applicationId: appId }),
     }),
-    'Chaufför godkänd. SMS skickat.',
+    'Chaufför godkänd.',
     'Fel vid godkännande.',
   )
 
@@ -387,7 +387,7 @@ export function WeekConfig() {
           body: JSON.stringify({ userId }),
         })
         if (!res.ok) throw new Error('book failed')
-        showToast('Chaufför bokad. SMS skickat.')
+        showToast('Chaufför bokad.')
         refreshCounts()
       } catch (err) {
         setCounts(snapCounts)
