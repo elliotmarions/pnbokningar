@@ -187,6 +187,10 @@ export function DriverHome() {
   // optimistic mutation is in flight so we don't overwrite local state with
   // a stale snapshot.
   const inflightRef = useRef(0)
+  // Monotonically decreasing id for optimistic entries. A counter (not
+  // Date.now()) guarantees uniqueness even on rapid double-taps within the
+  // same millisecond.
+  const tempIdRef = useRef(-1)
   const withInflight = useCallback(async <T,>(fn: () => Promise<T>): Promise<T> => {
     inflightRef.current++
     try { return await fn() }
@@ -305,7 +309,9 @@ export function DriverHome() {
   }, [weekOffset])
 
   const handleApplyReserve = async (shiftId: number) => {
-    const tempId = -Date.now()
+    // Guard against double-submit: bail if an active application already exists.
+    if (applications.some(a => a.shift_id === shiftId && !a.rejected && !a.withdrawn)) return
+    const tempId = tempIdRef.current--
     const optimisticApp: Application = {
       id: tempId, shift_id: shiftId,
       approved: false, rejected: false, rejection_reason: null,
@@ -321,6 +327,9 @@ export function DriverHome() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ shiftId, reserve: true }),
         })
+        // 409 = already on the list (e.g. another device). Treat as success —
+        // the next poll reconciles the temp entry with the real one.
+        if (res.status === 409) return
         if (!res.ok) throw new Error('reserve failed')
         const data = await res.json()
         setApplications(prev => prev.map(a => a.id === tempId ? { ...optimisticApp, id: data.id ?? tempId } : a))
@@ -333,10 +342,14 @@ export function DriverHome() {
   }
 
   const handleApply = async (shiftId: number, force = false) => {
+    // Guard against double-submit: bail if an active application already exists.
+    // (Skipped implicitly on the force path — the optimistic entry was removed
+    // when the consecutive-days warning was shown.)
+    if (applications.some(a => a.shift_id === shiftId && !a.rejected && !a.withdrawn)) return
     // Optimistic: add a pending app + show toast immediately so the UI reacts
     // instantly. If the server flags a consecutive-days warning we dismiss the
     // toast and surface the modal instead.
-    const tempId = -Date.now()
+    const tempId = tempIdRef.current--
     const optimisticApp: Application = {
       id: tempId,
       shift_id: shiftId,
@@ -357,6 +370,9 @@ export function DriverHome() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ shiftId, force }),
         })
+        // 409 = already applied (e.g. another device/tab). Treat as success —
+        // the next poll reconciles the temp entry with the real one.
+        if (res.status === 409) return
         if (!res.ok) throw new Error('apply failed')
         const data = await res.json()
 

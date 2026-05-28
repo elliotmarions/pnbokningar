@@ -267,9 +267,6 @@ export function WeekConfig() {
       if ((list as Mutable[]).some(a => a.id === appId)) { foundShiftId = Number(sidStr); break }
     }
 
-    const snapCounts = counts
-    const snapApps = applicantsByShift
-
     if (foundShiftId !== null) {
       const shiftId = foundShiftId
       const nextList = (applicantsByShift[shiftId] as Mutable[])
@@ -286,9 +283,10 @@ export function WeekConfig() {
         if (successToast) showToast(successToast)
         refreshCounts()
       } catch (err) {
-        setCounts(snapCounts)
-        setApplicantsByShift(snapApps)
+        // Reconcile to server truth rather than restoring a call-time snapshot:
+        // a stale snapshot would wipe other approvals made in the same burst.
         showToast(errorToast, 'error')
+        refreshCounts()
         throw err
       }
     })

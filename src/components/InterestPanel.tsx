@@ -152,11 +152,14 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           continue
         }
         if (!server || !local) continue
+        // Normalize to booleans: the server sends 0/1 (numbers) while optimistic
+        // mutations set true/false, so `1 === true` would otherwise never match
+        // and pendingIds for an approved row would never clear.
         if (
-          server.approved === local.approved &&
-          server.rejected === local.rejected &&
-          server.withdrawn === local.withdrawn &&
-          server.reserve === local.reserve
+          Boolean(server.approved) === Boolean(local.approved) &&
+          Boolean(server.rejected) === Boolean(local.rejected) &&
+          Boolean(server.withdrawn) === Boolean(local.withdrawn) &&
+          Boolean(server.reserve) === Boolean(local.reserve)
         ) {
           next.delete(id)
           changed = true
@@ -616,9 +619,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                   <div className="actions">
                     <button
                       className="btn btn-sm btn-success btn-icon"
-                      disabled={approved.length >= slots}
                       onClick={() => handleApprove(a.id)}
-                      title="Godkänn"
+                      title={approved.length >= slots ? 'Alla platser fyllda — godkänner som överbokning' : 'Godkänn'}
                     >
                       <Check className="svg-ico svg-ico-sm" />
                     </button>

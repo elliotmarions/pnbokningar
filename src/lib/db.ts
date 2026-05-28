@@ -609,11 +609,21 @@ export const applicationRepo = {
   },
 
   async consecutiveCount(userId: string, targetDate: string): Promise<number> {
+    // Only a small window around the target date can affect a consecutive-day
+    // streak, so bound the query instead of scanning the user's whole approved
+    // history on every apply (matters during the week-open booking burst).
+    // Dates are 'YYYY-MM-DD' text, so lexical comparison is chronological.
+    const fmtDay = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const base = new Date(targetDate + 'T12:00:00')
+    const lower = new Date(base); lower.setDate(lower.getDate() - 14)
+    const upper = new Date(base); upper.setDate(upper.getDate() + 14)
     const rows = await sql<{ date: string }[]>`
       SELECT s.date FROM applications a
       JOIN shifts s ON s.id = a.shift_id
       JOIN approvals ap ON ap.application_id = a.id
       WHERE a.user_id = ${userId}
+        AND s.date >= ${fmtDay(lower)} AND s.date <= ${fmtDay(upper)}
       ORDER BY s.date ASC
     `
     const dateSet = new Set(rows.map(r => r.date))
