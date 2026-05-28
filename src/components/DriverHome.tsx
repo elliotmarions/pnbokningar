@@ -465,7 +465,7 @@ export function DriverHome() {
             </div>
             <div className="right">
               <CurrentWeekBadge />
-              <Link href="/driver/schema" prefetch className="btn btn-sm btn-ghost">Mitt schema</Link>
+              <Link href="/driver/schema" prefetch className="btn btn-sm btn-ghost">Schema</Link>
               <Link href="/profile" prefetch className="driver-profile-link" title="Min profil">
                 <div style={{ textAlign: 'right' }}>
                   <div className="who">{user?.name}</div>

@@ -161,7 +161,7 @@ export function MySchedule() {
               <img src="/pn-logo.png" alt="PostNord" className="brand-logo" />
               <div>
                 <div className="name">Passbokning</div>
-                <div className="sub">Chaufför · Mitt schema</div>
+                <div className="sub">Chaufför · Schema</div>
               </div>
             </div>
             <div className="right">
@@ -184,7 +184,7 @@ export function MySchedule() {
           </div>
 
           <div className="section-h" style={{ marginTop: 28 }}>
-            <span className="t">Mitt schema</span>
+            <span className="t">Schema</span>
           </div>
           <div className="sched-wrap">{scheduleBody}</div>
         </div>
@@ -198,7 +198,7 @@ export function MySchedule() {
       <div className="driver-frame">
         <div className="driver-header">
           <div>
-            <div className="title">Mitt schema</div>
+            <div className="title">Schema</div>
             <div className="who">{user?.name}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
