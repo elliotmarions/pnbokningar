@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import { Phone, Search, X } from './Icons'
+import { Phone, Search, X, Bell } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 
@@ -10,6 +10,7 @@ interface Driver {
   email: string | null
   phone: string | null
   role: 'driver' | 'admin'
+  push_enabled?: boolean
 }
 
 function initials(name: string) {
@@ -146,6 +147,14 @@ export function DriversTable() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="avatar sm">{initials(d.name)}</div>
           <span style={{ fontWeight: 500 }}>{d.name}</span>
+          {d.push_enabled && (
+            <span
+              title="Har aktiverat push-notiser"
+              style={{ display: 'inline-flex', alignItems: 'center', color: '#4ade80' }}
+            >
+              <Bell className="svg-ico svg-ico-sm" />
+            </span>
+          )}
         </div>
       </td>
       <td style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{d.email ?? '—'}</td>

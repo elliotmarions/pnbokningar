@@ -204,6 +204,7 @@ export interface DbUser {
   phone: string | null
   role: 'driver' | 'admin'
   created_at: string
+  push_enabled?: boolean
 }
 
 export const userRepo = {
@@ -229,7 +230,12 @@ export const userRepo = {
 
   async all(): Promise<DbUser[]> {
     await ensureMigrated()
-    return sql<DbUser[]>`SELECT * FROM users ORDER BY name`
+    return sql<DbUser[]>`
+      SELECT u.*,
+        EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled
+      FROM users u
+      ORDER BY u.name
+    `
   },
 
   async updatePhone(id: string, phone: string): Promise<void> {
