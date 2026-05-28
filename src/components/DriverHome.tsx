@@ -5,6 +5,7 @@ import { useUser, useSignOut } from '@/lib/supabase/use-user'
 import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight } from './Icons'
 import { Toast, useToast } from './Toast'
 import { PushNudge } from './PushNudge'
+import { CurrentWeekBadge } from './CurrentWeekBadge'
 
 interface ShiftDay {
   shift: { id: number; is_open: number; slots: number; day_index: number; date: string } | null
@@ -463,6 +464,7 @@ export function DriverHome() {
               </div>
             </div>
             <div className="right">
+              <CurrentWeekBadge />
               <Link href="/profile" prefetch className="driver-profile-link" title="Min profil">
                 <div style={{ textAlign: 'right' }}>
                   <div className="who">{user?.name}</div>
@@ -543,9 +545,12 @@ export function DriverHome() {
             <div className="title">Passbokning</div>
             <div className="who">{user?.name}</div>
           </div>
-          <button className="btn-ghost btn btn-icon" onClick={signOut}>
-            <LogOut className="svg-ico" />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CurrentWeekBadge />
+            <button className="btn-ghost btn btn-icon" onClick={signOut}>
+              <LogOut className="svg-ico" />
+            </button>
+          </div>
         </div>
 
         <div className="driver-body">

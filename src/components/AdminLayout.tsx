@@ -3,6 +3,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useUser, useSignOut } from '@/lib/supabase/use-user'
 import { Home, Calendar, Users, BarChart, Briefcase, LogOut, Sun } from './Icons'
+import { CurrentWeekBadge } from './CurrentWeekBadge'
 
 const NAV = [
   { href: '/admin',            label: 'Översikt',    icon: Home },
@@ -83,6 +84,7 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
             <h1>{title}</h1>
             <div className="sub">{sub}</div>
           </div>
+          <CurrentWeekBadge />
         </header>
         <div className="main-body">{children}</div>
       </div>
