@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Phone, Search, X, Bell } from './Icons'
+import { formatSwedishPhone } from '@/lib/phone'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 
@@ -51,9 +52,10 @@ export function DriversTable() {
   const writeCache = (next: Driver[]) => cache.set(CACHE_KEY, next)
 
   const savePhone = async (id: string) => {
-    // Optimistic update — close editor + show new number immediately.
+    // Optimistic update — close editor + show new (formatted) number immediately.
+    const formatted = formatSwedishPhone(editPhone)
     const snapshot = drivers
-    const next = drivers.map(d => d.id === id ? { ...d, phone: editPhone } : d)
+    const next = drivers.map(d => d.id === id ? { ...d, phone: formatted } : d)
     setDrivers(next)
     writeCache(next)
     setEditId(null)

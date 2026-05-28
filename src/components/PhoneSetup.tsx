@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Phone, Check } from './Icons'
+import { formatSwedishPhone } from '@/lib/phone'
 
 interface Props {
   userName: string
@@ -65,7 +66,8 @@ export function PhoneSetup({ userName, redirectTo }: Props) {
               autoFocus
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              placeholder="+46701234567"
+              onBlur={e => setPhone(formatSwedishPhone(e.target.value))}
+              placeholder="070 123 45 67"
               disabled={saving}
               style={{
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',

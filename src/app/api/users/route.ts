@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUser, requireAdmin } from '@/lib/auth'
 import { userRepo } from '@/lib/db'
 import { str, oneOf, PHONE_RE, fieldError } from '@/lib/validate'
+import { formatSwedishPhone } from '@/lib/phone'
 
 export async function GET() {
   const session = await requireAdmin()
@@ -44,7 +45,9 @@ export async function PATCH(req: NextRequest) {
     if (phone !== null && phone !== '' && !PHONE_RE.test(phone)) {
       return NextResponse.json(fieldError('phone'), { status: 400 })
     }
-    await userRepo.updatePhone(targetId, phone ?? '')
+    // Normalize to the canonical "070 966 98 55" format before storing.
+    const formatted = phone ? formatSwedishPhone(phone) : ''
+    await userRepo.updatePhone(targetId, formatted)
   }
   if (raw.setRole !== undefined && role === 'admin') {
     const setRole = oneOf(raw.setRole, ['driver', 'admin'] as const)

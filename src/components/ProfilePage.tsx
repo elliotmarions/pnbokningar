@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Phone, Mail, User, LogOut, ChevronLeft, Check } from './Icons'
 import { useSignOut } from '@/lib/supabase/use-user'
 import { PushNotificationToggle } from './PushNotificationToggle'
+import { formatSwedishPhone } from '@/lib/phone'
 
 interface Props {
   name: string
@@ -37,10 +38,14 @@ export function ProfilePage({ name, email, role, phone: initialPhone }: Props) {
       return
     }
 
+    // Normalize to canonical "070 966 98 55" format (matches what the server stores).
+    const formatted = formatSwedishPhone(trimmed)
+    setPhone(formatted)
+
     // Optimistic: flash "Sparat!" instantly, treat as saved. If the server
     // rejects, restore previous savedPhone and surface the error.
     const previousSaved = savedPhone
-    setSavedPhone(trimmed)
+    setSavedPhone(formatted)
     setSavedFlash(true)
     setTimeout(() => setSavedFlash(false), 2000)
     setSaving(true)
@@ -114,7 +119,8 @@ export function ProfilePage({ name, email, role, phone: initialPhone }: Props) {
               type="tel"
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              placeholder="+46701234567"
+              onBlur={e => setPhone(formatSwedishPhone(e.target.value))}
+              placeholder="070 123 45 67"
               disabled={saving}
               className="profile-input"
             />
