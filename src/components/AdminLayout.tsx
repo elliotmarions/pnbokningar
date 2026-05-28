@@ -86,6 +86,9 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
           </div>
           <div className="main-header-right">
             <CurrentWeekBadge />
+            <Link href="/driver" prefetch className="header-driver-mobile" title="Chaufförsvy">
+              <Briefcase className="svg-ico" />
+            </Link>
             <Link href="/profile" prefetch className="header-profile-mobile" title="Min profil">
               <div className="avatar sm">{initials(user?.name)}</div>
             </Link>

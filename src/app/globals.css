@@ -210,6 +210,14 @@ a { color: inherit; text-decoration: none; }
 /* Right cluster in the admin top header (badge + mobile profile) */
 .main-header-right { display: flex; align-items: center; gap: 10px; }
 .header-profile-mobile { display: none; align-items: center; text-decoration: none; }
+.header-driver-mobile {
+  display: none; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 8px;
+  color: var(--text-secondary); border: 1px solid var(--border);
+  background: var(--bg-card); text-decoration: none;
+}
+.header-driver-mobile:hover { color: var(--text-primary); background: var(--bg-hover); }
+.header-driver-mobile .svg-ico { width: 18px; height: 18px; }
 
 /* ============================================================
    Admin mobile layout — only applies <= 900px. Desktop (>900px)
@@ -253,8 +261,9 @@ a { color: inherit; text-decoration: none; }
   .main-header { padding: 14px 16px; }
   .main-header h1 { font-size: 16px; }
 
-  /* Show the mobile profile shortcut in the header */
+  /* Show the mobile profile + driver-view shortcuts in the header */
   .header-profile-mobile { display: inline-flex; }
+  .header-driver-mobile { display: inline-flex; }
 
   /* Wide tables scroll instead of squishing */
   .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
