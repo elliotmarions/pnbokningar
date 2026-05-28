@@ -1048,24 +1048,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 16px 14px; border-bottom: 1px solid var(--border);
 }
-/* Day grid: week-label column + 6 weekday columns (Mon–Sat). gap:0 so the
-   per-cell month-outline borders join into one continuous line. */
-.lt-grid {
-  padding: 12px 16px; display: grid;
-  grid-template-columns: 30px repeat(6, minmax(40px, 1fr));
-  align-items: stretch;
-}
+.lt-weeks { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.lt-week-row { display: flex; align-items: flex-start; gap: 10px; }
 .lt-week-label {
   font-size: 10px; color: var(--text-tertiary); font-weight: 500;
-  align-self: start; padding-top: 11px; font-variant-numeric: tabular-nums;
+  min-width: 26px; padding-top: 6px; font-variant-numeric: tabular-nums;
 }
-.lt-cell { padding: 3px; display: flex; }
-.lt-cell .lt-chip { width: 100%; min-width: 0; }
-/* Month outline — amber border drawn only on the edges where the month ends. */
-.lt-cell.b-top    { border-top:    2px solid rgba(245, 158, 11, 0.75); }
-.lt-cell.b-bottom { border-bottom: 2px solid rgba(245, 158, 11, 0.75); }
-.lt-cell.b-left   { border-left:   2px solid rgba(245, 158, 11, 0.75); }
-.lt-cell.b-right  { border-right:  2px solid rgba(245, 158, 11, 0.75); }
+.lt-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .lt-chip {
   display: flex; flex-direction: column; align-items: center;
   padding: 5px 8px; border-radius: 6px; border: 1px solid transparent;
