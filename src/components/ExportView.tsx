@@ -54,6 +54,8 @@ export function ExportView() {
   const [wSearch, setWSearch] = useState('')
   // Sort the per-driver preview by number of shifts. 'desc' = most first.
   const [shiftSort, setShiftSort] = useState<'desc' | 'asc'>('desc')
+  // Sort the withdrawal history by total withdrawals. 'desc' = most first.
+  const [wSort, setWSort] = useState<'desc' | 'asc'>('desc')
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   const q = search.trim().toLowerCase()
@@ -67,10 +69,12 @@ export function ExportView() {
     rows = [...rows].sort((a, b) => shiftSort === 'desc' ? b.shifts - a.shifts : a.shifts - b.shifts)
     return rows
   })()
-  // Withdrawal history has its own independent search field.
-  const filteredWithdrawals = wq
-    ? withdrawals.filter(g => g.name.toLowerCase().includes(wq))
-    : withdrawals
+  // Withdrawal history has its own independent search field + sort toggle.
+  const filteredWithdrawals = (() => {
+    let rows = wq ? withdrawals.filter(g => g.name.toLowerCase().includes(wq)) : withdrawals
+    rows = [...rows].sort((a, b) => wSort === 'desc' ? b.total - a.total : a.total - b.total)
+    return rows
+  })()
 
   useEffect(() => {
     const key = previewKey(from, to, group)
@@ -239,7 +243,14 @@ export function ExportView() {
           <table className="tbl">
             <thead><tr>
               <th>Chaufför</th>
-              <th className="num">Totalt</th>
+              <th
+                className="num"
+                onClick={() => setWSort(s => s === 'desc' ? 'asc' : 'desc')}
+                style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                title="Sortera efter antal avbokningar"
+              >
+                Totalt <span style={{ opacity: 0.7 }}>{wSort === 'desc' ? '▼' : '▲'}</span>
+              </th>
               <th>Senaste</th>
               <th>Anledningar</th>
               <th>Avbokad av</th>
