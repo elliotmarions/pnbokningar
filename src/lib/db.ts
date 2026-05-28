@@ -82,6 +82,11 @@ async function migrate() {
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawal_reason TEXT
   `
+  // Track which admin performed the withdrawal (shown in withdrawal history)
+  await sql`
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawn_by TEXT REFERENCES users(id)
+  `
+  await sql`CREATE INDEX IF NOT EXISTS idx_applications_withdrawn_by ON applications(withdrawn_by)`
   // Reserve list: driver can join when shift is full
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS reserve INTEGER NOT NULL DEFAULT 0
@@ -575,12 +580,12 @@ export const applicationRepo = {
     await sql`UPDATE applications SET rejected = 0, rejection_reason = NULL WHERE id = ${appId}`
   },
 
-  async markWithdrawn(appId: number, reason?: string): Promise<void> {
-    await sql`UPDATE applications SET withdrawn = 1, withdrawal_reason = ${reason ?? null} WHERE id = ${appId}`
+  async markWithdrawn(appId: number, reason?: string, adminId?: string): Promise<void> {
+    await sql`UPDATE applications SET withdrawn = 1, withdrawal_reason = ${reason ?? null}, withdrawn_by = ${adminId ?? null} WHERE id = ${appId}`
   },
 
   async unmarkWithdrawn(appId: number): Promise<void> {
-    await sql`UPDATE applications SET withdrawn = 0 WHERE id = ${appId}`
+    await sql`UPDATE applications SET withdrawn = 0, withdrawn_by = NULL WHERE id = ${appId}`
   },
 
   async forUser(userId: string) {

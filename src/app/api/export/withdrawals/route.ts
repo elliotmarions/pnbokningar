@@ -16,14 +16,17 @@ export async function GET(req: NextRequest) {
     user_name: string
     shift_date: string
     withdrawal_reason: string | null
+    withdrawn_by_name: string | null
   }[]>`
     SELECT
-      u.name    AS user_name,
-      s.date    AS shift_date,
-      a.withdrawal_reason
+      u.name      AS user_name,
+      s.date      AS shift_date,
+      a.withdrawal_reason,
+      admin.name  AS withdrawn_by_name
     FROM applications a
     JOIN shifts  s ON s.id = a.shift_id
     JOIN users   u ON u.id = a.user_id
+    LEFT JOIN users admin ON admin.id = a.withdrawn_by
     WHERE a.withdrawn = 1
       AND s.date BETWEEN ${from} AND ${to}
     ORDER BY u.name, s.date DESC

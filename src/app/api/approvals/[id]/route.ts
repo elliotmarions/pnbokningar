@@ -12,6 +12,7 @@ export async function DELETE(
   const session = await requireAdmin()
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  const adminId = (session.user as Record<string, unknown>).id as string
   const { id } = await params
   const appId = parseInt(id)
 
@@ -31,7 +32,7 @@ export async function DELETE(
   `
 
   await approvalRepo.unapprove(appId)
-  await applicationRepo.markWithdrawn(appId, reason)
+  await applicationRepo.markWithdrawn(appId, reason, adminId)
 
   if (info) {
     sendPushToUserAsync(info.user_id, {

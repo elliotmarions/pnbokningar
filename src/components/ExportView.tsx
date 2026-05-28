@@ -6,12 +6,12 @@ import { useAdminCache } from './AdminCacheProvider'
 
 interface DriverRow { name: string; shifts: number; hours: number; last_shift: string }
 interface WeekRow { week_year: number; week_number: number; shifts: number; hours: number; drivers: number; last_date: string }
-interface WithdrawalRow { user_name: string; shift_date: string; withdrawal_reason: string | null }
+interface WithdrawalRow { user_name: string; shift_date: string; withdrawal_reason: string | null; withdrawn_by_name: string | null }
 interface WithdrawalGroup {
   name: string
   total: number
   last_date: string
-  entries: { date: string; reason: string }[]
+  entries: { date: string; reason: string; by: string | null }[]
 }
 
 function todayStr() {
@@ -34,7 +34,7 @@ function groupWithdrawals(rows: WithdrawalRow[]): WithdrawalGroup[] {
     const g = map.get(r.user_name)!
     g.total++
     if (r.shift_date > g.last_date) g.last_date = r.shift_date
-    g.entries.push({ date: r.shift_date, reason: r.withdrawal_reason ?? '–' })
+    g.entries.push({ date: r.shift_date, reason: r.withdrawal_reason ?? '–', by: r.withdrawn_by_name })
   }
   // Sort entries within each group by date DESC so the first one is the most recent
   for (const g of map.values()) g.entries.sort((a, b) => b.date.localeCompare(a.date))
@@ -224,6 +224,7 @@ export function ExportView() {
               <th className="num">Totalt</th>
               <th>Senaste</th>
               <th>Anledningar</th>
+              <th>Avbokad av</th>
             </tr></thead>
             <tbody>
               {withdrawals.map(g => {
@@ -262,6 +263,9 @@ export function ExportView() {
                           )
                         })()}
                       </td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+                        {!isExpanded && (g.entries[0]?.by ?? '–')}
+                      </td>
                     </tr>
                     {isExpanded && g.entries.map((e, i) => (
                       <tr key={`${g.name}-${i}`} className="wd-detail-row">
@@ -269,6 +273,7 @@ export function ExportView() {
                         <td />
                         <td style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{e.date}</td>
                         <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{e.reason}</td>
+                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{e.by ?? '–'}</td>
                       </tr>
                     ))}
                   </>
