@@ -316,6 +316,21 @@ export function LongTermBookings() {
                         {group.days.map(d => {
                           const isExcluded = excluded.includes(d.date)
                           const isToggling = togglingDate === `${b.id}:${d.date}`
+                          const isPast = d.date < today
+                          // Passed day that was booked → show red, not editable.
+                          if (isPast && !d.locked && !isExcluded) {
+                            return (
+                              <div
+                                key={d.date}
+                                className="lt-chip past"
+                                style={{ cursor: 'default' }}
+                                title="Datumet har passerat"
+                              >
+                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                                <span className="lt-chip-n">{d.n}</span>
+                              </div>
+                            )
+                          }
                           if (d.locked) {
                             return (
                               <div
