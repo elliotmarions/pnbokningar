@@ -91,6 +91,13 @@ export function LongTermBookings() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [togglingDate, setTogglingDate] = useState<string | null>(null) // "bookingId:date"
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+
+  const toggleExpand = (id: number) => setExpandedIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
   const [customClosed, setCustomClosed] = useState<CustomClosed[]>(() => (cache.get(CC_CACHE_KEY) as CustomClosed[]) ?? [])
 
   useEffect(() => {
@@ -265,11 +272,19 @@ export function LongTermBookings() {
             const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
             const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
             const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
+            const isExpanded = expandedIds.has(b.id)
             return (
               <div key={b.id} className="lt-card">
-                {/* Card header */}
-                <div className="lt-card-head">
+                {/* Card header — click to expand/collapse the day chips */}
+                <div
+                  className="lt-card-head"
+                  onClick={() => toggleExpand(b.id)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ color: 'var(--text-tertiary)', fontSize: 12, width: 12, flex: '0 0 12px' }}>
+                      {isExpanded ? '▾' : '▸'}
+                    </span>
                     <div className="avatar lg">{initials(b.user_name)}</div>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>{b.user_name}</div>
@@ -284,14 +299,15 @@ export function LongTermBookings() {
                   <button
                     className="btn btn-sm btn-danger-ghost btn-icon"
                     disabled={deletingId === b.id}
-                    onClick={() => handleDelete(b.id)}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(b.id) }}
                     title="Ta bort bokning"
                   >
                     <Trash2 className="svg-ico svg-ico-sm" />
                   </button>
                 </div>
 
-                {/* Day chips by week */}
+                {/* Day chips by week — only when expanded */}
+                {isExpanded && (
                 <div className="lt-weeks">
                   {groups.map(group => (
                     <div key={group.wk} className="lt-week-row">
@@ -330,6 +346,7 @@ export function LongTermBookings() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )
           })}
