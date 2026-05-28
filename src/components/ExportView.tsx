@@ -53,7 +53,18 @@ export function ExportView() {
   const [wFrom, setWFrom] = useState(nWeeksAgoStr(24))
   const [wTo,   setWTo]   = useState(todayStr())
   const [expandedDrivers, setExpandedDrivers] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
   const { toast, show: showToast, clear: clearToast } = useToast()
+
+  const q = search.trim().toLowerCase()
+  // Filter the per-driver preview + withdrawal history by name. The week
+  // grouping isn't name-based so it's left unfiltered.
+  const filteredPreview = (group === 'driver' && q)
+    ? (preview as DriverRow[]).filter(r => r.name.toLowerCase().includes(q))
+    : preview
+  const filteredWithdrawals = q
+    ? withdrawals.filter(g => g.name.toLowerCase().includes(q))
+    : withdrawals
 
   useEffect(() => {
     // Use cached current-week info if available (avoids a round-trip on revisit).
@@ -148,8 +159,15 @@ export function ExportView() {
         <div className="tbl-head">
           <div>
             <div className="ttl">Förhandsvisning</div>
-            <div className="sub">{preview.length} {group === 'driver' ? 'chaufförer' : 'veckor'} · {from} → {to}</div>
+            <div className="sub">{filteredPreview.length} {group === 'driver' ? 'chaufförer' : 'veckor'} · {from} → {to}</div>
           </div>
+          <input
+            type="text"
+            placeholder="Sök chaufför…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)', minWidth: 180 }}
+          />
         </div>
         <table className="tbl">
           {group === 'driver' ? (
@@ -160,7 +178,7 @@ export function ExportView() {
                 <th>Senaste pass</th>
               </tr></thead>
               <tbody>
-                {(preview as DriverRow[]).map((r, i) => (
+                {(filteredPreview as DriverRow[]).map((r, i) => (
                   <tr key={i}>
                     <td style={{ fontWeight: 500 }}>{r.name}</td>
                     <td className="num">{r.shifts}</td>
@@ -213,9 +231,9 @@ export function ExportView() {
           </div>
         </div>
 
-        {withdrawals.length === 0 ? (
+        {filteredWithdrawals.length === 0 ? (
           <div style={{ padding: '24px 20px', color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center' }}>
-            Inga avbokningar under vald period
+            {q ? 'Ingen chaufför matchar sökningen' : 'Inga avbokningar under vald period'}
           </div>
         ) : (
           <table className="tbl">
@@ -227,7 +245,7 @@ export function ExportView() {
               <th>Avbokad av</th>
             </tr></thead>
             <tbody>
-              {withdrawals.map(g => {
+              {filteredWithdrawals.map(g => {
                 const isExpanded = expandedDrivers.has(g.name)
                 const toggle = () => setExpandedDrivers(prev => {
                   const next = new Set(prev)
