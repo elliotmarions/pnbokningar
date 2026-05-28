@@ -47,9 +47,9 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
           </Link>
         ))}
 
-        <div style={{ flex: 1 }} />
+        <div className="sidebar-spacer" style={{ flex: 1 }} />
 
-        <Link href="/driver" prefetch className="nav-item">
+        <Link href="/driver" prefetch className="nav-item sidebar-driverlink">
           <Briefcase className="svg-ico ico" />
           Chaufförsvy
         </Link>
@@ -65,7 +65,7 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
           </span>
         </Link>
 
-        <div style={{
+        <div className="sidebar-powered" style={{
           marginTop: 10,
           paddingTop: 10,
           borderTop: '1px solid var(--border)',
@@ -84,7 +84,12 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
             <h1>{title}</h1>
             <div className="sub">{sub}</div>
           </div>
-          <CurrentWeekBadge />
+          <div className="main-header-right">
+            <CurrentWeekBadge />
+            <Link href="/profile" prefetch className="header-profile-mobile" title="Min profil">
+              <div className="avatar sm">{initials(user?.name)}</div>
+            </Link>
+          </div>
         </header>
         <div className="main-body">{children}</div>
       </div>

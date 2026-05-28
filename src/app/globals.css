@@ -207,6 +207,64 @@ a { color: inherit; text-decoration: none; }
 }
 .main-body { padding: 28px; flex: 1; }
 
+/* Right cluster in the admin top header (badge + mobile profile) */
+.main-header-right { display: flex; align-items: center; gap: 10px; }
+.header-profile-mobile { display: none; align-items: center; text-decoration: none; }
+
+/* ============================================================
+   Admin mobile layout — only applies <= 900px. Desktop (>900px)
+   is completely untouched: the sidebar becomes a bottom tab bar,
+   content goes full-width, and tables scroll horizontally.
+   ============================================================ */
+@media (max-width: 900px) {
+  .frame { grid-template-columns: 1fr; }
+  .main { min-height: 100vh; }
+
+  /* Sidebar → fixed bottom tab bar */
+  .sidebar {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    width: 100%; height: auto;
+    flex-direction: row; gap: 2px;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    border-right: none; border-top: 1px solid var(--border);
+    overflow: visible; z-index: 30;
+  }
+  /* Hide everything in the sidebar that isn't a primary nav tab */
+  .sidebar-brand,
+  .nav-section-label,
+  .sidebar-spacer,
+  .sidebar-driverlink,
+  .sidebar-powered,
+  .nav-foot { display: none !important; }
+
+  /* Nav links → compact icon-over-label tabs */
+  .sidebar .nav-item {
+    flex: 1 1 0; min-width: 0;
+    flex-direction: column; gap: 3px;
+    padding: 7px 2px; border-radius: 8px;
+    font-size: 10px; font-weight: 500; text-align: center;
+    justify-content: center; line-height: 1.1;
+  }
+  .sidebar .nav-item .ico { width: 20px; height: 20px; flex: 0 0 20px; }
+  .sidebar .nav-item.active { box-shadow: none; }
+
+  /* Content: full width, room for the bottom bar */
+  .main-body { padding: 16px 14px 80px; }
+  .main-header { padding: 14px 16px; }
+  .main-header h1 { font-size: 16px; }
+
+  /* Show the mobile profile shortcut in the header */
+  .header-profile-mobile { display: inline-flex; }
+
+  /* Wide tables scroll instead of squishing */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.tbl { min-width: 540px; }
+
+  /* The interest/applicant side panel must sit above the bottom bar */
+  .side-panel { width: 100vw; z-index: 50; }
+  .side-panel-overlay { z-index: 49; }
+}
+
 /* ===== Buttons ===== */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
