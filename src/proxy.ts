@@ -106,9 +106,9 @@ async function refreshSupabaseSession(req: NextRequest, res: NextResponse): Prom
 }
 
 // ---------------------------------------------------------------------------
-// Middleware entry point.
+// Proxy entry point (Next.js renamed the "middleware" convention to "proxy").
 // ---------------------------------------------------------------------------
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Cron routes are authenticated by CRON_SECRET header — skip session refresh
