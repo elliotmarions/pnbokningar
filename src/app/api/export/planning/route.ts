@@ -69,6 +69,14 @@ export async function GET(req: NextRequest) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'PostNord Passbokning'
 
+  // Thin border around every name cell.
+  const cellBorder: Partial<ExcelJS.Borders> = {
+    top:    { style: 'thin' },
+    left:   { style: 'thin' },
+    bottom: { style: 'thin' },
+    right:  { style: 'thin' },
+  }
+
   const swedishMonths = ['januari', 'februari', 'mars', 'april', 'maj', 'juni',
     'juli', 'augusti', 'september', 'oktober', 'november', 'december']
 
@@ -88,6 +96,7 @@ export async function GET(req: NextRequest) {
       formatted.forEach(name => {
         const row = ws.addRow([name])
         row.getCell(1).font = { name: 'Calibri', size: 14 }
+        row.getCell(1).border = cellBorder
       })
     }
 
@@ -101,6 +110,7 @@ export async function GET(req: NextRequest) {
       formatted.forEach(name => {
         const row = ws.addRow([name])
         row.getCell(1).font = { name: 'Calibri', size: 14 }
+        row.getCell(1).border = cellBorder
       })
     }
   }
