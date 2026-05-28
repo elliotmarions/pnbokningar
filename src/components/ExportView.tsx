@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Download, FileSpreadsheet } from './Icons'
+import { Download } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 
@@ -23,7 +23,6 @@ function nWeeksAgoStr(n: number) {
   return d.toISOString().slice(0, 10)
 }
 
-const WEEKS_CACHE_KEY = 'weeks-current'
 const previewKey = (from: string, to: string, group: string) => `export-preview-${from}-${to}-${group}`
 const withdrawalsKey = (from: string, to: string) => `export-withdrawals-${from}-${to}`
 
@@ -47,8 +46,6 @@ export function ExportView() {
   const [to, setTo] = useState(todayStr())
   const [group, setGroup] = useState<'driver' | 'week'>('driver')
   const [preview, setPreview] = useState<DriverRow[] | WeekRow[]>([])
-  const [weekYear, setWeekYear] = useState(0)
-  const [weekNumber, setWeekNumber] = useState(0)
   const [withdrawals, setWithdrawals] = useState<WithdrawalGroup[]>([])
   const [wFrom, setWFrom] = useState(nWeeksAgoStr(24))
   const [wTo,   setWTo]   = useState(todayStr())
@@ -71,17 +68,6 @@ export function ExportView() {
   const filteredWithdrawals = q
     ? withdrawals.filter(g => g.name.toLowerCase().includes(q))
     : withdrawals
-
-  useEffect(() => {
-    // Use cached current-week info if available (avoids a round-trip on revisit).
-    const cached = cache.get(WEEKS_CACHE_KEY) as { weekYear: number; weekNumber: number } | undefined
-    if (cached) { setWeekYear(cached.weekYear); setWeekNumber(cached.weekNumber) }
-    fetch('/api/weeks').then(r => r.json()).then(d => {
-      cache.set(WEEKS_CACHE_KEY, { weekYear: d.weekYear, weekNumber: d.weekNumber })
-      setWeekYear(d.weekYear)
-      setWeekNumber(d.weekNumber)
-    })
-  }, [cache])
 
   useEffect(() => {
     const key = previewKey(from, to, group)
@@ -118,11 +104,6 @@ export function ExportView() {
     showToast('Nedladdning startar…')
   }
 
-  const downloadPlanning = () => {
-    window.location.href = `/api/export/planning?year=${weekYear}&week=${weekNumber}`
-    showToast('Planeringsexport startar…')
-  }
-
   return (
     <>
       <div className="export-top">
@@ -149,10 +130,6 @@ export function ExportView() {
             </select>
           </div>
           <div className="export-actions">
-            <button className="btn btn-sm" onClick={downloadPlanning}>
-              <FileSpreadsheet className="svg-ico svg-ico-sm" />
-              Exportera till planering
-            </button>
             <button className="btn btn-sm btn-primary" onClick={download}>
               <Download className="svg-ico svg-ico-sm" />
               Ladda ner .xlsx
