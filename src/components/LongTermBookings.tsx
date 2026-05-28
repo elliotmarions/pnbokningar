@@ -20,6 +20,7 @@ interface Booking {
 
 const DAY_SHORT = ['Mån','Tis','Ons','Tor','Fre','Lör']
 const MONTHS = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
+const MONTHS_FULL = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December']
 
 function fmt(dateStr: string) {
   const d = new Date(dateStr + 'T12:00:00')
@@ -273,6 +274,20 @@ export function LongTermBookings() {
             const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
             const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
             const isExpanded = expandedIds.has(b.id)
+
+            // Group the week-rows into month sections so month boundaries get a
+            // clear bordered box + label. A week is assigned to the month of its
+            // first day (a straddling week stays with its starting month).
+            type WeekGroup = typeof groups[number]
+            const monthSections: { key: string; label: string; weeks: WeekGroup[] }[] = []
+            for (const g of groups) {
+              const first = new Date(g.days[0].date + 'T12:00:00')
+              const key = `${first.getFullYear()}-${first.getMonth()}`
+              const label = `${MONTHS_FULL[first.getMonth()]} ${first.getFullYear()}`
+              let section = monthSections.find(s => s.key === key)
+              if (!section) { section = { key, label, weeks: [] }; monthSections.push(section) }
+              section.weeks.push(g)
+            }
             return (
               <div key={b.id} className="lt-card">
                 {/* Card header — click to expand/collapse the day chips */}
@@ -306,10 +321,13 @@ export function LongTermBookings() {
                   </button>
                 </div>
 
-                {/* Day chips by week — only when expanded */}
+                {/* Day chips by week, grouped into month sections — only when expanded */}
                 {isExpanded && (
                 <div className="lt-weeks">
-                  {groups.map(group => (
+                  {monthSections.map(section => (
+                  <div key={section.key} className="lt-month">
+                    <div className="lt-month-label">{section.label}</div>
+                    {section.weeks.map(group => (
                     <div key={group.wk} className="lt-week-row">
                       <span className="lt-week-label">v{group.wk}</span>
                       <div className="lt-chips">
@@ -359,6 +377,8 @@ export function LongTermBookings() {
                         })}
                       </div>
                     </div>
+                    ))}
+                  </div>
                   ))}
                 </div>
                 )}
