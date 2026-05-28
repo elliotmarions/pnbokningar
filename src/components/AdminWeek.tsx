@@ -39,6 +39,11 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
+// Sort drivers alphabetically by first name (Swedish collation: å ä ö last).
+function byFirstName(a: Driver, b: Driver) {
+  return a.user_name.localeCompare(b.user_name, 'sv')
+}
+
 export function AdminWeek() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
@@ -283,9 +288,11 @@ export function AdminWeek() {
             const badgeClass   = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
             const badgeLabel   = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
             const isExpanded = expandedIds.has(shift.id)
-            const drivers  = driversMap[shift.id]
-            const reserves = reservesMap[shift.id] ?? []
-            const pending  = pendingMap[shift.id] ?? []
+            const driversRaw = driversMap[shift.id]
+            // Sort approved drivers alphabetically by first name for display.
+            const drivers  = Array.isArray(driversRaw) ? [...driversRaw].sort(byFirstName) : driversRaw
+            const reserves = [...(reservesMap[shift.id] ?? [])].sort(byFirstName)
+            const pending  = [...(pendingMap[shift.id] ?? [])].sort(byFirstName)
 
             return (
               <button
