@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
+import { IosSplashLinks } from '@/components/IosSplashLinks'
 
 // Self-hosted Inter (bundled + cached by the SW) — no render-blocking request
 // to Google Fonts on launch. `display: swap` avoids invisible text while loading.
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="sv" className={inter.variable}>
       <body>
+        <IosSplashLinks />
         <Providers>{children}</Providers>
       </body>
     </html>
