@@ -54,14 +54,20 @@ export function ExportView() {
   const [wTo,   setWTo]   = useState(todayStr())
   const [expandedDrivers, setExpandedDrivers] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
+  // Sort the per-driver preview by number of shifts. 'desc' = most first.
+  const [shiftSort, setShiftSort] = useState<'desc' | 'asc'>('desc')
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   const q = search.trim().toLowerCase()
   // Filter the per-driver preview + withdrawal history by name. The week
   // grouping isn't name-based so it's left unfiltered.
-  const filteredPreview = (group === 'driver' && q)
-    ? (preview as DriverRow[]).filter(r => r.name.toLowerCase().includes(q))
-    : preview
+  const filteredPreview = (() => {
+    if (group !== 'driver') return preview
+    let rows = preview as DriverRow[]
+    if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q))
+    rows = [...rows].sort((a, b) => shiftSort === 'desc' ? b.shifts - a.shifts : a.shifts - b.shifts)
+    return rows
+  })()
   const filteredWithdrawals = q
     ? withdrawals.filter(g => g.name.toLowerCase().includes(q))
     : withdrawals
@@ -174,7 +180,14 @@ export function ExportView() {
             <>
               <thead><tr>
                 <th>Namn</th>
-                <th className="num">Antal pass</th>
+                <th
+                  className="num"
+                  onClick={() => setShiftSort(s => s === 'desc' ? 'asc' : 'desc')}
+                  style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                  title="Sortera efter antal pass"
+                >
+                  Antal pass <span style={{ opacity: 0.7 }}>{shiftSort === 'desc' ? '▼' : '▲'}</span>
+                </th>
                 <th>Senaste pass</th>
               </tr></thead>
               <tbody>
