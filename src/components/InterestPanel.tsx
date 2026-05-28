@@ -416,7 +416,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   }
 
   const startTime = shift?.day_index === 5 ? '09:45' : '16:00'
-  const endTime = shift?.day_index === 5 ? '16:30' : '22:00'
+  const endTime = shift?.day_index === 5 ? '18:00' : '22:00'
 
   return (
     <>

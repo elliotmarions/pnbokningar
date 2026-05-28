@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
       name: r.name,
       date: r.date,
       day: dayNames[r.day_index],
-      hours: r.day_index === 5 ? '09:45–16:30' : '16:00–22:00',
+      hours: r.day_index === 5 ? '09:45–18:00' : '16:00–22:00',
     }))
   } else {
     const rows = await sql<{ week_year: number; week_number: number; shifts: number; drivers: number; last_date: string }[]>`

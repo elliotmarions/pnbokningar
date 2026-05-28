@@ -23,7 +23,7 @@ export function weekInfoFor(ref: Date): WeekInfo {
     label: DAY_LABELS[i],
     shortLabel: SHORT_LABELS[i],
     startTime: i === 5 ? '09:45' : '16:00',
-    endTime: i === 5 ? '16:30' : '22:00',
+    endTime: i === 5 ? '18:00' : '22:00',
   }))
   return { weekYear, weekNumber, days }
 }
@@ -54,7 +54,7 @@ export function formatSwedishDateLong(dateStr: string): string {
 }
 
 export function shiftHours(dayIndex: number): { start: string; end: string; durationH: number } {
-  if (dayIndex === 5) return { start: '09:45', end: '16:30', durationH: 6.75 }
+  if (dayIndex === 5) return { start: '09:45', end: '18:00', durationH: 8.25 }
   return { start: '16:00', end: '22:00', durationH: 6 }
 }
 

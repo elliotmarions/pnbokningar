@@ -21,7 +21,7 @@ interface MineApp {
 const DAY_LABELS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag']
 
 function shiftHours(dayIndex: number) {
-  if (dayIndex === 5) return { start: '09:45', end: '16:30' }
+  if (dayIndex === 5) return { start: '09:45', end: '18:00' }
   return { start: '16:00', end: '22:00' }
 }
 
