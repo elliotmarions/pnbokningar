@@ -1056,21 +1056,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .lt-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .lt-chip {
-  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 0; border-radius: 6px; border: 1px solid transparent;
   cursor: pointer; transition: all var(--t);
   width: 42px; height: 44px; flex: 0 0 42px;
   background: var(--primary-soft); border-color: var(--primary-border);
-}
-/* Discreet month marker shown on the 1st of each month (and the range's
-   first day). Absolutely positioned in the chip's top padding so it never
-   changes the fixed 42x44 box size. */
-.lt-chip-month {
-  position: absolute; top: 2px; left: 0; right: 0;
-  text-align: center; font-size: 6px; font-weight: 700;
-  letter-spacing: 0.5px; text-transform: uppercase; line-height: 1;
-  color: #000; pointer-events: none;
 }
 .lt-chip:hover:not(:disabled) { filter: brightness(1.15); }
 .lt-chip:disabled { opacity: 0.5; cursor: not-allowed; }

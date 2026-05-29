@@ -21,6 +21,18 @@ interface Booking {
 const DAY_SHORT = ['Mån','Tis','Ons','Tor','Fre','Lör']
 const MONTHS = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
 
+// One hue per month so consecutive months read as distinct colour tints on
+// the day chips. Subtle (low-alpha fill) to stay discreet on the dark theme.
+const MONTH_HUES = [210, 190, 170, 150, 90, 215, 265, 320, 40, 25, 0, 235]
+function monthTint(monthIdx: number) {
+  const h = MONTH_HUES[monthIdx] ?? 215
+  return {
+    background: `hsl(${h} 65% 55% / 0.16)`,
+    borderColor: `hsl(${h} 65% 60% / 0.5)`,
+    accent: `hsl(${h} 70% 70%)`,
+  }
+}
+
 function fmt(dateStr: string) {
   const d = new Date(dateStr + 'T12:00:00')
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`
@@ -270,9 +282,6 @@ export function LongTermBookings() {
           {bookings.map(b => {
             const excluded: string[] = JSON.parse(b.excluded_dates)
             const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
-            // First visible day in the whole range — used to label the start
-            // month even when the booking doesn't begin on the 1st.
-            const firstDate = groups[0]?.days[0]?.date
             const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
             const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
             const isExpanded = expandedIds.has(b.id)
@@ -320,12 +329,9 @@ export function LongTermBookings() {
                           const isExcluded = excluded.includes(d.date)
                           const isToggling = togglingDate === `${b.id}:${d.date}`
                           const isPast = d.date < today
-                          // Show a discreet month marker on the 1st of each
-                          // month and on the range's very first day.
-                          const showMonth = d.n === 1 || d.date === firstDate
-                          const monthTag = showMonth
-                            ? <span className="lt-chip-month">{MONTHS[new Date(d.date + 'T12:00:00').getMonth()]}</span>
-                            : null
+                          // Per-month colour tint so it's clear which month
+                          // each day belongs to across a multi-month booking.
+                          const tint = monthTint(new Date(d.date + 'T12:00:00').getMonth())
                           // Passed day that was booked → show red, not editable.
                           if (isPast && !d.locked && !isExcluded) {
                             return (
@@ -335,7 +341,6 @@ export function LongTermBookings() {
                                 style={{ cursor: 'default' }}
                                 title="Datumet har passerat"
                               >
-                                {monthTag}
                                 <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
                                 <span className="lt-chip-n">{d.n}</span>
                               </div>
@@ -349,7 +354,6 @@ export function LongTermBookings() {
                                 style={{ opacity: 0.4, cursor: 'not-allowed' }}
                                 title="Stängd dag – kan ej bokas"
                               >
-                                {monthTag}
                                 <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
                                 <span className="lt-chip-n">{d.n}</span>
                               </div>
@@ -359,12 +363,12 @@ export function LongTermBookings() {
                             <button
                               key={d.date}
                               className={`lt-chip ${isExcluded ? 'excluded' : 'active'}`}
+                              style={isExcluded ? undefined : { background: tint.background, borderColor: tint.borderColor }}
                               onClick={() => handleToggleDate(b.id, d.date)}
                               disabled={isToggling}
                               title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
                             >
-                              {monthTag}
-                              <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                              <span className="lt-chip-day" style={isExcluded ? undefined : { color: tint.accent }}>{DAY_SHORT[d.dayIdx]}</span>
                               <span className="lt-chip-n">{d.n}</span>
                             </button>
                           )
