@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { applicationRepo, getDb } from '@/lib/db'
+import { applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate } from '@/lib/weeks'
 
@@ -14,10 +14,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Look up shift + user for the push payload before mutating.
   const sql = getDb()
-  const [info] = await sql<{ user_id: string; day_index: number; date: string }[]>`
-    SELECT a.user_id, s.day_index, s.date
+  const [info] = await sql<{ user_id: string; day_index: number; date: string; user_name: string }[]>`
+    SELECT a.user_id, s.day_index, s.date, u.name AS user_name
     FROM applications a
     JOIN shifts s ON s.id = a.shift_id
+    JOIN users u ON u.id = a.user_id
     WHERE a.id = ${appId}
   `
 
@@ -29,6 +30,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       body: `Din ansökan för ${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)} har nekats.`,
       url: '/',
       tag: `reject-${appId}`,
+    })
+    logActivityAsync({
+      action: 'rejected',
+      actorName: session.user.name ?? null,
+      driverName: info.user_name,
+      shiftDate: info.date,
+      dayIndex: info.day_index,
+      detail: reason?.trim() || undefined,
     })
   }
 

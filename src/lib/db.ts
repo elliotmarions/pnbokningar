@@ -148,6 +148,38 @@ async function migrate() {
     console.error('[migrate] push_subscriptions migration failed (non-fatal):', err)
   }
 
+  // Activity log — immutable audit trail of booking actions. Names are
+  // denormalized (snapshot) so entries stay readable even if a user is later
+  // renamed or deleted. No FKs for the same reason.
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS activity_log (
+        id           SERIAL PRIMARY KEY,
+        action       TEXT NOT NULL,
+        actor_name   TEXT,
+        driver_name  TEXT,
+        shift_date   TEXT,
+        day_index    INTEGER,
+        detail       TEXT,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+    await sql`CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at DESC)`
+    await sql`ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY`
+    await sql.unsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = 'activity_log' AND policyname = 'service_role_all'
+        ) THEN
+          EXECUTE 'CREATE POLICY service_role_all ON activity_log FOR ALL TO service_role USING (true) WITH CHECK (true)';
+        END IF;
+      END $$
+    `)
+  } catch (err) {
+    console.error('[migrate] activity_log migration failed (non-fatal):', err)
+  }
+
   // Custom closed days (admin-defined, with reason + color)
   await sql`
     CREATE TABLE IF NOT EXISTS custom_closed_days (
@@ -780,4 +812,58 @@ export const pushSubscriptionRepo = {
     await ensureMigrated()
     await sql`DELETE FROM push_subscriptions WHERE user_id = ${userId}`
   },
+}
+
+// --------------- Activity log ---------------
+
+export interface DbActivity {
+  id: number
+  action: string
+  actor_name: string | null
+  driver_name: string | null
+  shift_date: string | null
+  day_index: number | null
+  detail: string | null
+  created_at: string
+}
+
+export const activityRepo = {
+  async log(entry: {
+    action: string
+    actorName?: string | null
+    driverName?: string | null
+    shiftDate?: string | null
+    dayIndex?: number | null
+    detail?: string | null
+  }): Promise<void> {
+    await ensureMigrated()
+    await sql`
+      INSERT INTO activity_log (action, actor_name, driver_name, shift_date, day_index, detail)
+      VALUES (${entry.action}, ${entry.actorName ?? null}, ${entry.driverName ?? null},
+              ${entry.shiftDate ?? null}, ${entry.dayIndex ?? null}, ${entry.detail ?? null})
+    `
+  },
+
+  async recent(limit = 200): Promise<DbActivity[]> {
+    await ensureMigrated()
+    return sql<DbActivity[]>`
+      SELECT id, action, actor_name, driver_name, shift_date, day_index, detail,
+             (created_at AT TIME ZONE 'Europe/Stockholm')::text AS created_at
+      FROM activity_log
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `
+  },
+}
+
+/** Fire-and-forget activity logging — never blocks or breaks the calling action. */
+export function logActivityAsync(entry: {
+  action: string
+  actorName?: string | null
+  driverName?: string | null
+  shiftDate?: string | null
+  dayIndex?: number | null
+  detail?: string | null
+}): void {
+  activityRepo.log(entry).catch(err => console.error('[activity] log failed', err))
 }

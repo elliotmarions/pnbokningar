@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { approvalRepo, getDb } from '@/lib/db'
+import { approvalRepo, getDb, logActivityAsync } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
@@ -50,6 +50,13 @@ export async function POST(req: NextRequest) {
       date: app.date,
       startTime: start,
       endTime: end,
+    })
+    logActivityAsync({
+      action: 'booked',
+      actorName: session.user.name ?? null,
+      driverName: app.user_name,
+      shiftDate: app.date,
+      dayIndex: app.day_index,
     })
   }
 

@@ -13,6 +13,38 @@ interface WithdrawalGroup {
   last_date: string
   entries: { date: string; reason: string; by: string | null }[]
 }
+interface ActivityEntry {
+  id: number
+  action: string
+  actor_name: string | null
+  driver_name: string | null
+  shift_date: string | null
+  day_index: number | null
+  detail: string | null
+  created_at: string
+}
+
+const DAY_SHORT = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön']
+
+// Visual + label config per action type.
+const ACTION_META: Record<string, { label: string; color: string; bg: string }> = {
+  booked:    { label: 'Bokad',   color: '#4ade80', bg: 'rgba(46,160,67,0.14)' },
+  cancelled: { label: 'Avbokad', color: '#F87171', bg: 'rgba(218,54,51,0.14)' },
+  rejected:  { label: 'Nekad',   color: '#F59E0B', bg: 'rgba(245,158,11,0.14)' },
+}
+
+function fmtActivityDate(dateStr: string | null) {
+  if (!dateStr) return ''
+  const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec']
+  const d = new Date(dateStr + 'T12:00:00')
+  return `${d.getDate()} ${months[d.getMonth()]}`
+}
+
+function fmtTimestamp(iso: string) {
+  // iso is already Europe/Stockholm local text "YYYY-MM-DD HH:MM:SS(.ms)"
+  const [datePart, timePart] = iso.split(/[ T]/)
+  return `${datePart} ${(timePart ?? '').slice(0, 5)}`
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -56,6 +88,10 @@ export function ExportView() {
   const [shiftSort, setShiftSort] = useState<'desc' | 'asc'>('desc')
   // Sort the withdrawal history by total withdrawals. 'desc' = most first.
   const [wSort, setWSort] = useState<'desc' | 'asc'>('desc')
+  // Top-level tab: summary/export vs activity log.
+  const [tab, setTab] = useState<'summary' | 'log'>('summary')
+  const [activity, setActivity] = useState<ActivityEntry[] | null>(null)
+  const [logSearch, setLogSearch] = useState('')
   const { toast, show: showToast, clear: clearToast } = useToast()
 
   const q = search.trim().toLowerCase()
@@ -106,6 +142,29 @@ export function ExportView() {
     return () => clearTimeout(id)
   }, [wFrom, wTo, cache])
 
+  // Load the activity log when the log tab is opened, then poll every 10s so
+  // new bookings/cancellations appear without a manual refresh.
+  useEffect(() => {
+    if (tab !== 'log') return
+    let cancelled = false
+    const load = async () => {
+      const res = await fetch('/api/activity')
+      if (!res.ok || cancelled) return
+      const data = await res.json()
+      setActivity(data.entries ?? [])
+    }
+    load()
+    const interval = setInterval(() => { if (!document.hidden) load() }, 10000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [tab])
+
+  const lq = logSearch.trim().toLowerCase()
+  const filteredActivity = (activity ?? []).filter(e =>
+    !lq ||
+    (e.driver_name ?? '').toLowerCase().includes(lq) ||
+    (e.actor_name ?? '').toLowerCase().includes(lq)
+  )
+
   const download = () => {
     window.location.href = `/api/export?from=${from}&to=${to}&group=${group}`
     showToast('Nedladdning startar…')
@@ -114,11 +173,79 @@ export function ExportView() {
   return (
     <>
       <div className="export-top">
-        <div className="eyebrow">EXPORT</div>
-        <h2>Sammanställning</h2>
-        <div className="helper">Ladda ner data som Excel-fil eller exportera planering för aktuell vecka.</div>
+        <div className="eyebrow">STATISTIK</div>
+        <h2>{tab === 'summary' ? 'Sammanställning' : 'Aktivitetslogg'}</h2>
+        <div className="helper">
+          {tab === 'summary'
+            ? 'Ladda ner data som Excel-fil eller se avbokningshistorik.'
+            : 'Alla bokningar, avbokningar och nekanden — vem som gjorde vad och när.'}
+        </div>
       </div>
 
+      {/* Tab switcher */}
+      <div className="sched-toggle" style={{ maxWidth: 360, marginBottom: 18 }}>
+        <button className={`sched-tab ${tab === 'summary' ? 'active' : ''}`} onClick={() => setTab('summary')}>
+          Sammanställning
+        </button>
+        <button className={`sched-tab ${tab === 'log' ? 'active' : ''}`} onClick={() => setTab('log')}>
+          Aktivitetslogg
+        </button>
+      </div>
+
+      {tab === 'log' ? (
+        <div className="tbl-wrap">
+          <div className="tbl-head">
+            <div>
+              <div className="ttl">Aktivitetslogg</div>
+              <div className="sub">Senaste 300 händelserna</div>
+            </div>
+            <input
+              type="text"
+              placeholder="Sök namn…"
+              value={logSearch}
+              onChange={e => setLogSearch(e.target.value)}
+              style={{ fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-deep)', color: 'var(--text-primary)', minWidth: 160 }}
+            />
+          </div>
+          {activity === null ? (
+            <div style={{ padding: '24px 20px', color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center' }}>Läser in…</div>
+          ) : filteredActivity.length === 0 ? (
+            <div style={{ padding: '24px 20px', color: 'var(--text-tertiary)', fontSize: 13, textAlign: 'center' }}>
+              {lq ? 'Inga händelser matchar sökningen.' : 'Inga händelser loggade ännu.'}
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead><tr>
+                <th>Händelse</th>
+                <th>Chaufför</th>
+                <th>Pass</th>
+                <th>Av</th>
+                <th>Tidpunkt</th>
+              </tr></thead>
+              <tbody>
+                {filteredActivity.map(e => {
+                  const meta = ACTION_META[e.action] ?? { label: e.action, color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' }
+                  const day = e.day_index != null ? DAY_SHORT[e.day_index] : ''
+                  return (
+                    <tr key={e.id}>
+                      <td data-label="Händelse">
+                        <span className="act-pill" style={{ color: meta.color, background: meta.bg }}>{meta.label}</span>
+                      </td>
+                      <td data-label="Chaufför" style={{ fontWeight: 500 }}>{e.driver_name ?? '—'}</td>
+                      <td data-label="Pass" style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>
+                        {e.shift_date ? `${day} ${fmtActivityDate(e.shift_date)}` : '—'}
+                      </td>
+                      <td data-label="Av" style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{e.actor_name ?? '—'}</td>
+                      <td data-label="Tidpunkt" style={{ color: 'var(--text-tertiary)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtTimestamp(e.created_at)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : (
+      <>
       <div className="export-card">
         <div className="export-row">
           <div className="field">
@@ -312,6 +439,8 @@ export function ExportView() {
           </table>
         )}
       </div>
+      </>
+      )}
 
       <Toast message={toast.msg} type={toast.type} onDismiss={clearToast} />
     </>

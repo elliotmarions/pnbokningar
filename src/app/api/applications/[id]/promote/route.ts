@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { applicationRepo, getDb } from '@/lib/db'
+import { applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
@@ -42,6 +42,14 @@ export async function POST(
       date: info.shift_date,
       startTime: start,
       endTime: end,
+    })
+    logActivityAsync({
+      action: 'booked',
+      actorName: session.user.name ?? null,
+      driverName: info.user_name,
+      shiftDate: info.shift_date,
+      dayIndex: info.shift_day_index,
+      detail: 'Uppflyttad från reserv',
     })
   }
 

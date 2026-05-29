@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { approvalRepo, applicationRepo, getDb } from '@/lib/db'
+import { approvalRepo, applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, dayLabelFull, formatSwedishDate } from '@/lib/weeks'
@@ -57,6 +57,14 @@ export async function DELETE(
         date: info.date,
         startTime: start,
         endTime: end,
+      })
+      logActivityAsync({
+        action: 'cancelled',
+        actorName: session.user.name ?? null,
+        driverName: info.user_name,
+        shiftDate: info.date,
+        dayIndex: info.day_index,
+        detail: reason,
       })
     }
   }

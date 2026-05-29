@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { approvalRepo, applicationRepo, getDb } from '@/lib/db'
+import { approvalRepo, applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { verifyIntegrationKey } from '@/lib/integration'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate } from '@/lib/weeks'
@@ -29,11 +29,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch { /* body optional */ }
 
   const sql = getDb()
-  const [info] = await sql<{ user_id: string; day_index: number; date: string; was_approved: number }[]>`
-    SELECT a.user_id, s.day_index, s.date,
+  const [info] = await sql<{ user_id: string; day_index: number; date: string; user_name: string; was_approved: number }[]>`
+    SELECT a.user_id, s.day_index, s.date, u.name AS user_name,
            CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS was_approved
     FROM applications a
     JOIN shifts s ON s.id = a.shift_id
+    JOIN users u ON u.id = a.user_id
     LEFT JOIN approvals ap ON ap.application_id = a.id
     WHERE a.id = ${appId}
   `
@@ -52,6 +53,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     body: `Ditt godkända pass ${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)} har avbokats.`,
     url: '/',
     tag: `withdraw-${appId}`,
+  })
+
+  logActivityAsync({
+    action: 'cancelled',
+    actorName: 'Partnersystem',
+    driverName: info.user_name,
+    shiftDate: info.date,
+    dayIndex: info.day_index,
+    detail: reason ?? 'Avbokad via integration',
   })
 
   return NextResponse.json({ ok: true, bookingId: appId })
