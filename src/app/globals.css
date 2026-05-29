@@ -1081,14 +1081,14 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Locked day (red day / eve / custom-closed) — subtle dashed look so it's
    clearly a closed day, not a manually-deselected one. Kept discreet. */
 .lt-chip.locked {
-  background: rgba(245, 158, 11, 0.05);
-  border: 1px dashed rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.025);
+  border: 1px dashed rgba(245, 158, 11, 0.18);
   gap: 1px;
 }
-.lt-chip.locked .lt-chip-n { font-size: 12px; color: rgba(245, 158, 11, 0.7); }
+.lt-chip.locked .lt-chip-n { font-size: 12px; color: rgba(245, 158, 11, 0.5); }
 .lt-chip-closed {
   font-size: 7.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.2px; color: rgba(245, 158, 11, 0.65); line-height: 1;
+  letter-spacing: 0.2px; color: rgba(245, 158, 11, 0.45); line-height: 1;
 }
 
 /* ===== Skeleton loader ===== */
