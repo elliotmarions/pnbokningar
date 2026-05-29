@@ -1070,7 +1070,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   position: absolute; top: 2px; left: 0; right: 0;
   text-align: center; font-size: 6px; font-weight: 700;
   letter-spacing: 0.5px; text-transform: uppercase; line-height: 1;
-  color: #F59E0B; pointer-events: none;
+  color: #000; pointer-events: none;
 }
 .lt-chip:hover:not(:disabled) { filter: brightness(1.15); }
 .lt-chip:disabled { opacity: 0.5; cursor: not-allowed; }
