@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, getDb } from '@/lib/db'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { sendPushToUserAsync } from '@/lib/push'
+import { sendBookingEventAsync } from '@/lib/integration'
 
 export async function POST(
   _req: NextRequest,
@@ -25,7 +26,7 @@ export async function POST(
 
   const info = await applicationRepo.promote(appId, adminId)
 
-  // Push notification (fire-and-forget)
+  // Push notification + partner webhook (fire-and-forget)
   if (info) {
     const { start, end } = shiftHours(info.shift_day_index)
     sendPushToUserAsync(info.user_id, {
@@ -33,6 +34,14 @@ export async function POST(
       body: `${dayLabelFull(info.shift_day_index)} ${formatSwedishDate(info.shift_date)}, ${start}–${end}`,
       url: '/',
       tag: `promote-${appId}`,
+    })
+    sendBookingEventAsync({
+      event: 'booking.confirmed',
+      bookingId: appId,
+      driverName: info.user_name,
+      date: info.shift_date,
+      startTime: start,
+      endTime: end,
     })
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, approvalRepo, getDb } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
+import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     WHERE a.id = ${appId}
   `
 
-  // Push notification (fire-and-forget)
+  // Push notification + partner webhook (fire-and-forget)
   if (info) {
     const { start, end } = shiftHours(info.day_index)
     sendPushToUserAsync(userId, {
@@ -55,6 +56,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       body: `${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)}, ${start}–${end}`,
       url: '/',
       tag: `book-${appId}`,
+    })
+    sendBookingEventAsync({
+      event: 'booking.confirmed',
+      bookingId: appId,
+      driverName: info.user_name,
+      date: info.date,
+      startTime: start,
+      endTime: end,
     })
   }
 

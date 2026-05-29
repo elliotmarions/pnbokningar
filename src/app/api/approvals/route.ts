@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { approvalRepo, getDb } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
+import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { int, fieldError } from '@/lib/validate'
 
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   const approval = await approvalRepo.approve(applicationId, adminId)
 
-  // Push notification (fire-and-forget)
+  // Push notification + partner webhook (fire-and-forget)
   {
     const { start, end } = shiftHours(app.day_index)
     sendPushToUserAsync(app.user_id, {
@@ -41,6 +42,14 @@ export async function POST(req: NextRequest) {
       body: `${dayLabelFull(app.day_index)} ${formatSwedishDate(app.date)}, ${start}–${end}`,
       url: '/',
       tag: `approval-${applicationId}`,
+    })
+    sendBookingEventAsync({
+      event: 'booking.confirmed',
+      bookingId: applicationId,
+      driverName: app.user_name,
+      date: app.date,
+      startTime: start,
+      endTime: end,
     })
   }
 
