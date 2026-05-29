@@ -145,7 +145,7 @@ export function DriversTable() {
 
   const renderRows = (list: Driver[]) => list.map(d => (
     <tr key={d.id}>
-      <td>
+      <td data-label="Namn">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="avatar sm">{initials(d.name)}</div>
           <span style={{ fontWeight: 500 }}>{d.name}</span>
@@ -159,8 +159,8 @@ export function DriversTable() {
           )}
         </div>
       </td>
-      <td style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{d.email ?? '—'}</td>
-      <td>
+      <td data-label="E-post" style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{d.email ?? '—'}</td>
+      <td data-label="Telefon">
         {editId === d.id ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input
@@ -185,13 +185,13 @@ export function DriversTable() {
           </span>
         )}
       </td>
-      <td>
+      <td data-label="Roll">
         <span className={`badge ${d.role === 'admin' ? 'b-confirmed' : 'b-closed'}`}>
           <span className="pip" />{d.role === 'admin' ? 'Trafikledare' : 'Chaufför'}
         </span>
       </td>
-      <td>
-        <div style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
+      <td data-label="">
+        <div className="drivers-row-actions" style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
           <button className="btn btn-sm" onClick={() => toggleRole(d)}>
             {d.role === 'admin' ? 'Ta bort admin' : 'Gör till admin'}
           </button>
@@ -288,7 +288,7 @@ export function DriversTable() {
         </div>
       ) : (
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl drivers-tbl">
             <thead>
               <tr>
                 <th>Namn</th>

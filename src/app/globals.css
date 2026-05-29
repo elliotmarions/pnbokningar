@@ -272,6 +272,57 @@ a { color: inherit; text-decoration: none; }
   /* The interest/applicant side panel must sit above the bottom bar */
   .side-panel { width: 100vw; z-index: 50; }
   .side-panel-overlay { z-index: 49; }
+
+  /* Personal: header stacks, hint text hidden (no room on phones) */
+  .drivers-top { flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 14px; }
+  .drivers-top > div { display: none; }
+  /* Filter bar: full-width search, chips wrap */
+  .drivers-filter { flex-direction: column; align-items: stretch; gap: 10px; }
+  .drivers-search { width: 100%; }
+  .filter-chips { flex-wrap: wrap; }
+
+  /* Personal table → stacked cards instead of a wide horizontal-scroll table */
+  .drivers-tbl { min-width: 0; width: 100%; }
+  .drivers-tbl thead { display: none; }
+  .drivers-tbl tbody, .drivers-tbl tr, .drivers-tbl td { display: block; width: 100%; }
+  .drivers-tbl tr {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 10px; background: var(--bg-card);
+  }
+  /* Group separator rows ("Trafikledare" / "Chaufförer") stay plain */
+  .drivers-tbl tr:has(.list-group-h) {
+    border: none; background: none; padding: 0; margin: 8px 0 2px;
+  }
+  .drivers-tbl td {
+    border: none; padding: 4px 0;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  /* Label each value with its column name (from data-label) */
+  .drivers-tbl td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; color: var(--text-tertiary); flex: 0 0 auto;
+  }
+  .drivers-tbl td[data-label="Namn"] { padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .drivers-tbl td[data-label="Namn"]::before { display: none; }
+  .drivers-tbl td[data-label="E-post"] { font-size: 12px; }
+  /* Action buttons go side-by-side, full width */
+  .drivers-row-actions { flex-direction: row !important; width: 100%; }
+  .drivers-row-actions .btn { flex: 1; }
+  .drivers-tbl td[data-label=""] { padding-top: 8px; }
+
+  /* Statistik / export controls: stack and go full-width */
+  .export-row { flex-direction: column; align-items: stretch; }
+  .field { min-width: 0; width: 100%; }
+  .export-actions { margin-left: 0; width: 100%; }
+  .export-actions .btn { flex: 1; }
+  /* Section headers (Förhandsvisning / Avbokningshistorik) stack their controls */
+  .tbl-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tbl-head > div:last-child { flex-wrap: wrap; }
+  .tbl-head input[type="text"] { width: 100%; box-sizing: border-box; }
+
+  /* Section titles a touch smaller */
+  .cfg-top h2, .export-top h2 { font-size: 18px; }
 }
 
 /* ===== Buttons ===== */
