@@ -271,6 +271,28 @@ async function migrate() {
   } catch (err) {
     console.error('[migrate] long-term excluded-date cleanup failed (non-fatal):', err)
   }
+
+  // One-time backfill: seed the activity log with historical bookings from the
+  // approvals table (which carries the real approval timestamp + actor). Past
+  // cancellations/rejections can't be reconstructed — they never stored a
+  // timestamp before the log existed — so only bookings are backfilled.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1003`
+    if (!done) {
+      await sql`
+        INSERT INTO activity_log (action, actor_name, driver_name, shift_date, day_index, detail, created_at)
+        SELECT 'booked', admin.name, u.name, s.date, s.day_index, 'Historik', ap.approved_at
+        FROM approvals ap
+        JOIN applications a ON a.id = ap.application_id
+        JOIN shifts s ON s.id = a.shift_id
+        JOIN users u ON u.id = a.user_id
+        LEFT JOIN users admin ON admin.id = ap.approved_by
+      `
+      await sql`INSERT INTO schema_migrations (version) VALUES (1003) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] activity log backfill failed (non-fatal):', err)
+  }
 }
 
 // --------------- Users ---------------
