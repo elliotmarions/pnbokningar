@@ -270,6 +270,9 @@ export function LongTermBookings() {
           {bookings.map(b => {
             const excluded: string[] = JSON.parse(b.excluded_dates)
             const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
+            // First visible day in the whole range — used to label the start
+            // month even when the booking doesn't begin on the 1st.
+            const firstDate = groups[0]?.days[0]?.date
             const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
             const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
             const isExpanded = expandedIds.has(b.id)
@@ -317,6 +320,12 @@ export function LongTermBookings() {
                           const isExcluded = excluded.includes(d.date)
                           const isToggling = togglingDate === `${b.id}:${d.date}`
                           const isPast = d.date < today
+                          // Show a discreet month marker on the 1st of each
+                          // month and on the range's very first day.
+                          const showMonth = d.n === 1 || d.date === firstDate
+                          const monthTag = showMonth
+                            ? <span className="lt-chip-month">{MONTHS[new Date(d.date + 'T12:00:00').getMonth()]}</span>
+                            : null
                           // Passed day that was booked → show red, not editable.
                           if (isPast && !d.locked && !isExcluded) {
                             return (
@@ -326,6 +335,7 @@ export function LongTermBookings() {
                                 style={{ cursor: 'default' }}
                                 title="Datumet har passerat"
                               >
+                                {monthTag}
                                 <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
                                 <span className="lt-chip-n">{d.n}</span>
                               </div>
@@ -339,6 +349,7 @@ export function LongTermBookings() {
                                 style={{ opacity: 0.4, cursor: 'not-allowed' }}
                                 title="Stängd dag – kan ej bokas"
                               >
+                                {monthTag}
                                 <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
                                 <span className="lt-chip-n">{d.n}</span>
                               </div>
@@ -352,6 +363,7 @@ export function LongTermBookings() {
                               disabled={isToggling}
                               title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
                             >
+                              {monthTag}
                               <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
                               <span className="lt-chip-n">{d.n}</span>
                             </button>
