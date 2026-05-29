@@ -242,17 +242,23 @@ export function LongTermBookings() {
     } finally { setTogglingDate(null) }
   }
 
-  const lockedDates = useMemo(() => {
-    const set = new Set<string>()
-    const customSet = new Set(customClosed.map(d => d.date))
-    // Build holiday maps for nearby years
+  // date → why it's locked, so a closed day clearly shows its reason instead
+  // of looking identical to a manually-deselected day.
+  const lockedInfo = useMemo(() => {
+    const map = new Map<string, { short: string; full: string }>()
     const thisYear = new Date().getFullYear()
     for (let y = thisYear - 1; y <= thisYear + 3; y++) {
-      for (const [date] of getHolidayMap(y)) set.add(date)
+      for (const [date, info] of getHolidayMap(y)) {
+        const short = info.type === 'eve' ? 'Afton' : 'Röd dag'
+        if (!map.has(date)) map.set(date, { short, full: info.name })
+      }
     }
-    for (const d of customSet) set.add(d)
-    return set
+    // Custom closed days override holiday labels (admin-defined reason).
+    for (const c of customClosed) map.set(c.date, { short: 'Stängt', full: c.reason })
+    return map
   }, [customClosed])
+
+  const lockedDates = useMemo(() => new Set(lockedInfo.keys()), [lockedInfo])
 
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -348,15 +354,16 @@ export function LongTermBookings() {
                             )
                           }
                           if (d.locked) {
+                            const info = lockedInfo.get(d.date)
                             return (
                               <div
                                 key={d.date}
-                                className="lt-chip excluded"
-                                style={{ opacity: 0.4, cursor: 'not-allowed' }}
-                                title="Stängd dag – kan ej bokas"
+                                className="lt-chip locked"
+                                style={{ cursor: 'not-allowed' }}
+                                title={info ? `${info.short} – ${info.full}` : 'Stängd dag – kan ej bokas'}
                               >
-                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
                                 <span className="lt-chip-n">{d.n}</span>
+                                <span className="lt-chip-closed">{info?.short ?? 'Stängt'}</span>
                               </div>
                             )
                           }
