@@ -249,7 +249,7 @@ export function LongTermBookings() {
     const thisYear = new Date().getFullYear()
     for (let y = thisYear - 1; y <= thisYear + 3; y++) {
       for (const [date, info] of getHolidayMap(y)) {
-        const short = info.type === 'eve' ? 'Afton' : 'Röd dag'
+        const short = info.type === 'eve' ? 'Afton' : info.type === 'closed' ? 'Stängt' : 'Röd dag'
         if (!map.has(date)) map.set(date, { short, full: info.name })
       }
     }
