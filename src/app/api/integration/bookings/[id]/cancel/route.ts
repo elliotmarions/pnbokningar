@@ -43,8 +43,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await approvalRepo.unapprove(appId)
-  // withdrawn_by left null — the cancellation came from the partner system, not an admin.
-  await applicationRepo.markWithdrawn(appId, reason ?? 'Avbokad via integration', null)
+  // withdrawn_by left undefined — the cancellation came from the partner system, not an admin.
+  await applicationRepo.markWithdrawn(appId, reason ?? 'Avbokad via integration', undefined)
 
   // Tell the driver their shift was cancelled (same as an admin cancel).
   sendPushToUserAsync(info.user_id, {
