@@ -23,7 +23,8 @@ const MONTHS = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov
 
 // One hue per month so consecutive months read as distinct colour tints on
 // the day chips. Subtle (low-alpha fill) to stay discreet on the dark theme.
-const MONTH_HUES = [210, 190, 170, 150, 90, 215, 265, 320, 40, 25, 0, 235]
+// Note: November avoids red (hue ~0) so it doesn't read like a "passed day".
+const MONTH_HUES = [210, 190, 170, 150, 90, 215, 265, 320, 40, 25, 120, 235]
 function monthTint(monthIdx: number) {
   const h = MONTH_HUES[monthIdx] ?? 215
   return {
