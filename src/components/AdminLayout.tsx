@@ -2,7 +2,7 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useUser, useSignOut } from '@/lib/supabase/use-user'
-import { Home, Calendar, Users, BarChart, Briefcase, LogOut, Sun } from './Icons'
+import { Home, Calendar, Users, BarChart, Briefcase, LogOut, Sun, List } from './Icons'
 import { CurrentWeekBadge } from './CurrentWeekBadge'
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { href: '/admin/calendar',   label: 'Kalender',    icon: Sun },
   { href: '/admin/drivers',    label: 'Personal',    icon: Users },
   { href: '/admin/export',     label: 'Statistik',   icon: BarChart },
+  { href: '/admin/log',        label: 'Logg',        icon: List },
 ]
 
 function initials(name?: string | null) {
