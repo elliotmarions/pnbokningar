@@ -1057,8 +1057,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lt-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .lt-chip {
   display: flex; flex-direction: column; align-items: center;
-  padding: 5px 8px; border-radius: 6px; border: 1px solid transparent;
-  cursor: pointer; transition: all var(--t); min-width: 38px;
+  padding: 5px 0; border-radius: 6px; border: 1px solid transparent;
+  cursor: pointer; transition: all var(--t);
+  width: 42px; flex: 0 0 42px;
   background: var(--primary-soft); border-color: var(--primary-border);
 }
 .lt-chip:hover:not(:disabled) { filter: brightness(1.15); }
