@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "seed": "tsx scripts/seed.ts",
-    "gen-vapid": "node scripts/gen-vapid.mjs"
+    "gen-vapid": "node scripts/gen-vapid.mjs",
+    "loadtest": "tsx scripts/loadtest.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
