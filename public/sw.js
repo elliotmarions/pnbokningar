@@ -1,57 +1,30 @@
-// Service worker for Web Push notifications + static-asset caching.
-// Activated automatically when registered from the client.
-
-const STATIC_CACHE = 'pn-static-v1'
+// Service worker for Web Push notifications.
+//
+// NOTE: asset caching was intentionally removed. A cache-first strategy could
+// serve a stale or broken bundle from a previous deploy and leave the iOS
+// standalone PWA stuck on a blank white screen. Push notifications need a
+// service worker but no caching, so every request now goes straight to the
+// network and the white-screen risk is gone.
 
 self.addEventListener('install', () => {
-  // Take over immediately so first-time subscribers don't need a reload.
+  // Activate the new SW immediately so the fix lands on next launch.
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // Drop old caches from previous SW versions.
+      // Delete ALL caches left by older SW versions — the old cache-first
+      // asset cache is the likely cause of the white screen.
       const keys = await caches.keys()
-      await Promise.all(keys.filter(k => k !== STATIC_CACHE).map(k => caches.delete(k)))
+      await Promise.all(keys.map((k) => caches.delete(k)))
       await self.clients.claim()
     })()
   )
 })
 
-// Speed up PWA launches: serve content-hashed static assets from cache first
-// (they're immutable, so this is always safe), and refresh the cache in the
-// background. HTML navigations and API calls always go to the network so new
-// deploys and live data are never stale.
-self.addEventListener('fetch', (event) => {
-  const req = event.request
-  if (req.method !== 'GET') return
-
-  const url = new URL(req.url)
-  if (url.origin !== self.location.origin) return
-
-  const isStaticAsset =
-    url.pathname.startsWith('/_next/static/') ||
-    url.pathname === '/pn-logo.png' ||
-    url.pathname === '/manifest.json' ||
-    /\.(?:js|css|woff2?|png|jpg|jpeg|svg|ico)$/.test(url.pathname)
-
-  if (!isStaticAsset) return // navigations + API: let the network handle it
-
-  event.respondWith(
-    caches.open(STATIC_CACHE).then(async (cache) => {
-      const cached = await cache.match(req)
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.status === 200) cache.put(req, res.clone())
-          return res
-        })
-        .catch(() => cached) // offline → fall back to cache if we have it
-      // Cache-first: instant if cached, otherwise wait for network.
-      return cached || network
-    })
-  )
-})
+// No fetch handler — the browser fetches everything from the network as normal.
+// This eliminates any chance of the SW serving a broken cached asset.
 
 self.addEventListener('push', (event) => {
   let data = {}
