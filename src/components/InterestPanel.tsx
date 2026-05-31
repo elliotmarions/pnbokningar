@@ -59,6 +59,14 @@ function fmtTime(iso: string) {
   return iso.slice(11, 16)
 }
 
+// Full date + time for the hover tooltip on "anmäld HH:MM".
+function fmtAppliedFull(iso: string) {
+  const months = ['januari','februari','mars','april','maj','juni','juli','augusti','september','oktober','november','december']
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00')
+  if (isNaN(d.getTime())) return `Anmäld kl. ${fmtTime(iso)}`
+  return `Anmäld ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} kl. ${fmtTime(iso)}`
+}
+
 export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves'>('applications')
@@ -551,7 +559,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <div className="meta">
                       {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
                       <span className="sep">·</span>
-                      anmäld {fmtTime(a.applied_at)}
+                      <span title={fmtAppliedFull(a.applied_at)} style={{ cursor: 'help' }}>anmäld {fmtTime(a.applied_at)}</span>
                     </div>
                   </div>
                   <div className="actions">
@@ -613,7 +621,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     </div>
                     <div className="meta">
                       {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}<span className="sep">·</span></>}
-                      <span className="applied-time">anmäld {fmtTime(a.applied_at)}</span>
+                      <span className="applied-time" title={fmtAppliedFull(a.applied_at)} style={{ cursor: 'help' }}>anmäld {fmtTime(a.applied_at)}</span>
                     </div>
                   </div>
                   <div className="actions">
