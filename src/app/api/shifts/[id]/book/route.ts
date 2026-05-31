@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await sql`DELETE FROM approvals WHERE application_id = ${existing.id}`
     appId = existing.id
   } else {
-    const app = await applicationRepo.apply(shiftId, userId)
+    const app = await applicationRepo.apply(shiftId, userId, false, 'admin')
     appId = app.id
   }
 

@@ -20,11 +20,14 @@ export async function applyLongTermToShift(shiftId: number, date: string, adminI
     `
     let appId: number
     if (existing) {
+      // Re-activate an existing application but DON'T overwrite its source —
+      // if the driver booked this day themselves, it stays 'driver' so that
+      // excluding the day later still warns the admin.
       await sql`UPDATE applications SET rejected=0, withdrawn=0, rejection_reason=NULL, withdrawal_reason=NULL WHERE id=${existing.id}`
       await sql`DELETE FROM approvals WHERE application_id=${existing.id}`
       appId = existing.id
     } else {
-      const app = await applicationRepo.apply(shiftId, booking.user_id)
+      const app = await applicationRepo.apply(shiftId, booking.user_id, false, 'long_term')
       appId = app.id
     }
     await approvalRepo.approve(appId, adminId)

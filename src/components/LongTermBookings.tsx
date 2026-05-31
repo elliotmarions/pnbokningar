@@ -105,6 +105,8 @@ export function LongTermBookings() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [togglingDate, setTogglingDate] = useState<string | null>(null) // "bookingId:date"
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  // Set when excluding a day would remove a booking the driver made themselves.
+  const [conflict, setConflict] = useState<{ bookingId: number; date: string; driverName: string } | null>(null)
 
   const toggleExpand = (id: number) => setExpandedIds(prev => {
     const next = new Set(prev)
@@ -202,7 +204,9 @@ export function LongTermBookings() {
     } finally { setDeletingId(null) }
   }
 
-  const handleToggleDate = async (bookingId: number, date: string) => {
+  const handleToggleDate = (bookingId: number, date: string) => doToggle(bookingId, date, false)
+
+  const doToggle = async (bookingId: number, date: string, force: boolean) => {
     const key = `${bookingId}:${date}`
     const booking = bookings.find(b => b.id === bookingId)
     if (!booking) return
@@ -224,14 +228,24 @@ export function LongTermBookings() {
       const res = await fetch(`/api/long-term/${bookingId}/toggle-date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date, force }),
       })
       if (!res.ok) throw new Error('toggle failed')
+      const data = await res.json() as { excluded?: string[]; warning?: string; driverName?: string }
+
+      // Excluding this day would remove a booking the driver made themselves —
+      // revert the optimistic change and ask the admin to confirm.
+      if (data.warning === 'HAS_OWN_BOOKING') {
+        setBookings(snapshot)
+        cache.set(LT_CACHE_KEY, snapshot)
+        setConflict({ bookingId, date, driverName: data.driverName ?? booking.user_name })
+        return
+      }
+
       // Reconcile with canonical excluded list from server.
-      const { excluded } = await res.json() as { excluded: string[] }
       setBookings(prev => {
         const next = prev.map(b =>
-          b.id === bookingId ? { ...b, excluded_dates: JSON.stringify(excluded) } : b
+          b.id === bookingId ? { ...b, excluded_dates: JSON.stringify(data.excluded ?? nextExcluded) } : b
         )
         cache.set(LT_CACHE_KEY, next)
         return next
@@ -389,6 +403,36 @@ export function LongTermBookings() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Conflict warning — excluding a day the driver booked themselves */}
+      {conflict && (
+        <div className="modal-backdrop" onClick={() => setConflict(null)}>
+          <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-title">Chauffören är redan inbokad</div>
+            <p className="modal-sub">
+              <strong>{conflict.driverName}</strong> är inbokad <strong>{fmt(conflict.date)}</strong> via
+              en egen anmälan (inte via den här långtidsbokningen). Tar du bort dagen försvinner även
+              den bokningen.
+              <br /><br />
+              Vill du ta bort hennes/hans bokning den dagen ändå?
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-sm btn-ghost" onClick={() => setConflict(null)}>Avbryt</button>
+              <button
+                className="btn btn-sm"
+                style={{ background: 'var(--red, #DC2626)', color: '#fff', fontWeight: 600 }}
+                onClick={() => {
+                  const c = conflict
+                  setConflict(null)
+                  doToggle(c.bookingId, c.date, true)
+                }}
+              >
+                Ta bort ändå
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
