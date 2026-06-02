@@ -301,7 +301,7 @@ export function LongTermBookings({ viewToggle }: { viewToggle?: React.ReactNode 
         <div className="empty-state">Inga långtidsbokningar ännu.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {bookings.map(b => {
+          {[...bookings].sort((a, b) => a.user_name.localeCompare(b.user_name, 'sv')).map(b => {
             const excluded: string[] = JSON.parse(b.excluded_dates)
             const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
             const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
