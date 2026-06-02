@@ -446,9 +446,11 @@ export function DriverHome() {
   // this week's count or appear here. We use shift_date (returned by
   // /api/applications/mine) and the dates of the viewed week to scope.
   const weekDateSet = new Set(weekData.days.map(d => d.date))
-  const confirmedThisWeekApps = applications.filter(a =>
-    a.approved && a.shift_date && weekDateSet.has(a.shift_date)
-  )
+  const confirmedThisWeekApps = applications
+    .filter(a => a.approved && a.shift_date && weekDateSet.has(a.shift_date))
+    // Chronological order — earliest date first (dates are 'YYYY-MM-DD', so a
+    // lexical sort is also chronological).
+    .sort((a, b) => (a.shift_date ?? '').localeCompare(b.shift_date ?? ''))
 
   if (isDesktop) {
     return (
