@@ -545,6 +545,14 @@ export function WeekConfig() {
 
   return (
     <>
+      <DriverScheduleFilter
+        drivers={driverList}
+        applicantsByShift={applicantsByShift}
+        shifts={shifts}
+        days={days}
+        onChange={handleHighlight}
+      />
+
       <div className="cfg-top">
         <div>
           <div className="eyebrow">SCHEMALÄGG</div>
@@ -578,14 +586,6 @@ export function WeekConfig() {
           </button>
         </div>
       </div>
-
-      <DriverScheduleFilter
-        drivers={driverList}
-        applicantsByShift={applicantsByShift}
-        shifts={shifts}
-        days={days}
-        onChange={handleHighlight}
-      />
 
       <div className="cfg-grid">
         {days.map(day => {

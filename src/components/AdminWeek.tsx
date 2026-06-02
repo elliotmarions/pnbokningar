@@ -259,6 +259,14 @@ export function AdminWeek() {
 
   return (
     <>
+      <DriverScheduleFilter
+        drivers={driverList}
+        applicantsByShift={applicantsByShift}
+        shifts={shifts}
+        days={days}
+        onChange={handleHighlight}
+      />
+
       <div className="week-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div className="week-nav">
@@ -277,14 +285,6 @@ export function AdminWeek() {
           </button>
         </div>
       </div>
-
-      <DriverScheduleFilter
-        drivers={driverList}
-        applicantsByShift={applicantsByShift}
-        shifts={shifts}
-        days={days}
-        onChange={handleHighlight}
-      />
 
       {loading && shifts.length === 0 ? (
         <div className="week-grid">
