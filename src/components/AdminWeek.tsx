@@ -261,17 +261,6 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
   return (
     <>
       <div className="ov-toolbar">
-        <DriverScheduleFilter
-          drivers={driverList}
-          applicantsByShift={applicantsByShift}
-          shifts={shifts}
-          days={days}
-          onChange={handleHighlight}
-        />
-        <ViewToggle value={view} onChange={onView} />
-      </div>
-
-      <div className="week-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div className="week-nav">
             <button className="arrow" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="svg-ico" /></button>
@@ -282,6 +271,17 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
             Tillsatta <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
           </div>
         </div>
+        <ViewToggle value={view} onChange={onView} />
+      </div>
+
+      <div className="week-header">
+        <DriverScheduleFilter
+          drivers={driverList}
+          applicantsByShift={applicantsByShift}
+          shifts={shifts}
+          days={days}
+          onChange={handleHighlight}
+        />
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-sm" onClick={handleExportPlanning}>
             <FileSpreadsheet className="svg-ico svg-ico-sm" />
