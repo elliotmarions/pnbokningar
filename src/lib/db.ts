@@ -87,6 +87,10 @@ async function migrate() {
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawn_by TEXT REFERENCES users(id)
   `
+  // Per-user calendar feed token (private .ics subscription URL). Generated
+  // lazily the first time a driver exports their schedule.
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token TEXT`
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_calendar_token ON users(calendar_token) WHERE calendar_token IS NOT NULL`
   await sql`CREATE INDEX IF NOT EXISTS idx_applications_withdrawn_by ON applications(withdrawn_by)`
   // Track how an application was created so excluding a long-term day can warn
   // when it would remove a booking the driver made independently.
@@ -359,6 +363,29 @@ export const userRepo = {
     await ensureMigrated()
     await sql`DELETE FROM users WHERE id = ${id}`
   },
+
+  // Return the user's calendar feed token, generating + storing one on first use.
+  async ensureCalendarToken(id: string): Promise<string> {
+    await ensureMigrated()
+    const [row] = await sql<{ calendar_token: string | null }[]>`SELECT calendar_token FROM users WHERE id = ${id}`
+    if (row?.calendar_token) return row.calendar_token
+    const token = randomToken()
+    await sql`UPDATE users SET calendar_token = ${token} WHERE id = ${id}`
+    return token
+  },
+
+  async getByCalendarToken(token: string): Promise<DbUser | undefined> {
+    await ensureMigrated()
+    const [user] = await sql<DbUser[]>`SELECT * FROM users WHERE calendar_token = ${token}`
+    return user
+  },
+}
+
+function randomToken(): string {
+  // 32 hex chars, URL-safe, unguessable.
+  const bytes = new Uint8Array(16)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // --------------- Shifts ---------------

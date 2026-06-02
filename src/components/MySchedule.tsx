@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useUser, useSignOut } from '@/lib/supabase/use-user'
-import { Clock, Home, Calendar, Settings, User, LogOut } from './Icons'
+import { Clock, Home, Calendar, Settings, User, LogOut, Download, Check } from './Icons'
 import { CurrentWeekBadge } from './CurrentWeekBadge'
 
 interface MineApp {
@@ -54,8 +54,38 @@ export function MySchedule() {
   const [isDesktop, setIsDesktop] = useState(false)
   const [apps, setApps] = useState<MineApp[] | null>(null)
   const [showPast, setShowPast] = useState(false)
+  const [calOpen, setCalOpen] = useState(false)
+  const [calToken, setCalToken] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const user = authUser ? { ...authUser, role } : null
+
+  // Fetch the per-user calendar token the first time the export panel opens.
+  const openCalendar = async () => {
+    setCalOpen(o => !o)
+    if (!calToken) {
+      try {
+        const res = await fetch('/api/calendar/token')
+        if (res.ok) { const d = await res.json(); setCalToken(d.token) }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // Build the feed URLs (only meaningful once we have the token + we're client-side).
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const host = typeof window !== 'undefined' ? window.location.host : ''
+  const feedPath = calToken ? `/api/calendar/${calToken}.ics` : ''
+  const httpsUrl = calToken ? `${origin}${feedPath}` : ''
+  const webcalUrl = calToken ? `webcal://${host}${feedPath}` : ''
+  const googleUrl = calToken ? `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcalUrl)}` : ''
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(httpsUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard blocked */ }
+  }
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 900px)')
@@ -107,6 +137,53 @@ export function MySchedule() {
 
   const scheduleBody = (
     <>
+      {/* Calendar export */}
+      <div className="cal-export">
+        <button className="btn btn-sm btn-ghost cal-export-btn" onClick={openCalendar}>
+          <Calendar className="svg-ico svg-ico-sm" />
+          Lägg till i kalender
+        </button>
+        {calOpen && (
+          <div className="cal-export-panel">
+            {!calToken ? (
+              <div className="cal-export-loading">Förbereder…</div>
+            ) : (
+              <>
+                <div className="cal-export-hint">Lägg till dina bokade pass i din kalender.</div>
+                <a className="cal-opt" href={webcalUrl}>
+                  <Calendar className="svg-ico svg-ico-sm" />
+                  <div>
+                    <div className="cal-opt-t">Apple Kalender</div>
+                    <div className="cal-opt-s">Prenumerera — uppdateras automatiskt</div>
+                  </div>
+                </a>
+                <a className="cal-opt" href={googleUrl} target="_blank" rel="noopener noreferrer">
+                  <Calendar className="svg-ico svg-ico-sm" />
+                  <div>
+                    <div className="cal-opt-t">Google Calendar</div>
+                    <div className="cal-opt-s">Prenumerera — uppdateras automatiskt</div>
+                  </div>
+                </a>
+                <a className="cal-opt" href={httpsUrl} download="mina-pass.ics">
+                  <Download className="svg-ico svg-ico-sm" />
+                  <div>
+                    <div className="cal-opt-t">Ladda ner (.ics)</div>
+                    <div className="cal-opt-s">Engångsfil — funkar i alla kalenderappar</div>
+                  </div>
+                </a>
+                <button className="cal-opt" onClick={copyLink}>
+                  {copied ? <Check className="svg-ico svg-ico-sm" /> : <Calendar className="svg-ico svg-ico-sm" />}
+                  <div>
+                    <div className="cal-opt-t">{copied ? 'Länk kopierad!' : 'Kopiera prenumerationslänk'}</div>
+                    <div className="cal-opt-s">Klistra in i valfri kalenderapp</div>
+                  </div>
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="sched-toggle">
         <button className={`sched-tab ${!showPast ? 'active' : ''}`} onClick={() => setShowPast(false)}>
           Kommande {upcoming.length > 0 && <span className="sched-count">{upcoming.length}</span>}
