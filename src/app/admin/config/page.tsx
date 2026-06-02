@@ -36,19 +36,24 @@ function PrefetchLongTerm() {
 export default function AdminConfigPage() {
   const [tab, setTab] = useState<Tab>('week')
 
+  // Rendered inside each view's header row (cfg-top / long-term header) so it
+  // sits on the same line as the week title instead of on its own top row.
+  const viewToggle = (
+    <div className="view-toggle">
+      <button className={tab === 'week'      ? 'active' : ''} onClick={() => setTab('week')}>Vecka</button>
+      <button className={tab === 'long-term' ? 'active' : ''} onClick={() => setTab('long-term')}>Långtid</button>
+    </div>
+  )
+
   return (
     <AdminLayout
       title="Schemalägg"
       sub={tab === 'week' ? 'Konfigurera platser och öppna dagar.' : 'Boka chaufförer för längre perioder, t.ex. sommarvikariat.'}
     >
       <PrefetchLongTerm />
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:18 }}>
-        <div className="view-toggle">
-          <button className={tab === 'week'      ? 'active' : ''} onClick={() => setTab('week')}>Vecka</button>
-          <button className={tab === 'long-term' ? 'active' : ''} onClick={() => setTab('long-term')}>Långtid</button>
-        </div>
-      </div>
-      {tab === 'week' ? <WeekConfig /> : <LongTermBookings />}
+      {tab === 'week'
+        ? <WeekConfig viewToggle={viewToggle} />
+        : <LongTermBookings viewToggle={viewToggle} />}
     </AdminLayout>
   )
 }

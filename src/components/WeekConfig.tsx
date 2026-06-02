@@ -32,7 +32,7 @@ function fmt(dateStr: string) {
   return `${d.getDate()} ${months[d.getMonth()]}`
 }
 
-export function WeekConfig() {
+export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
   const cache = useAdminCache()
   // isMounted: first-mount cache (see load() below).
   const isMounted = useRef(false)
@@ -551,6 +551,7 @@ export function WeekConfig() {
           <h2>Vecka {weekNumber} · {weekYear}</h2>
           <div className="helper">Öppna dagar och sätt antal platser inför kommande vecka.</div>
         </div>
+        {viewToggle}
       </div>
 
       <div className="ov-toolbar">

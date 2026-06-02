@@ -84,7 +84,7 @@ const LT_CACHE_KEY = 'long-term-bookings'
 const CC_CACHE_KEY = 'custom-closed'
 const USERS_CACHE_KEY = 'users'
 
-export function LongTermBookings() {
+export function LongTermBookings({ viewToggle }: { viewToggle?: React.ReactNode }) {
   const cache = useAdminCache()
   const [bookings, setBookings] = useState<Booking[]>(() => (cache.get(LT_CACHE_KEY) as Booking[]) ?? [])
   const [drivers, setDrivers] = useState<Driver[]>(() => {
@@ -283,16 +283,17 @@ export function LongTermBookings() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-        <div>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-tertiary)', fontWeight: 500, marginBottom: 4 }}>
-            {bookings.length} aktiva bokningar
-          </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, gap: 12 }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+          {bookings.length} aktiva bokningar
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-          <Plus className="svg-ico svg-ico-sm" />
-          Ny bokning
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {viewToggle}
+          <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+            <Plus className="svg-ico svg-ico-sm" />
+            Ny bokning
+          </button>
+        </div>
       </div>
 
       {/* Booking cards */}
