@@ -274,6 +274,17 @@ export function LongTermBookings({ viewToggle }: { viewToggle?: React.ReactNode 
 
   const lockedDates = useMemo(() => new Set(lockedInfo.keys()), [lockedInfo])
 
+  // Group bookings by driver so multiple periods for the same driver appear as one card.
+  const grouped = useMemo(() => {
+    const map = new Map<string, Booking[]>()
+    for (const b of bookings) {
+      if (!map.has(b.user_id)) map.set(b.user_id, [])
+      map.get(b.user_id)!.push(b)
+    }
+    for (const list of map.values()) list.sort((a, b) => a.from_date.localeCompare(b.from_date))
+    return [...map.entries()].sort(([, a], [, b]) => a[0].user_name.localeCompare(b[0].user_name, 'sv'))
+  }, [bookings])
+
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {[0,1,2].map(i => <div key={i} className="skel" style={{ height: 120, borderRadius: 8 }} />)}
@@ -296,110 +307,134 @@ export function LongTermBookings({ viewToggle }: { viewToggle?: React.ReactNode 
         </div>
       </div>
 
-      {/* Booking cards */}
-      {bookings.length === 0 ? (
+      {/* Booking cards — one per driver, with all their periods grouped */}
+      {grouped.length === 0 ? (
         <div className="empty-state">Inga långtidsbokningar ännu.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[...bookings].sort((a, b) => a.user_name.localeCompare(b.user_name, 'sv')).map(b => {
-            const excluded: string[] = JSON.parse(b.excluded_dates)
-            const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
-            const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
-            const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
-            const isExpanded = expandedIds.has(b.id)
+          {grouped.map(([userId, driverBookings]) => {
+            const driverName = driverBookings[0].user_name
+            const isExpanded = expandedIds.has(driverBookings[0].id)
+
+            // Compute totals across all periods for the summary line.
+            let totalDaysAll = 0
+            let activeDaysAll = 0
+            for (const b of driverBookings) {
+              const excluded: string[] = JSON.parse(b.excluded_dates)
+              const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
+              const t = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
+              totalDaysAll  += t
+              activeDaysAll += t - excluded.filter(d => !lockedDates.has(d)).length
+            }
+
             return (
-              <div key={b.id} className="lt-card">
-                {/* Card header — click to expand/collapse the day chips */}
+              <div key={userId} className="lt-card">
+                {/* Card header — click to expand/collapse */}
                 <div
                   className="lt-card-head"
-                  onClick={() => toggleExpand(b.id)}
+                  onClick={() => toggleExpand(driverBookings[0].id)}
                   style={{ cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ color: 'var(--text-tertiary)', fontSize: 12, width: 12, flex: '0 0 12px' }}>
                       {isExpanded ? '▾' : '▸'}
                     </span>
-                    <div className="avatar lg">{initials(b.user_name)}</div>
+                    <div className="avatar lg">{initials(driverName)}</div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>{b.user_name}</div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{driverName}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                        {fmt(b.from_date)} – {fmt(b.to_date)}
+                        {driverBookings.length > 1
+                          ? `${driverBookings.length} perioder`
+                          : `${fmt(driverBookings[0].from_date)} – ${fmt(driverBookings[0].to_date)}`}
                         <span style={{ marginLeft: 8, color: 'var(--text-tertiary)' }}>·</span>
-                        <span style={{ marginLeft: 8 }}>{activeDays} av {totalDays} dagar</span>
+                        <span style={{ marginLeft: 8 }}>{activeDaysAll} av {totalDaysAll} dagar</span>
                       </div>
-                      {b.notes && <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 3 }}>{b.notes}</div>}
                     </div>
                   </div>
-                  <button
-                    className="btn btn-sm btn-danger-ghost btn-icon"
-                    disabled={deletingId === b.id}
-                    onClick={(e) => { e.stopPropagation(); handleDelete(b.id) }}
-                    title="Ta bort bokning"
-                  >
-                    <Trash2 className="svg-ico svg-ico-sm" />
-                  </button>
                 </div>
 
-                {/* Day chips by week — only when expanded */}
+                {/* Expanded: show each period with its own chips + delete button */}
                 {isExpanded && (
-                <div className="lt-weeks">
-                  {groups.map(group => (
-                    <div key={group.wk} className="lt-week-row">
-                      <span className="lt-week-label">v{group.wk}</span>
-                      <div className="lt-chips">
-                        {group.days.map(d => {
-                          const isExcluded = excluded.includes(d.date)
-                          const isToggling = togglingDate === `${b.id}:${d.date}`
-                          const isPast = d.date < today
-                          // Per-month colour tint so it's clear which month
-                          // each day belongs to across a multi-month booking.
-                          const tint = monthTint(new Date(d.date + 'T12:00:00').getMonth())
-                          // Passed day that was booked → show red, not editable.
-                          if (isPast && !d.locked && !isExcluded) {
-                            return (
-                              <div
-                                key={d.date}
-                                className="lt-chip past"
-                                style={{ cursor: 'default' }}
-                                title="Datumet har passerat"
-                              >
-                                <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
-                                <span className="lt-chip-n">{d.n}</span>
-                              </div>
-                            )
-                          }
-                          if (d.locked) {
-                            const info = lockedInfo.get(d.date)
-                            return (
-                              <div
-                                key={d.date}
-                                className="lt-chip locked"
-                                style={{ cursor: 'not-allowed' }}
-                                title={info ? `${info.short} – ${info.full}` : 'Stängd dag – kan ej bokas'}
-                              >
-                                <span className="lt-chip-n">{d.n}</span>
-                                <span className="lt-chip-closed">{info?.short ?? 'Stängt'}</span>
-                              </div>
-                            )
-                          }
-                          return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 4 }}>
+                    {driverBookings.map((b, periodIdx) => {
+                      const excluded: string[] = JSON.parse(b.excluded_dates)
+                      const groups = buildWeekGroups(b.from_date, b.to_date, lockedDates)
+                      const totalDays  = groups.reduce((s, g) => s + g.days.filter(d => !d.locked).length, 0)
+                      const activeDays = totalDays - excluded.filter(d => !lockedDates.has(d)).length
+
+                      return (
+                        <div key={b.id}>
+                          {/* Period sub-header */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingLeft: 24 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                              {driverBookings.length > 1 && (
+                                <span style={{ color: 'var(--text-tertiary)', marginRight: 6 }}>Period {periodIdx + 1}:</span>
+                              )}
+                              {fmt(b.from_date)} – {fmt(b.to_date)}
+                              <span style={{ marginLeft: 8, color: 'var(--text-tertiary)' }}>·</span>
+                              <span style={{ marginLeft: 8 }}>{activeDays} av {totalDays} dagar</span>
+                              {b.notes && <span style={{ marginLeft: 8, color: 'var(--text-tertiary)', fontStyle: 'italic' }}>{b.notes}</span>}
+                            </div>
                             <button
-                              key={d.date}
-                              className={`lt-chip ${isExcluded ? 'excluded' : 'active'}`}
-                              style={isExcluded ? undefined : { background: tint.background, borderColor: tint.borderColor }}
-                              onClick={() => handleToggleDate(b.id, d.date)}
-                              disabled={isToggling}
-                              title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
+                              className="btn btn-sm btn-danger-ghost btn-icon"
+                              disabled={deletingId === b.id}
+                              onClick={(e) => { e.stopPropagation(); handleDelete(b.id) }}
+                              title="Ta bort period"
                             >
-                              <span className="lt-chip-day" style={isExcluded ? undefined : { color: tint.accent }}>{DAY_SHORT[d.dayIdx]}</span>
-                              <span className="lt-chip-n">{d.n}</span>
+                              <Trash2 className="svg-ico svg-ico-sm" />
                             </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                          </div>
+
+                          {/* Day chips by week */}
+                          <div className="lt-weeks">
+                            {groups.map(group => (
+                              <div key={group.wk} className="lt-week-row">
+                                <span className="lt-week-label">v{group.wk}</span>
+                                <div className="lt-chips">
+                                  {group.days.map(d => {
+                                    const isExcluded = excluded.includes(d.date)
+                                    const isToggling = togglingDate === `${b.id}:${d.date}`
+                                    const isPast = d.date < today
+                                    const tint = monthTint(new Date(d.date + 'T12:00:00').getMonth())
+                                    if (isPast && !d.locked && !isExcluded) {
+                                      return (
+                                        <div key={d.date} className="lt-chip past" style={{ cursor: 'default' }} title="Datumet har passerat">
+                                          <span className="lt-chip-day">{DAY_SHORT[d.dayIdx]}</span>
+                                          <span className="lt-chip-n">{d.n}</span>
+                                        </div>
+                                      )
+                                    }
+                                    if (d.locked) {
+                                      const info = lockedInfo.get(d.date)
+                                      return (
+                                        <div key={d.date} className="lt-chip locked" style={{ cursor: 'not-allowed' }} title={info ? `${info.short} – ${info.full}` : 'Stängd dag – kan ej bokas'}>
+                                          <span className="lt-chip-n">{d.n}</span>
+                                          <span className="lt-chip-closed">{info?.short ?? 'Stängt'}</span>
+                                        </div>
+                                      )
+                                    }
+                                    return (
+                                      <button
+                                        key={d.date}
+                                        className={`lt-chip ${isExcluded ? 'excluded' : 'active'}`}
+                                        style={isExcluded ? undefined : { background: tint.background, borderColor: tint.borderColor }}
+                                        onClick={() => handleToggleDate(b.id, d.date)}
+                                        disabled={isToggling}
+                                        title={isExcluded ? 'Klicka för att inkludera' : 'Klicka för att undanta'}
+                                      >
+                                        <span className="lt-chip-day" style={isExcluded ? undefined : { color: tint.accent }}>{DAY_SHORT[d.dayIdx]}</span>
+                                        <span className="lt-chip-n">{d.n}</span>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             )
