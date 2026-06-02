@@ -306,6 +306,25 @@ async function migrate() {
   } catch (err) {
     console.error('[migrate] activity log backfill failed (non-fatal):', err)
   }
+
+  // One-time backfill: seed the activity log with historical long-term bookings.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1004`
+    if (!done) {
+      await sql`
+        INSERT INTO activity_log (action, actor_name, driver_name, detail, created_at)
+        SELECT 'long_term_created', admin.name, u.name,
+               lt.from_date || ' – ' || lt.to_date,
+               lt.created_at
+        FROM long_term_bookings lt
+        JOIN users u ON u.id = lt.user_id
+        LEFT JOIN users admin ON admin.id = lt.created_by
+      `
+      await sql`INSERT INTO schema_migrations (version) VALUES (1004) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] long-term backfill failed (non-fatal):', err)
+  }
 }
 
 // --------------- Users ---------------
