@@ -15,9 +15,11 @@ interface ActivityEntry {
 const DAY_SHORT = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
 
 const ACTION_META: Record<string, { label: string; color: string; bg: string }> = {
-  booked:    { label: 'Bokad',   color: '#4ade80', bg: 'rgba(46,160,67,0.14)' },
-  cancelled: { label: 'Avbokad', color: '#F87171', bg: 'rgba(218,54,51,0.14)' },
-  rejected:  { label: 'Nekad',   color: '#F59E0B', bg: 'rgba(245,158,11,0.14)' },
+  booked:             { label: 'Bokad',         color: '#4ade80', bg: 'rgba(46,160,67,0.14)' },
+  cancelled:          { label: 'Avbokad',        color: '#F87171', bg: 'rgba(218,54,51,0.14)' },
+  rejected:           { label: 'Nekad',          color: '#F59E0B', bg: 'rgba(245,158,11,0.14)' },
+  long_term_created:  { label: 'Långtid skapad', color: '#60a5fa', bg: 'rgba(59,130,246,0.14)' },
+  long_term_deleted:  { label: 'Långtid borttagen', color: '#c084fc', bg: 'rgba(168,85,247,0.14)' },
 }
 
 function fmtActivityDate(dateStr: string | null) {
@@ -98,7 +100,7 @@ export function ActivityLog() {
                   </td>
                   <td data-label="Chaufför" style={{ fontWeight: 500 }}>{e.driver_name ?? '—'}</td>
                   <td data-label="Pass" style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>
-                    {e.shift_date ? `${day} ${fmtActivityDate(e.shift_date)}` : '—'}
+                    {e.shift_date ? `${day} ${fmtActivityDate(e.shift_date)}` : e.detail ?? '—'}
                   </td>
                   <td data-label="Av" style={{ color: 'var(--text-secondary)', fontSize: 12.5 }}>{e.actor_name ?? '—'}</td>
                   <td data-label="Tidpunkt" style={{ color: 'var(--text-tertiary)', fontSize: 12, whiteSpace: 'nowrap' }}>{fmtTimestamp(e.created_at)}</td>

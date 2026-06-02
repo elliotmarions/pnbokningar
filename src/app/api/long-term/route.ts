@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { longTermRepo, shiftRepo, getDb } from '@/lib/db'
+import { longTermRepo, shiftRepo, getDb, logActivityAsync } from '@/lib/db'
 import { applyLongTermToShift } from '@/lib/apply-long-term'
 import { weekInfoFor } from '@/lib/weeks'
 
@@ -23,6 +23,17 @@ export async function POST(req: NextRequest) {
   }
 
   const booking = await longTermRepo.create({ userId, fromDate, toDate, notes, createdBy: adminId })
+
+  // Log the creation — fetch driver name for the audit trail.
+  const sql2 = getDb()
+  const [driver] = await sql2<{ name: string; }[]>`SELECT name FROM users WHERE id = ${userId}`
+  const adminUser = await sql2<{ name: string }[]>`SELECT name FROM users WHERE id = ${adminId}`
+  logActivityAsync({
+    action: 'long_term_created',
+    actorName: adminUser[0]?.name ?? null,
+    driverName: driver?.name ?? null,
+    detail: `${fromDate} – ${toDate}${notes ? ` (${notes})` : ''}`,
+  })
 
   // Ensure all weeks in the range have shift rows, then apply long-term booking
   const from = new Date(fromDate + 'T00:00:00')
