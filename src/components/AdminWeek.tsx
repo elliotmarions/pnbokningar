@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet, Phone } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
+import { DriverScheduleFilter } from './DriverScheduleFilter'
 
 interface Shift {
   id: number
@@ -60,6 +61,24 @@ export function AdminWeek() {
   const [reservesMap, setReservesMap] = useState<Record<number, Driver[]>>({})
   const [pendingMap,  setPendingMap]  = useState<Record<number, Driver[]>>({})
   const [applicantsByShift, setApplicantsByShift] = useState<Record<number, unknown[]>>({})
+
+  // Driver search: list of drivers + the shift ids the selected driver works.
+  const [driverList, setDriverList] = useState<{ id: string; name: string }[]>([])
+  const [highlight, setHighlight] = useState<Set<number> | null>(null)
+  const handleHighlight = useCallback((s: Set<number> | null) => setHighlight(s), [])
+
+  // Load the driver list (SWR via the shared admin cache) for the search box.
+  useEffect(() => {
+    const fromCache = cache.get('users') as { id: string; name: string; role: string }[] | undefined
+    if (fromCache) setDriverList(fromCache.filter(u => u.role === 'driver').map(u => ({ id: u.id, name: u.name })))
+    fetch('/api/users')
+      .then(r => r.ok ? r.json() : [])
+      .then((u: { id: string; name: string; role: string }[]) => {
+        cache.set('users', u)
+        setDriverList(u.filter(x => x.role === 'driver').map(x => ({ id: x.id, name: x.name })))
+      })
+      .catch(() => {})
+  }, [cache])
 
   // Helper: derive ISO year+week from an offset (in weeks from today)
   const isoFromOffset = (offset: number) => {
@@ -259,6 +278,14 @@ export function AdminWeek() {
         </div>
       </div>
 
+      <DriverScheduleFilter
+        drivers={driverList}
+        applicantsByShift={applicantsByShift}
+        shifts={shifts}
+        days={days}
+        onChange={handleHighlight}
+      />
+
       {loading && shifts.length === 0 ? (
         <div className="week-grid">
           {[0,1,2,3,4,5].map(i => (
@@ -288,6 +315,8 @@ export function AdminWeek() {
             const badgeClass   = !shift.is_open ? 'b-closed' : isFull ? 'b-full' : 'b-open'
             const badgeLabel   = !shift.is_open ? 'Stängd' : isFull ? 'Fullbokad' : 'Öppen'
             const isExpanded = expandedIds.has(shift.id)
+            const isHit = highlight?.has(shift.id) ?? false
+            const isDim = highlight != null && !isHit
             const driversRaw = driversMap[shift.id]
             // Sort approved drivers alphabetically by first name for display.
             const drivers  = Array.isArray(driversRaw) ? [...driversRaw].sort(byFirstName) : driversRaw
@@ -298,7 +327,7 @@ export function AdminWeek() {
               <button
                 key={day.dayIndex}
                 type="button"
-                className={`wk-card ${!shift.is_open ? 'is-closed' : ''} ${isExpanded ? 'is-selected' : ''}`}
+                className={`wk-card ${!shift.is_open ? 'is-closed' : ''} ${isExpanded ? 'is-selected' : ''} ${isHit ? 'is-driver-hit' : ''} ${isDim ? 'is-driver-dim' : ''}`}
                 onClick={() => handleCardClick(shift.id)}
               >
                 {/* Static card info */}

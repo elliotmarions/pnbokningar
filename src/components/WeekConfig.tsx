@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Clock, Plus, Users, X } from './Icons'
 import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
+import { DriverScheduleFilter } from './DriverScheduleFilter'
 
 interface Shift {
   id: number
@@ -64,6 +65,23 @@ export function WeekConfig() {
   // Custom-closed days (sommarstängt, midsommar, jul etc) — keyed by date string
   const [customClosed, setCustomClosed] = useState<Record<string, { reason: string; color: string }>>({})
   const { toast, show: showToast, clear: clearToast } = useToast()
+
+  // Driver search: list of drivers + the shift ids the selected driver works.
+  const [driverList, setDriverList] = useState<{ id: string; name: string }[]>([])
+  const [highlight, setHighlight] = useState<Set<number> | null>(null)
+  const handleHighlight = useCallback((s: Set<number> | null) => setHighlight(s), [])
+
+  useEffect(() => {
+    const fromCache = cache.get('users') as { id: string; name: string; role: string }[] | undefined
+    if (fromCache) setDriverList(fromCache.filter(u => u.role === 'driver').map(u => ({ id: u.id, name: u.name })))
+    fetch('/api/users')
+      .then(r => r.ok ? r.json() : [])
+      .then((u: { id: string; name: string; role: string }[]) => {
+        cache.set('users', u)
+        setDriverList(u.filter(x => x.role === 'driver').map(x => ({ id: x.id, name: x.name })))
+      })
+      .catch(() => {})
+  }, [cache])
 
   const load = useCallback(async () => {
     const base = new Date()
@@ -561,6 +579,14 @@ export function WeekConfig() {
         </div>
       </div>
 
+      <DriverScheduleFilter
+        drivers={driverList}
+        applicantsByShift={applicantsByShift}
+        shifts={shifts}
+        days={days}
+        onChange={handleHighlight}
+      />
+
       <div className="cfg-grid">
         {days.map(day => {
           const shift = local.find(s => s.day_index === day.dayIndex)
@@ -568,11 +594,13 @@ export function WeekConfig() {
           const isOpen = !!shift.is_open
           const lock = getLockReason(day)
           const isLocked = lock !== null
+          const isHit = highlight?.has(shift.id) ?? false
+          const isDim = highlight != null && !isHit
 
           return (
             <div
               key={day.dayIndex}
-              className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'} ${isLocked ? 'is-locked' : ''}`}
+              className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'} ${isLocked ? 'is-locked' : ''} ${isHit ? 'is-driver-hit' : ''} ${isDim ? 'is-driver-dim' : ''}`}
             >
               <div className="top">
                 <div>

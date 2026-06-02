@@ -1382,3 +1382,54 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   cursor: pointer;
 }
 .push-nudge-close:hover { background: rgba(255,255,255,0.06); color: var(--text-primary, #e6edf3); }
+
+/* ===== Driver schedule search (Översikt + Schemalägg) ===== */
+.driver-filter { margin-bottom: 18px; }
+.driver-filter-input {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  max-width: 340px;
+  padding: 8px 12px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text-tertiary);
+}
+.driver-filter-input input {
+  flex: 1; min-width: 0;
+  background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-size: 13px; font-family: inherit;
+}
+.driver-filter-input input::placeholder { color: var(--text-tertiary); }
+.driver-filter-clear {
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-tertiary); padding: 0;
+}
+.driver-filter-clear:hover { color: var(--text-primary); }
+.driver-filter-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; max-height: 240px; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.driver-filter-row {
+  display: block; width: 100%; text-align: left;
+  padding: 9px 12px; background: transparent; border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary); font-size: 13px; cursor: pointer;
+}
+.driver-filter-row:last-child { border-bottom: none; }
+.driver-filter-row:hover { background: var(--primary-soft); }
+.driver-filter-summary {
+  margin-top: 10px; font-size: 13px; color: var(--text-secondary);
+  padding: 8px 12px; border-radius: 8px;
+  background: var(--primary-soft); border: 1px solid var(--primary-border);
+}
+.driver-filter-summary strong { color: var(--text-primary); }
+
+/* Highlight / dim day cards when a driver is selected in the search. */
+.wk-card.is-driver-hit, .cfg-card.is-driver-hit {
+  outline: 2px solid var(--primary); outline-offset: 2px;
+}
+.wk-card.is-driver-dim, .cfg-card.is-driver-dim {
+  opacity: 0.4; transition: opacity var(--t);
+}
