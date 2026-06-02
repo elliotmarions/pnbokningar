@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Phone } from './Icons'
 import { useAdminCache } from './AdminCacheProvider'
 import { getHolidayMap, HolidayInfo } from '../lib/holidays'
+import { ViewToggle, type OverviewView } from './ViewToggle'
 
 interface MonthShift {
   id: number
@@ -81,7 +82,7 @@ function monthTo(year: number, month: number): string {
   return `${year}-${String(month).padStart(2,'0')}-${String(last).padStart(2,'0')}`
 }
 
-export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
+export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval'; view: OverviewView; onView: (v: OverviewView) => void }) {
   const now = new Date()
   const todayStr = fmt(now)
 
@@ -171,6 +172,10 @@ export function AdminMonth({ mode }: { mode: 'month' | 'interval' }) {
 
   return (
     <div>
+      <div className="ov-toolbar" style={{ justifyContent: 'flex-end' }}>
+        <ViewToggle value={view} onChange={onView} />
+      </div>
+
       {/* Header */}
       <div className="week-header">
         <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap', flex:1 }}>

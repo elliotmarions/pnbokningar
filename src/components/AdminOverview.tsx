@@ -2,24 +2,14 @@
 import { useState } from 'react'
 import { AdminWeek } from './AdminWeek'
 import { AdminMonth } from './AdminMonth'
-
-type View = 'week' | 'month' | 'interval'
+import type { OverviewView } from './ViewToggle'
 
 export function AdminOverview() {
-  const [view, setView] = useState<View>('week')
+  const [view, setView] = useState<OverviewView>('week')
 
-  return (
-    <>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:18 }}>
-        <div className="view-toggle">
-          <button className={view === 'week'     ? 'active' : ''} onClick={() => setView('week')}>Vecka</button>
-          <button className={view === 'month'    ? 'active' : ''} onClick={() => setView('month')}>Månad</button>
-          <button className={view === 'interval' ? 'active' : ''} onClick={() => setView('interval')}>Intervall</button>
-        </div>
-      </div>
-      {view === 'week'
-        ? <AdminWeek />
-        : <AdminMonth mode={view === 'interval' ? 'interval' : 'month'} />}
-    </>
-  )
+  // The view toggle is rendered inside each view (on the same row as the driver
+  // search) so they share one toolbar line instead of stacking.
+  return view === 'week'
+    ? <AdminWeek view={view} onView={setView} />
+    : <AdminMonth mode={view === 'interval' ? 'interval' : 'month'} view={view} onView={setView} />
 }

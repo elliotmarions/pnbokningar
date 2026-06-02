@@ -4,6 +4,7 @@ import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet, Phone } from './Icon
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 import { DriverScheduleFilter } from './DriverScheduleFilter'
+import { ViewToggle, type OverviewView } from './ViewToggle'
 
 interface Shift {
   id: number
@@ -45,7 +46,7 @@ function byFirstName(a: Driver, b: Driver) {
   return a.user_name.localeCompare(b.user_name, 'sv')
 }
 
-export function AdminWeek() {
+export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: OverviewView) => void }) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
   const [weekNumber, setWeekNumber] = useState(0)
@@ -259,13 +260,16 @@ export function AdminWeek() {
 
   return (
     <>
-      <DriverScheduleFilter
-        drivers={driverList}
-        applicantsByShift={applicantsByShift}
-        shifts={shifts}
-        days={days}
-        onChange={handleHighlight}
-      />
+      <div className="ov-toolbar">
+        <DriverScheduleFilter
+          drivers={driverList}
+          applicantsByShift={applicantsByShift}
+          shifts={shifts}
+          days={days}
+          onChange={handleHighlight}
+        />
+        <ViewToggle value={view} onChange={onView} />
+      </div>
 
       <div className="week-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

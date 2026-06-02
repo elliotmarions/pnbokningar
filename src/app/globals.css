@@ -1384,6 +1384,12 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .push-nudge-close:hover { background: rgba(255,255,255,0.06); color: var(--text-primary, #e6edf3); }
 
 /* ===== Driver schedule search (Översikt + Schemalägg) ===== */
+/* Toolbar row: driver search on the left, view toggle on the right. */
+.ov-toolbar {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.ov-toolbar .driver-filter { margin-bottom: 0; flex: 1; min-width: 240px; }
 .driver-filter { margin-bottom: 18px; }
 .driver-filter-input {
   position: relative;
