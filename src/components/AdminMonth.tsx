@@ -249,7 +249,6 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                   const isClickable = isOpen || (showClosed && !!shift && shift.approved > 0)
                   const isExpanded  = shift ? expandedIds.has(shift.id) : false
                   const drivers     = shift ? driversMap[shift.id] : undefined
-                  const isFull      = isOpen ? shift!.approved >= shift!.slots : false
                   const holiday     = holidayMap.get(d.date)
                   const customDay   = customClosedMap[d.date]
 
@@ -289,8 +288,8 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                         {showClosed ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : shift?.is_open === 1 ? (
-                          <span className={`month-cell-count ${isFull ? 'full' : ''}`}>
-                            {shift.approved}/{shift.slots}
+                          <span className="month-cell-count">
+                            {shift.approved}
                           </span>
                         ) : null}
                       </div>

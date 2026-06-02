@@ -55,12 +55,12 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
   const [shifts, setShifts] = useState<Shift[]>([])
   const [days, setDays] = useState<DayInfo[]>([])
   const [local, setLocal] = useState<Shift[]>([])
-  const [draftSlots, setDraftSlots] = useState<Record<number, string>>({})
   const [counts, setCounts] = useState<Record<number, { approved: number; pending: number; reserves: number }>>({})
   const [applicantsByShift, setApplicantsByShift] = useState<Record<number, unknown[]>>({})
   const [openShiftId, setOpenShiftId] = useState<number | null>(null)
   const [openWeekDialog, setOpenWeekDialog] = useState(false)
-  const [openWeekSlots, setOpenWeekSlots] = useState<Record<number, string>>({})
+  // Shift ids that will be opened by the "Öppna vecka" dialog.
+  const [openWeekIds, setOpenWeekIds] = useState<number[]>([])
   const [closeWeekDialog, setCloseWeekDialog] = useState(false)
   // Custom-closed days (sommarstängt, midsommar, jul etc) — keyed by date string
   const [customClosed, setCustomClosed] = useState<Record<string, { reason: string; color: string }>>({})
@@ -97,9 +97,6 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
       setShifts(data.shifts)
       setDays(data.days)
       setLocal(data.shifts.map((s: Shift) => ({ ...s })))
-      const drafts: Record<number, string> = {}
-      data.shifts.forEach((s: Shift) => { drafts[s.id] = String(s.slots) })
-      setDraftSlots(drafts)
       const c: Record<number, { approved: number; pending: number; reserves: number }> = {}
       data.shifts.forEach((s: Shift) => {
         c[s.id] = { approved: s.approved ?? 0, pending: s.pending ?? 0, reserves: s.reserves ?? 0 }
@@ -234,7 +231,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [weekOffset, cache])
 
-  const update = async (id: number, field: 'is_open' | 'slots', value: number) => {
+  const update = async (id: number, field: 'is_open', value: number) => {
     const currentShift = local.find(s => s.id === id)
     if (!currentShift) return
     // Block opening a day that's locked by holiday/eve/custom-closed
@@ -246,11 +243,10 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     }
     const updatedShift = { ...currentShift, [field]: value }
     setLocal(prev => prev.map(s => s.id === id ? updatedShift : s))
-    if (field === 'slots') setDraftSlots(prev => ({ ...prev, [id]: String(value) }))
     const res = await fetch('/api/shifts', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ id: updatedShift.id, is_open: updatedShift.is_open, slots: updatedShift.slots }]),
+      body: JSON.stringify([{ id: updatedShift.id, is_open: updatedShift.is_open }]),
     })
     if (res.ok) showToast('Autosparad')
     else showToast('Fel vid sparande', 'error')
@@ -428,39 +424,8 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     })
   }
 
-  const handleUpdateSlots = async (shiftId: number, slots: number) => {
-    // Optimistic — update local state instantly, no full week reload.
-    const prevLocal = local
-    const prevShifts = shifts
-    const prevDrafts = draftSlots
-    setLocal(prev => prev.map(s => s.id === shiftId ? { ...s, slots } : s))
-    setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, slots } : s))
-    setDraftSlots(prev => ({ ...prev, [shiftId]: String(slots) }))
-
-    await withInflight(async () => {
-      try {
-        const res = await fetch('/api/shifts', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify([{ id: shiftId, slots }]),
-        })
-        if (!res.ok) throw new Error('update slots failed')
-        // Background refresh in case slot change cascades (long-term bookings etc).
-        refreshCounts()
-      } catch {
-        setLocal(prevLocal)
-        setShifts(prevShifts)
-        setDraftSlots(prevDrafts)
-        showToast('Kunde inte uppdatera platser.', 'error')
-      }
-    })
-  }
-
   const handleOpenWeek = async () => {
-    const updates = Object.entries(openWeekSlots).map(([idStr, val]) => {
-      const slots = Math.min(50, Math.max(1, parseInt(val) || 5))
-      return { id: parseInt(idStr), is_open: 1, slots }
-    })
+    const updates = openWeekIds.map(id => ({ id, is_open: 1 }))
     if (updates.length === 0) {
       showToast('Inga pass att öppna den här veckan.', 'error')
       setOpenWeekDialog(false)
@@ -469,23 +434,11 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
 
     // Optimistic UI: close dialog, apply changes locally, show toast immediately.
     // The user gets instant feedback while the request + revalidation flies off.
-    const updateMap = new Map(updates.map(u => [u.id, u]))
+    const updateIds = new Set(updates.map(u => u.id))
     const previousLocal = local
     const previousShifts = shifts
-    const previousDrafts = draftSlots
-    setLocal(prev => prev.map(s => {
-      const u = updateMap.get(s.id)
-      return u ? { ...s, is_open: 1, slots: u.slots } : s
-    }))
-    setShifts(prev => prev.map(s => {
-      const u = updateMap.get(s.id)
-      return u ? { ...s, is_open: 1, slots: u.slots } : s
-    }))
-    setDraftSlots(prev => {
-      const next = { ...prev }
-      for (const u of updates) next[u.id] = String(u.slots)
-      return next
-    })
+    setLocal(prev => prev.map(s => updateIds.has(s.id) ? { ...s, is_open: 1 } : s))
+    setShifts(prev => prev.map(s => updateIds.has(s.id) ? { ...s, is_open: 1 } : s))
     setOpenWeekDialog(false)
     showToast(`${updates.length} pass öppnade.`)
 
@@ -502,7 +455,6 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
       } catch {
         setLocal(previousLocal)
         setShifts(previousShifts)
-        setDraftSlots(previousDrafts)
         showToast('Fel vid öppning. Försök igen.', 'error')
       }
     })
@@ -575,13 +527,12 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
           <button className="btn btn-sm btn-primary" onClick={() => {
             const today = new Date()
             const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-            const init: Record<number, string> = {}
-            shifts.filter(s => {
+            const ids = shifts.filter(s => {
               const d = days.find(d => d.dayIndex === s.day_index)
               // Skip past days, holidays/eves, and custom-closed days
               return d && d.date >= todayStr && !d.holiday && !customClosed[d.date]
-            }).forEach(s => { init[s.id] = '5' })
-            setOpenWeekSlots(init)
+            }).map(s => s.id)
+            setOpenWeekIds(ids)
             setOpenWeekDialog(true)
           }}>
             <Plus className="svg-ico svg-ico-sm" />
@@ -629,23 +580,15 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
 
               {/* Applicants button */}
               {(() => {
-                const c            = counts[shift.id] ?? { approved: 0, pending: 0, reserves: 0 }
-                const isOverbooked = isOpen && c.approved > shift.slots
-                const isFull       = isOpen && c.approved >= shift.slots
+                const c = counts[shift.id] ?? { approved: 0, pending: 0, reserves: 0 }
                 return (
                   <button
-                    className={`cfg-applicants-btn ${isOverbooked ? 'is-overbooked' : ''}`}
+                    className="cfg-applicants-btn"
                     onClick={() => setOpenShiftId(shift.id)}
                     type="button"
                   >
                     <Users className="svg-ico svg-ico-sm" />
                     <span>{c.approved} godkända</span>
-                    {isOverbooked
-                      ? <span className="cfg-overbooked-tag">+{c.approved - shift.slots} över</span>
-                      : isFull
-                        ? <span className="cfg-full-tag">Fullbokad</span>
-                        : null
-                    }
                     {c.pending > 0 && <span className="badge b-pending" style={{ fontSize: 11 }}><span className="pip" />{c.pending} väntar</span>}
                     {c.reserves > 0 && <span className="cfg-reserve-count">{c.reserves} res.</span>}
                   </button>
@@ -669,32 +612,6 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                   title={isLocked ? `Låst — ${lock.label}: ${lock.detail}` : undefined}
                 />
               </div>
-
-              <div className="cfg-field">
-                <label>Antal platser</label>
-                <div className="num-input">
-                  <button disabled={!isOpen || isLocked} onClick={() => update(shift.id, 'slots', Math.max(1, shift.slots - 1))}>
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    value={draftSlots[shift.id] ?? shift.slots}
-                    min={1}
-                    max={50}
-                    disabled={!isOpen || isLocked}
-                    style={{ opacity: (!isOpen || isLocked) ? 0.5 : 1 }}
-                    onChange={e => setDraftSlots(prev => ({ ...prev, [shift.id]: e.target.value }))}
-                    onBlur={e => {
-                      const val = parseInt(e.target.value)
-                      const clamped = isNaN(val) || val < 1 ? 1 : Math.min(50, val)
-                      update(shift.id, 'slots', clamped)
-                    }}
-                  />
-                  <button disabled={!isOpen || isLocked} onClick={() => update(shift.id, 'slots', Math.min(50, shift.slots + 1))}>
-                    +
-                  </button>
-                </div>
-              </div>
             </div>
           )
         })}
@@ -707,7 +624,6 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
         onClose={() => setOpenShiftId(null)}
         onApprove={handleApprove}
         onUnapprove={handleUnapprove}
-        onUpdateSlots={handleUpdateSlots}
         onBookDriver={handleBookDriver}
         onReject={handleReject}
         onUnreject={handleUnreject}
@@ -724,54 +640,23 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
         <div className="modal-backdrop" onClick={() => setOpenWeekDialog(false)}>
           <div className="modal-box" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
             <div className="modal-title">Öppna vecka {weekNumber}</div>
-            <p className="modal-sub">Ange antal platser per dag. Röda dagar, aftnar och förflutna dagar visas inte.</p>
-
-            {/* Quick-fill all */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>Sätt alla till</span>
-              <input
-                className="modal-input"
-                type="number"
-                min={1}
-                max={50}
-                style={{ width: 70, textAlign: 'center' }}
-                placeholder="5"
-                onChange={e => {
-                  const v = parseInt(e.target.value)
-                  if (!isNaN(v) && v >= 1) {
-                    setOpenWeekSlots(prev => Object.fromEntries(Object.keys(prev).map(k => [k, String(Math.min(50, v))])))
-                  }
-                }}
-              />
-            </div>
+            <p className="modal-sub">
+              Det här öppnar <strong>{openWeekIds.length}</strong> pass för anmälan.
+              Röda dagar, aftnar och förflutna dagar hoppas över.
+            </p>
 
             {/* Per-day rows */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 22 }}>
-              {Object.entries(openWeekSlots).map(([idStr, val]) => {
-                const shiftId = parseInt(idStr)
-                const shift = shifts.find(s => s.id === shiftId)
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
+              {openWeekIds.map(id => {
+                const shift = shifts.find(s => s.id === id)
                 const day = shift ? days.find(d => d.dayIndex === shift.day_index) : null
                 if (!day) return null
                 return (
-                  <div key={idStr} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{day.label}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{day.startTime}–{day.endTime}</div>
                     </div>
-                    <input
-                      className="modal-input"
-                      type="number"
-                      min={1}
-                      max={50}
-                      style={{ width: 70, textAlign: 'center' }}
-                      value={val}
-                      onChange={e => setOpenWeekSlots(prev => ({ ...prev, [idStr]: e.target.value }))}
-                      onBlur={e => {
-                        const v = parseInt(e.target.value)
-                        setOpenWeekSlots(prev => ({ ...prev, [idStr]: String(isNaN(v) || v < 1 ? 1 : Math.min(50, v)) }))
-                      }}
-                    />
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', width: 40 }}>platser</span>
                   </div>
                 )
               })}

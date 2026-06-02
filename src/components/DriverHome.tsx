@@ -56,14 +56,13 @@ function initials(name?: string | null) {
 
 type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'withdrawn' | 'full' | 'open' | 'reserve'
 
-function statusFor(shift: ShiftDay['shift'], app?: Application, approvedCount = 0): DayStatus {
+function statusFor(shift: ShiftDay['shift'], app?: Application): DayStatus {
   if (!shift || !shift.is_open) return 'closed'
   if (app?.approved) return 'confirmed'
   if (app?.rejected) return 'rejected'
   if (app?.withdrawn) return 'withdrawn'
   if (app?.reserve === 1) return 'reserve'
   if (app) return 'pending'
-  if (approvedCount >= shift.slots) return 'full'
   return 'open'
 }
 
@@ -74,7 +73,6 @@ export function DriverHome() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekData, setWeekData] = useState<WeekData | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
-  const [allApprovedCounts, setAllApprovedCounts] = useState<Record<number, number>>({})
   const [role, setRole] = useState<'driver' | 'admin' | null>(null)
   const [consecutiveWarning, setConsecutiveWarning] = useState<{ shiftId: number; count: number } | null>(null)
   const { toast, show: showToast, clear: clearToast } = useToast()
@@ -133,9 +131,6 @@ export function DriverHome() {
           const fresh = typeof parsed.ts === 'number' && (Date.now() - parsed.ts) < CACHE_MAX_AGE_MS
           if (fresh && parsed.week) {
             setWeekData(parsed.week)
-            const counts: Record<number, number> = {}
-            for (const s of parsed.week.shifts) counts[s.id] = s.approved ?? 0
-            setAllApprovedCounts(counts)
             if (parsed.apps) setApplications(parsed.apps)
             hasCache = true
           }
@@ -166,13 +161,9 @@ export function DriverHome() {
     ])
     if (id !== loadId.current) return
 
-    const counts: Record<number, number> = {}
-    for (const shift of data.shifts) counts[shift.id] = shift.approved ?? 0
-
     // Set together — React 18 batches these into one render.
     setWeekData(data)
     if (apps) setApplications(apps)
-    setAllApprovedCounts(counts)
 
     if (typeof window !== 'undefined') {
       try { sessionStorage.setItem(cacheKey, JSON.stringify({ week: data, apps, ts: Date.now() })) } catch {}
@@ -220,9 +211,6 @@ export function DriverHome() {
       if (inflightRef.current > 0) return
 
       if (data) {
-        const counts: Record<number, number> = {}
-        for (const s of data.shifts) counts[s.id] = s.approved ?? 0
-        setAllApprovedCounts(counts)
         setWeekData(prev => prev ? { ...prev, shifts: data.shifts, days: data.days } : data)
       }
       if (next) {
@@ -515,7 +503,7 @@ export function DriverHome() {
           </div>
           <div className="driver-grid">
             {days.map(d => (
-              <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} onApplyReserve={handleApplyReserve} />
+              <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} onApply={handleApply} onWithdraw={handleWithdraw} onApplyReserve={handleApplyReserve} />
             ))}
           </div>
 
@@ -570,7 +558,7 @@ export function DriverHome() {
           </div>
 
           {days.map(d => (
-            <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} approvedCount={allApprovedCounts[d.shift?.id ?? -1] ?? 0} onApply={handleApply} onWithdraw={handleWithdraw} onApplyReserve={handleApplyReserve} />
+            <DayCard key={d.dayIndex} day={d} app={myApps[d.shift?.id ?? -1]} onApply={handleApply} onWithdraw={handleWithdraw} onApplyReserve={handleApplyReserve} />
           ))}
 
           <div className="section-h">
@@ -719,15 +707,14 @@ function ConsecutiveWarning({ count, onConfirm, onCancel }: { count: number; onC
   )
 }
 
-function DayCard({ day, app, approvedCount, onApply, onWithdraw, onApplyReserve }: {
+function DayCard({ day, app, onApply, onWithdraw, onApplyReserve }: {
   day: ShiftDay
   app?: Application
-  approvedCount: number
   onApply: (id: number) => void
   onWithdraw: (appId: number) => void
   onApplyReserve: (id: number) => void
 }) {
-  const status = statusFor(day.shift, app, approvedCount)
+  const status = statusFor(day.shift, app)
   const isHoliday = status === 'closed' && day.holiday?.type === 'holiday'
   const isEve     = status === 'closed' && day.holiday?.type === 'eve'
   const cardClass = `day-card is-${status}${isHoliday ? ' is-holiday' : ''}${isEve ? ' is-eve' : ''}`

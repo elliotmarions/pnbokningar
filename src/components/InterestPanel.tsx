@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { X, Clock, Phone, Check, Plus, Minus } from './Icons'
+import { X, Clock, Phone, Check, Plus } from './Icons'
 
 interface Applicant {
   id: number
@@ -21,7 +21,6 @@ interface Shift {
   day_index: number
   date: string
   is_open: number
-  slots: number
 }
 
 interface Driver { id: string; name: string; phone: string | null }
@@ -33,9 +32,7 @@ interface Props {
   onClose: () => void
   onApprove: (appId: number) => Promise<void>
   onUnapprove: (appId: number, reason?: string) => Promise<void>
-  onUpdateSlots: (shiftId: number, slots: number) => Promise<void>
   onBookDriver?: (shiftId: number, userId: string) => Promise<void>
-  readOnlySlots?: boolean
   onReject?: (appId: number, reason?: string) => Promise<void>
   onUnreject?: (appId: number) => Promise<void>
   onUnwithdraw?: (appId: number) => Promise<void>
@@ -67,11 +64,9 @@ function fmtAppliedFull(iso: string) {
   return `Anmäld ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} kl. ${fmtTime(iso)}`
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onUpdateSlots, onBookDriver, readOnlySlots = false, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves'>('applications')
-  const [slots, setSlots] = useState(shift?.slots ?? 5)
-  const [slotsInput, setSlotsInput] = useState(String(shift?.slots ?? 5))
   const [rejectingId, setRejectingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
@@ -98,8 +93,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
 
   useEffect(() => {
     if (!shift) return
-    setSlots(shift.slots)
-    setSlotsInput(String(shift.slots))
     // Sync applicants only when the panel opens for a (new) shift — NOT when the parent refetches
     // and pushes a new initialApplicants reference. Otherwise an optimistic update gets clobbered
     // mid-action which causes the visible "hopping" behavior.
@@ -404,25 +397,6 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     }
   }
 
-  const handleSlots = async (delta: number) => {
-    if (!shift) return
-    const next = Math.max(1, Math.min(50, slots + delta))
-    setSlots(next)
-    setSlotsInput(String(next))
-    await onUpdateSlots(shift.id, next)
-  }
-  const handleSlotsInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSlotsInput(e.target.value)
-  }
-  const handleSlotsBlur = async () => {
-    if (!shift) return
-    const val = parseInt(slotsInput)
-    const clamped = isNaN(val) || val < 1 ? 1 : Math.min(50, val)
-    setSlots(clamped)
-    setSlotsInput(String(clamped))
-    await onUpdateSlots(shift.id, clamped)
-  }
-
   const startTime = shift?.day_index === 5 ? '09:45' : '16:00'
   const endTime = shift?.day_index === 5 ? '18:00' : '22:00'
 
@@ -444,18 +418,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
         </div>
 
         <div className="side-panel-meta">
-          {!readOnlySlots && (
-            <div className="slots-field">
-              <label>Platser</label>
-              <div className="num-input">
-                <button onClick={() => handleSlots(-1)}><Minus className="svg-ico svg-ico-sm" /></button>
-                <input type="number" value={slotsInput} min={1} max={50} onChange={handleSlotsInput} onBlur={handleSlotsBlur} />
-                <button onClick={() => handleSlots(+1)}><Plus className="svg-ico svg-ico-sm" /></button>
-              </div>
-            </div>
-          )}
           <div className="fill-stat">
-            <strong>{approved.length}</strong> godkända av <strong>{slots}</strong> · <strong>{pending.length}</strong> väntar
+            <strong>{approved.length}</strong> godkända · <strong>{pending.length}</strong> väntar
           </div>
         </div>
 
@@ -487,7 +451,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           <div className="list-group-h">
             <span>Godkända</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>{approved.length} / {slots}</span>
+              <span>{approved.length}</span>
               {onBookDriver && (
                 <button
                   className="btn btn-sm btn-ghost"
@@ -628,7 +592,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     <button
                       className="btn btn-sm btn-success btn-icon"
                       onClick={() => handleApprove(a.id)}
-                      title={approved.length >= slots ? 'Alla platser fyllda — godkänner som överbokning' : 'Godkänn'}
+                      title="Godkänn"
                     >
                       <Check className="svg-ico svg-ico-sm" />
                     </button>
