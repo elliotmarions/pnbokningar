@@ -545,20 +545,22 @@ export function WeekConfig() {
 
   return (
     <>
-      <DriverScheduleFilter
-        drivers={driverList}
-        applicantsByShift={applicantsByShift}
-        shifts={shifts}
-        days={days}
-        onChange={handleHighlight}
-      />
-
       <div className="cfg-top">
         <div>
           <div className="eyebrow">SCHEMALÄGG</div>
           <h2>Vecka {weekNumber} · {weekYear}</h2>
           <div className="helper">Öppna dagar och sätt antal platser inför kommande vecka.</div>
         </div>
+      </div>
+
+      <div className="ov-toolbar">
+        <DriverScheduleFilter
+          drivers={driverList}
+          applicantsByShift={applicantsByShift}
+          shifts={shifts}
+          days={days}
+          onChange={handleHighlight}
+        />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="week-nav">
             <button className="arrow" onClick={() => setWeekOffset(o => o - 1)}><ChevronLeft className="svg-ico" /></button>
