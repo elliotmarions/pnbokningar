@@ -5,8 +5,6 @@ import { isHolidayOrEve } from '@/lib/holidays'
 import { applyLongTermToShift } from '@/lib/apply-long-term'
 import { sendPushToAllDrivers } from '@/lib/push'
 
-const AUTO_SLOTS = 50
-
 /**
  * Auto-open next week's shifts. Intended to run every Wednesday at 18:00
  * Europe/Stockholm. Vercel cron runs in UTC and ignores DST, so we schedule it
@@ -56,7 +54,7 @@ export async function GET(req: NextRequest) {
     s.ever_opened === 0 && !isHolidayOrEve(s.date) && !closed.has(s.date)
   )
 
-  await Promise.all(toOpen.map(s => shiftRepo.update(s.id, { is_open: 1, slots: AUTO_SLOTS })))
+  await Promise.all(toOpen.map(s => shiftRepo.update(s.id, { is_open: 1 })))
 
   // Apply any long-term bookings to the freshly-opened shifts. These create
   // approvals, which need a valid users.id as approved_by — use any admin.
@@ -81,6 +79,5 @@ export async function GET(req: NextRequest) {
     ok: true,
     week: `${info.weekNumber}/${info.weekYear}`,
     opened: toOpen.length,
-    slots: AUTO_SLOTS,
   })
 }
