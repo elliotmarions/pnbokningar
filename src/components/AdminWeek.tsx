@@ -260,6 +260,15 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
 
   return (
     <>
+      <div className="cfg-top">
+        <div>
+          <div className="eyebrow">ÖVERSIKT</div>
+          <h2>Vecka {weekNumber} · {weekYear}</h2>
+          <div className="helper">Pass, sökande och godkännanden för veckan.</div>
+        </div>
+        <ViewToggle value={view} onChange={onView} />
+      </div>
+
       <div className="ov-toolbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div className="week-nav">
@@ -271,7 +280,6 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
             Tillsatta <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
           </div>
         </div>
-        <ViewToggle value={view} onChange={onView} />
       </div>
 
       <div className="week-header">

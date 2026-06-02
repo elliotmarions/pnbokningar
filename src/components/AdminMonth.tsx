@@ -172,7 +172,12 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
 
   return (
     <div>
-      <div className="ov-toolbar" style={{ justifyContent: 'flex-end' }}>
+      <div className="cfg-top">
+        <div>
+          <div className="eyebrow">ÖVERSIKT</div>
+          <h2>{mode === 'month' ? `${MONTH_NAMES[month-1]} ${year}` : 'Intervall'}</h2>
+          <div className="helper">Pass, sökande och godkännanden{mode === 'month' ? ' för månaden' : ''}.</div>
+        </div>
         <ViewToggle value={view} onChange={onView} />
       </div>
 
