@@ -1,4 +1,8 @@
 {
   "framework": "nextjs",
-  "regions": ["dub1"]
+  "regions": ["dub1"],
+  "crons": [
+    { "path": "/api/cron/open-week", "schedule": "0 16 * * 3" },
+    { "path": "/api/cron/open-week", "schedule": "0 17 * * 3" }
+  ]
 }
