@@ -146,6 +146,10 @@ async function migrate() {
       )
     `
     await sql`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`
+    // Last time we confirmed this subscription is alive (refreshed on every
+    // successful push delivery). Stale rows are pruned by a daily cron — this
+    // keeps the "notiser på" indicator honest after e.g. a deleted iOS PWA.
+    await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()`
     await sql`ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY`
     await sql.unsafe(`
       DO $$ BEGIN
@@ -869,8 +873,30 @@ export const pushSubscriptionRepo = {
         SET user_id = EXCLUDED.user_id,
             p256dh  = EXCLUDED.p256dh,
             auth    = EXCLUDED.auth,
-            user_agent = EXCLUDED.user_agent
+            user_agent = EXCLUDED.user_agent,
+            last_seen = NOW()
     `
+  },
+
+  // Bump last_seen — called after a successful push delivery to mark the
+  // subscription as still alive.
+  async touchByEndpoint(endpoint: string): Promise<void> {
+    try {
+      await sql`UPDATE push_subscriptions SET last_seen = NOW() WHERE endpoint = ${endpoint}`
+    } catch { /* non-critical */ }
+  },
+
+  // Delete subscriptions not confirmed alive for `days` days. Returns the count
+  // removed. Live subscriptions are refreshed at least weekly by the broadcast,
+  // so anything this stale is almost certainly a removed/expired install.
+  async pruneStale(days: number): Promise<number> {
+    await ensureMigrated()
+    const rows = await sql<{ id: number }[]>`
+      DELETE FROM push_subscriptions
+      WHERE last_seen < NOW() - make_interval(days => ${days})
+      RETURNING id
+    `
+    return rows.length
   },
 
   async forUser(userId: string): Promise<DbPushSubscription[]> {

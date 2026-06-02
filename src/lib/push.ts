@@ -35,6 +35,8 @@ async function deliver(subs: DbPushSubscription[], payload: PushPayload): Promis
           json,
           { TTL: 60 * 60 * 24 } // 24h — drop if undelivered
         )
+        // Delivery accepted by the push service → subscription is alive.
+        await pushSubscriptionRepo.touchByEndpoint(s.endpoint)
       } catch (err: unknown) {
         const statusCode = (err as { statusCode?: number })?.statusCode
         if (statusCode === 404 || statusCode === 410) {
