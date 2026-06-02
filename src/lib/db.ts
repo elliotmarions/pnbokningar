@@ -861,6 +861,16 @@ export const pushSubscriptionRepo = {
     `
   },
 
+  // All subscriptions for drivers (used for broadcast notifications).
+  async allForDrivers(): Promise<DbPushSubscription[]> {
+    await ensureMigrated()
+    return sql<DbPushSubscription[]>`
+      SELECT ps.* FROM push_subscriptions ps
+      JOIN users u ON u.id = ps.user_id
+      WHERE u.role = 'driver'
+    `
+  },
+
   async deleteByEndpoint(endpoint: string): Promise<void> {
     await ensureMigrated()
     await sql`DELETE FROM push_subscriptions WHERE endpoint = ${endpoint}`

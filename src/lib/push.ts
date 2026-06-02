@@ -1,5 +1,5 @@
 import webpush from 'web-push'
-import { pushSubscriptionRepo } from './db'
+import { pushSubscriptionRepo, type DbPushSubscription } from './db'
 
 let _configured = false
 function configure() {
@@ -23,41 +23,21 @@ export interface PushPayload {
   tag?: string
 }
 
-/**
- * Send a push notification to all subscribed devices for a user.
- * Silently no-ops if VAPID keys aren't configured.
- * Cleans up subscriptions that return 404/410 (browser revoked them).
- */
-export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
-  configure()
-  if (!_configured) return
-
-  let subs: Awaited<ReturnType<typeof pushSubscriptionRepo.forUser>>
-  try {
-    subs = await pushSubscriptionRepo.forUser(userId)
-  } catch (err) {
-    console.error('[push] failed to load subscriptions', err)
-    return
-  }
+// Deliver a payload to a set of subscriptions, cleaning up dead ones.
+async function deliver(subs: DbPushSubscription[], payload: PushPayload): Promise<void> {
   if (subs.length === 0) return
-
   const json = JSON.stringify(payload)
-
   await Promise.allSettled(
     subs.map(async (s) => {
       try {
         await webpush.sendNotification(
-          {
-            endpoint: s.endpoint,
-            keys: { p256dh: s.p256dh, auth: s.auth },
-          },
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           json,
           { TTL: 60 * 60 * 24 } // 24h — drop if undelivered
         )
       } catch (err: unknown) {
         const statusCode = (err as { statusCode?: number })?.statusCode
         if (statusCode === 404 || statusCode === 410) {
-          // Subscription is dead — remove from DB.
           try { await pushSubscriptionRepo.deleteByEndpoint(s.endpoint) } catch {}
         } else {
           console.error('[push] send failed', { endpoint: s.endpoint.slice(0, 40), err })
@@ -65,6 +45,33 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       }
     })
   )
+}
+
+/**
+ * Send a push notification to all subscribed devices for a user.
+ * Silently no-ops if VAPID keys aren't configured.
+ */
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
+  configure()
+  if (!_configured) return
+  try {
+    const subs = await pushSubscriptionRepo.forUser(userId)
+    await deliver(subs, payload)
+  } catch (err) {
+    console.error('[push] failed to load subscriptions', err)
+  }
+}
+
+/** Broadcast a push notification to every driver with notifications enabled. */
+export async function sendPushToAllDrivers(payload: PushPayload): Promise<void> {
+  configure()
+  if (!_configured) return
+  try {
+    const subs = await pushSubscriptionRepo.allForDrivers()
+    await deliver(subs, payload)
+  } catch (err) {
+    console.error('[push] broadcast failed to load subscriptions', err)
+  }
 }
 
 /** Fire-and-forget wrapper for use in API routes — never blocks the response on push delivery. */

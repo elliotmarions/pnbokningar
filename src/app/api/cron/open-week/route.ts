@@ -3,6 +3,7 @@ import { shiftRepo, customClosedRepo, getDb } from '@/lib/db'
 import { nextWeekInfo } from '@/lib/weeks'
 import { isHolidayOrEve } from '@/lib/holidays'
 import { applyLongTermToShift } from '@/lib/apply-long-term'
+import { sendPushToAllDrivers } from '@/lib/push'
 
 const AUTO_SLOTS = 50
 
@@ -63,6 +64,17 @@ export async function GET(req: NextRequest) {
   const [admin] = await sql<{ id: string }[]>`SELECT id FROM users WHERE role = 'admin' LIMIT 1`
   if (admin) {
     await Promise.all(toOpen.map(s => applyLongTermToShift(s.id, s.date, admin.id)))
+  }
+
+  // Notify all drivers that a new week is open — only when shifts were actually
+  // opened (i.e. only on the weekly auto-open, never on manual opening).
+  if (toOpen.length > 0) {
+    await sendPushToAllDrivers({
+      title: 'Nya pass öppna! 📅',
+      body: `Vecka ${info.weekNumber} är nu öppen för bokning. Säkra dina pass!`,
+      url: '/',
+      tag: `week-open-${info.weekYear}-${info.weekNumber}`,
+    })
   }
 
   return NextResponse.json({
