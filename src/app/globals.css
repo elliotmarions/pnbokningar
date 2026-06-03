@@ -1458,10 +1458,20 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: var(--primary-soft); border: 1px solid var(--primary-border);
 }
 .driver-filter-summary strong { color: var(--text-primary); }
+.driver-filter-summary .dfs-line {
+  display: flex; align-items: center; gap: 7px; margin-top: 4px;
+}
+.dfs-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+.dfs-dot-booked  { background: var(--primary); }
+.dfs-dot-applied { background: #f59e0b; }
 
 /* Highlight / dim day cards when a driver is selected in the search. */
 .wk-card.is-driver-hit, .cfg-card.is-driver-hit {
   outline: 2px solid var(--primary); outline-offset: 2px;
+}
+/* Applied-but-not-yet-booked: amber dashed outline to distinguish from booked. */
+.wk-card.is-driver-applied, .cfg-card.is-driver-applied {
+  outline: 2px dashed #f59e0b; outline-offset: 2px;
 }
 .wk-card.is-driver-dim, .cfg-card.is-driver-dim {
   opacity: 0.4; transition: opacity var(--t);

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, ChevronLeft, ChevronRight, FileSpreadsheet, Phone } from './Icons'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
-import { DriverScheduleFilter } from './DriverScheduleFilter'
+import { DriverScheduleFilter, type DriverHighlight } from './DriverScheduleFilter'
 import { ViewToggle, type OverviewView } from './ViewToggle'
 
 interface Shift {
@@ -65,8 +65,8 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
 
   // Driver search: list of drivers + the shift ids the selected driver works.
   const [driverList, setDriverList] = useState<{ id: string; name: string }[]>([])
-  const [highlight, setHighlight] = useState<Set<number> | null>(null)
-  const handleHighlight = useCallback((s: Set<number> | null) => setHighlight(s), [])
+  const [highlight, setHighlight] = useState<DriverHighlight | null>(null)
+  const handleHighlight = useCallback((h: DriverHighlight | null) => setHighlight(h), [])
 
   // Load the driver list (SWR via the shared admin cache) for the search box.
   useEffect(() => {
@@ -324,8 +324,10 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
             const badgeClass   = !shift.is_open ? 'b-closed' : 'b-open'
             const badgeLabel   = !shift.is_open ? 'Stängd' : 'Öppen'
             const isExpanded = expandedIds.has(shift.id)
-            const isHit = highlight?.has(shift.id) ?? false
-            const isDim = highlight != null && !isHit
+            const isBooked  = highlight?.booked.has(shift.id) ?? false
+            const isApplied = !isBooked && (highlight?.applied.has(shift.id) ?? false)
+            const isHit = isBooked
+            const isDim = highlight != null && !isBooked && !isApplied
             const driversRaw = driversMap[shift.id]
             // Sort approved drivers alphabetically by first name for display.
             const drivers  = Array.isArray(driversRaw) ? [...driversRaw].sort(byFirstName) : driversRaw
@@ -336,7 +338,7 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
               <button
                 key={day.dayIndex}
                 type="button"
-                className={`wk-card ${!shift.is_open ? 'is-closed' : ''} ${isExpanded ? 'is-selected' : ''} ${isHit ? 'is-driver-hit' : ''} ${isDim ? 'is-driver-dim' : ''}`}
+                className={`wk-card ${!shift.is_open ? 'is-closed' : ''} ${isExpanded ? 'is-selected' : ''} ${isHit ? 'is-driver-hit' : ''} ${isApplied ? 'is-driver-applied' : ''} ${isDim ? 'is-driver-dim' : ''}`}
                 onClick={() => handleCardClick(shift.id)}
               >
                 {/* Static card info */}

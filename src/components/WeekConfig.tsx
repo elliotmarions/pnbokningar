@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Clock, Plus, Users, X } from './Icons'
 import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
-import { DriverScheduleFilter } from './DriverScheduleFilter'
+import { DriverScheduleFilter, type DriverHighlight } from './DriverScheduleFilter'
 
 interface Shift {
   id: number
@@ -68,8 +68,8 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
 
   // Driver search: list of drivers + the shift ids the selected driver works.
   const [driverList, setDriverList] = useState<{ id: string; name: string }[]>([])
-  const [highlight, setHighlight] = useState<Set<number> | null>(null)
-  const handleHighlight = useCallback((s: Set<number> | null) => setHighlight(s), [])
+  const [highlight, setHighlight] = useState<DriverHighlight | null>(null)
+  const handleHighlight = useCallback((h: DriverHighlight | null) => setHighlight(h), [])
 
   useEffect(() => {
     const fromCache = cache.get('users') as { id: string; name: string; role: string }[] | undefined
@@ -548,13 +548,15 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
           const isOpen = !!shift.is_open
           const lock = getLockReason(day)
           const isLocked = lock !== null
-          const isHit = highlight?.has(shift.id) ?? false
-          const isDim = highlight != null && !isHit
+          const isBooked  = highlight?.booked.has(shift.id) ?? false
+          const isApplied = !isBooked && (highlight?.applied.has(shift.id) ?? false)
+          const isHit = isBooked
+          const isDim = highlight != null && !isBooked && !isApplied
 
           return (
             <div
               key={day.dayIndex}
-              className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'} ${isLocked ? 'is-locked' : ''} ${isHit ? 'is-driver-hit' : ''} ${isDim ? 'is-driver-dim' : ''}`}
+              className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'} ${isLocked ? 'is-locked' : ''} ${isHit ? 'is-driver-hit' : ''} ${isApplied ? 'is-driver-applied' : ''} ${isDim ? 'is-driver-dim' : ''}`}
             >
               <div className="top">
                 <div>

@@ -2,12 +2,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from './Icons'
 
-interface Applicant { user_id: string; approved: boolean | number; reserve: number }
+interface Applicant {
+  user_id: string
+  approved: boolean | number
+  reserve: number
+  rejected?: boolean | number
+  withdrawn?: boolean | number
+}
+
+// Reported back to the parent so it can highlight the selected driver's days:
+//   booked  = approved (and not on the reserve list)
+//   applied = applied and still waiting (not approved/rejected/withdrawn/reserve)
+export interface DriverHighlight { booked: Set<number>; applied: Set<number> }
 
 /**
  * Driver search used in the week views (Översikt + Schemalägg). Pick a driver
- * and the days they're booked in the currently-viewed week are reported back
- * via `onChange` (a set of shift ids) so the parent can highlight those cards.
+ * and the days they're booked OR have applied for in the currently-viewed week
+ * are reported back via `onChange` so the parent can highlight those cards.
  * Purely client-side — uses the applicant data the parent already has.
  */
 export function DriverScheduleFilter({
@@ -21,9 +32,9 @@ export function DriverScheduleFilter({
   applicantsByShift: Record<number, unknown[]>
   shifts: { id: number; day_index: number }[]
   days: { dayIndex: number; label: string }[]
-  // null = no driver selected (parent should not dim anything); a Set (possibly
-  // empty) = a driver is selected and these are the shifts they work.
-  onChange: (highlighted: Set<number> | null) => void
+  // null = no driver selected (parent should not dim anything); an object (with
+  // possibly-empty sets) = a driver is selected and these are their shifts.
+  onChange: (highlighted: DriverHighlight | null) => void
 }) {
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -38,24 +49,37 @@ export function DriverScheduleFilter({
     return drivers.filter(d => d.name.toLowerCase().includes(q)).slice(0, 8)
   }, [query, drivers, selected])
 
-  // Shift ids (in the current week) the selected driver is booked/approved for.
-  const bookedShiftIds = useMemo(() => {
-    const set = new Set<number>()
-    if (!selectedId) return set
+  // Shift ids (in the current week) the selected driver is booked for vs has
+  // applied for (still waiting). One application row per shift, so each shift
+  // falls into at most one bucket.
+  const { bookedShiftIds, appliedShiftIds } = useMemo(() => {
+    const booked = new Set<number>()
+    const applied = new Set<number>()
+    if (!selectedId) return { bookedShiftIds: booked, appliedShiftIds: applied }
     for (const s of shifts) {
       const apps = (applicantsByShift[s.id] ?? []) as Applicant[]
-      if (apps.some(a => a.user_id === selectedId && Boolean(a.approved) && !a.reserve)) set.add(s.id)
+      const mine = apps.find(a => a.user_id === selectedId)
+      if (!mine) continue
+      if (Boolean(mine.approved) && !mine.reserve) {
+        booked.add(s.id)
+      } else if (!mine.reserve && !Boolean(mine.rejected) && !Boolean(mine.withdrawn)) {
+        applied.add(s.id)
+      }
     }
-    return set
+    return { bookedShiftIds: booked, appliedShiftIds: applied }
   }, [selectedId, shifts, applicantsByShift])
 
-  useEffect(() => { onChange(selectedId ? bookedShiftIds : null) }, [selectedId, bookedShiftIds, onChange])
+  useEffect(() => {
+    onChange(selectedId ? { booked: bookedShiftIds, applied: appliedShiftIds } : null)
+  }, [selectedId, bookedShiftIds, appliedShiftIds, onChange])
 
-  // Booked day labels in week order, for the summary line.
-  const bookedDayLabels = useMemo(() => {
-    const idxs = new Set(shifts.filter(s => bookedShiftIds.has(s.id)).map(s => s.day_index))
+  // Day labels in week order, for the summary lines.
+  const labelsFor = (ids: Set<number>) => {
+    const idxs = new Set(shifts.filter(s => ids.has(s.id)).map(s => s.day_index))
     return days.filter(d => idxs.has(d.dayIndex)).map(d => d.label)
-  }, [bookedShiftIds, shifts, days])
+  }
+  const bookedDayLabels = useMemo(() => labelsFor(bookedShiftIds), [bookedShiftIds, shifts, days]) // eslint-disable-line react-hooks/exhaustive-deps
+  const appliedDayLabels = useMemo(() => labelsFor(appliedShiftIds), [appliedShiftIds, shifts, days]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (d: { id: string; name: string }) => { setSelectedId(d.id); setQuery(d.name); setFocused(false) }
   const clear = () => { setSelectedId(null); setQuery('') }
@@ -94,9 +118,19 @@ export function DriverScheduleFilter({
       </div>
       {selected && (
         <div className="driver-filter-summary">
-          {bookedDayLabels.length > 0
-            ? <><strong>{selected.name}</strong> jobbar denna vecka: {bookedDayLabels.join(', ')}</>
-            : <><strong>{selected.name}</strong> jobbar inga pass denna vecka.</>}
+          <strong>{selected.name}</strong>
+          {bookedDayLabels.length === 0 && appliedDayLabels.length === 0 ? (
+            <> jobbar eller söker inga pass denna vecka.</>
+          ) : (
+            <>
+              {bookedDayLabels.length > 0 && (
+                <div className="dfs-line"><span className="dfs-dot dfs-dot-booked" />Jobbar: {bookedDayLabels.join(', ')}</div>
+              )}
+              {appliedDayLabels.length > 0 && (
+                <div className="dfs-line"><span className="dfs-dot dfs-dot-applied" />Sökt: {appliedDayLabels.join(', ')}</div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
