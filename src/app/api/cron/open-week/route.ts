@@ -6,11 +6,16 @@ import { applyLongTermToShift } from '@/lib/apply-long-term'
 import { sendPushToAllDrivers } from '@/lib/push'
 
 /**
- * Auto-open next week's shifts. Intended to run every Wednesday at 18:00
+ * Auto-open next week's shifts. Intended to run Wednesday evening,
  * Europe/Stockholm. Vercel cron runs in UTC and ignores DST, so we schedule it
- * at both 16:00 and 17:00 UTC on Wednesdays (vercel.json) and gate here on the
- * real Stockholm local time being Wednesday 18:00 — that lands exactly once at
- * 18:00 local year-round (16:00 UTC in summer, 17:00 UTC in winter).
+ * at both 16:00 and 17:00 UTC on Wednesdays (vercel.json) — that covers both
+ * 18:00 local in summer (16:00 UTC) and winter (17:00 UTC).
+ *
+ * The gate below accepts any Wednesday 18:00–22:59 Stockholm time rather than an
+ * exact hour, because Vercel cron timing is best-effort and can be delayed — a
+ * strict "hour === 18" check would silently skip the whole week if a trigger
+ * landed even an hour late. Re-running is safe: the `ever_opened` guard means a
+ * second/late invocation re-opens nothing and re-sends no broadcast.
  *
  * Pass ?force=1 (with the cron secret) to run regardless of the time check.
  */
@@ -28,14 +33,23 @@ export async function GET(req: NextRequest) {
 
   const force = new URL(req.url).searchParams.get('force') === '1'
 
-  // Current time in Europe/Stockholm.
-  const now = new Date()
-  const sthlm = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Stockholm' }))
-  const isWednesday = sthlm.getDay() === 3
-  const is18 = sthlm.getHours() === 18
+  // Stockholm local weekday + hour, derived in a timezone-correct way that does
+  // NOT depend on the runtime's own timezone (the previous string-reparse trick
+  // only worked because Vercel runs in UTC).
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Stockholm',
+    weekday: 'long',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const weekday = parts.find(p => p.type === 'weekday')?.value ?? ''
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value ?? '-1', 10)
 
-  if (!force && !(isWednesday && is18)) {
-    return NextResponse.json({ ok: true, skipped: true, reason: `Not Wed 18:00 (Sthlm: ${sthlm.toString()})` })
+  const isWednesday = weekday === 'Wednesday'
+  const inWindow = hour >= 18 && hour <= 22
+
+  if (!force && !(isWednesday && inWindow)) {
+    return NextResponse.json({ ok: true, skipped: true, reason: `Not Wed 18:00–22:59 (Sthlm: ${weekday} ${hour}:00)` })
   }
 
   // Next week relative to today.
