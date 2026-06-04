@@ -61,3 +61,26 @@ export function shiftHours(dayIndex: number): { start: string; end: string; dura
 export function dayLabelFull(dayIndex: number): string {
   return DAY_LABELS[dayIndex]
 }
+
+// Default number of permanent staff (fastanställda) working each weekday,
+// indexed by dayIndex (0 = Monday … 5 = Saturday). This is the baseline every
+// week starts from; admins can override a single day in a single week from the
+// Schemalägg page (stored on the shift). Normal operating-day figures — red
+// days / closed days fall back to 0 (see resolvePermanentStaff).
+const PERMANENT_STAFF_DEFAULT = [12, 32, 26, 26, 26, 26]
+
+export function permanentStaffDefault(dayIndex: number): number {
+  return PERMANENT_STAFF_DEFAULT[dayIndex] ?? 0
+}
+
+// Effective permanent-staff count for a day: the per-week override if one was
+// set, otherwise the weekday default. A red day / eve has no permanent staff,
+// so the default collapses to 0 there (an explicit override still wins).
+export function resolvePermanentStaff(
+  override: number | null | undefined,
+  dayIndex: number,
+  isHoliday: boolean,
+): number {
+  if (override != null) return override
+  return isHoliday ? 0 : permanentStaffDefault(dayIndex)
+}

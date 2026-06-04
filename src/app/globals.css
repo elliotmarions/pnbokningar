@@ -686,6 +686,11 @@ a { color: inherit; text-decoration: none; }
 .wk-card-foot .label { font-size: 11px; color: var(--text-tertiary); letter-spacing: 0.3px; text-transform: uppercase; }
 .wk-waiting { font-size: 11.5px; color: var(--text-tertiary); margin-top: 4px; }
 .wk-reserves { font-size: 10.5px; color: var(--text-tertiary); opacity: 0.6; margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* Permanent + extra breakdown under the "totalt i tjänst" meter. */
+.wk-staff-split { display: flex; align-items: baseline; gap: 5px; margin-top: 2px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.wk-staff-perm { color: var(--text-secondary); }
+.wk-staff-sep { color: var(--text-tertiary); }
+.wk-staff-extra { color: var(--primary); font-weight: 600; }
 
 /* Inline driver list — expands inside the card column */
 .wk-inline-drivers {
@@ -910,6 +915,17 @@ a { color: inherit; text-decoration: none; }
 .cfg-field { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
 .cfg-field label { font-size: 12.5px; color: var(--text-secondary); }
 .cfg-actions { margin-top: 22px; display: flex; justify-content: flex-end; gap: 10px; }
+/* Stepper for the per-week permanent-staff count. */
+.cfg-stepper { display: inline-flex; align-items: center; gap: 4px; }
+.cfg-step-btn {
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1; border-radius: 6px; cursor: pointer;
+  background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary);
+  transition: background var(--t), border-color var(--t);
+}
+.cfg-step-btn:hover:not(:disabled) { border-color: var(--primary); }
+.cfg-step-btn:disabled { opacity: 0.35; cursor: default; }
+.cfg-step-value { min-width: 28px; text-align: center; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ===== Export ===== */
 .export-top { margin-bottom: 22px; }

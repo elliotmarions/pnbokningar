@@ -109,6 +109,12 @@ async function migrate() {
   await sql`
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS ever_opened INTEGER NOT NULL DEFAULT 0
   `
+  // Per-week override for the number of permanent staff (fastanställda) working
+  // this day. NULL = follow the weekday default (see permanentStaffDefault).
+  // Lets admins reduce a single day for e.g. vacation without touching the pattern.
+  await sql`
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS permanent_staff INTEGER
+  `
   // Backfill: mark shifts as ever_opened if they are currently open OR have had applicants
   await sql`
     UPDATE shifts SET ever_opened = 1
@@ -449,6 +455,7 @@ export interface DbShift {
   is_open: number
   ever_opened: number
   slots: number
+  permanent_staff: number | null
   created_at: string
 }
 
@@ -526,7 +533,7 @@ export const shiftRepo = {
     return { shifts, created: true }
   },
 
-  async update(id: number, fields: { is_open?: number; slots?: number }): Promise<void> {
+  async update(id: number, fields: { is_open?: number; slots?: number; permanent_staff?: number | null }): Promise<void> {
     if (fields.is_open !== undefined) {
       if (fields.is_open === 1) {
         // Mark as ever_opened when admin opens a shift
@@ -537,6 +544,9 @@ export const shiftRepo = {
     }
     if (fields.slots !== undefined) {
       await sql`UPDATE shifts SET slots = ${fields.slots} WHERE id = ${id}`
+    }
+    if (fields.permanent_staff !== undefined) {
+      await sql`UPDATE shifts SET permanent_staff = ${fields.permanent_staff} WHERE id = ${id}`
     }
   },
 

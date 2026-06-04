@@ -5,6 +5,7 @@ import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 import { DriverScheduleFilter, type DriverHighlight } from './DriverScheduleFilter'
+import { resolvePermanentStaff } from '@/lib/weeks'
 
 interface Shift {
   id: number
@@ -15,6 +16,7 @@ interface Shift {
   approved?: number
   pending?: number
   reserves?: number
+  permanent_staff?: number | null
 }
 interface DayInfo {
   dayIndex: number
@@ -250,6 +252,28 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     })
     if (res.ok) showToast('Autosparad')
     else showToast('Fel vid sparande', 'error')
+  }
+
+  // Per-week override for the number of permanent staff working a day. Optimistic
+  // + autosave, guarded by the inflight gate so polling doesn't revert it.
+  const setPermanentStaff = async (id: number, value: number) => {
+    const next = Math.max(0, Math.min(200, value))
+    const prev = local.find(s => s.id === id)?.permanent_staff
+    setLocal(p => p.map(s => s.id === id ? { ...s, permanent_staff: next } : s))
+    await withInflight(async () => {
+      try {
+        const res = await fetch('/api/shifts', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify([{ id, permanent_staff: next }]),
+        })
+        if (!res.ok) throw new Error('save failed')
+        showToast('Autosparad')
+      } catch {
+        setLocal(p => p.map(s => s.id === id ? { ...s, permanent_staff: prev ?? null } : s))
+        showToast('Fel vid sparande', 'error')
+      }
+    })
   }
 
   // --- Optimistic helpers for admin actions inside InterestPanel ---
@@ -594,6 +618,33 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                     {c.pending > 0 && <span className="badge b-pending" style={{ fontSize: 11 }}><span className="pip" />{c.pending} väntar</span>}
                     {c.reserves > 0 && <span className="cfg-reserve-count">{c.reserves} res.</span>}
                   </button>
+                )
+              })()}
+
+              {/* Permanent staff (fastanställda) working this day — per-week override
+                  of the weekday default. Drives the "Total i tjänst" on the overview. */}
+              {(() => {
+                const permanent = resolvePermanentStaff(shift.permanent_staff, day.dayIndex, day.holiday != null)
+                return (
+                  <div className="cfg-field">
+                    <label>Fast personal</label>
+                    <div className="cfg-stepper">
+                      <button
+                        type="button"
+                        className="cfg-step-btn"
+                        aria-label="Minska"
+                        disabled={permanent <= 0}
+                        onClick={() => setPermanentStaff(shift.id, permanent - 1)}
+                      >−</button>
+                      <span className="cfg-step-value">{permanent}</span>
+                      <button
+                        type="button"
+                        className="cfg-step-btn"
+                        aria-label="Öka"
+                        onClick={() => setPermanentStaff(shift.id, permanent + 1)}
+                      >+</button>
+                    </div>
+                  </div>
                 )
               })()}
 

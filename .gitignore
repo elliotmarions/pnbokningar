@@ -17,3 +17,5 @@ data/
 
 # claude
 .claude/
+.vercel
+.env*

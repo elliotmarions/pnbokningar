@@ -5,6 +5,7 @@ import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 import { DriverScheduleFilter, type DriverHighlight } from './DriverScheduleFilter'
 import { ViewToggle, type OverviewView } from './ViewToggle'
+import { resolvePermanentStaff } from '@/lib/weeks'
 
 interface Shift {
   id: number
@@ -15,6 +16,7 @@ interface Shift {
   approved: number
   pending: number
   reserves: number
+  permanent_staff: number | null
 }
 interface DayInfo {
   dayIndex: number
@@ -332,6 +334,8 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
             const shift = shifts.find(s => s.day_index === day.dayIndex)
             if (!shift) return null
             const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0, reserves: shift.reserves ?? 0 }
+            const permanent = resolvePermanentStaff(shift.permanent_staff, day.dayIndex, day.holiday != null)
+            const total = permanent + c.approved
             const badgeClass   = !shift.is_open ? 'b-closed' : 'b-open'
             const badgeLabel   = !shift.is_open ? 'Stängd' : 'Öppen'
             const isExpanded = expandedIds.has(shift.id)
@@ -373,8 +377,13 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
 
                 <div>
                   <div className="wk-meter">
-                    <span className="num">{c.approved}</span>
-                    <span className="denom">godkända</span>
+                    <span className="num">{total}</span>
+                    <span className="denom">totalt i tjänst</span>
+                  </div>
+                  <div className="wk-staff-split">
+                    <span className="wk-staff-perm">{permanent} fast</span>
+                    <span className="wk-staff-sep">·</span>
+                    <span className="wk-staff-extra">{c.approved} extra</span>
                   </div>
                   <div className="wk-waiting">{c.pending} väntar på godkännande</div>
                   {c.reserves > 0 && (

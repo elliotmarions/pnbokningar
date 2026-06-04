@@ -14,7 +14,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'body måste vara en array med 1–7 pass.' }, { status: 400 })
   }
 
-  const body: { id: number; is_open?: number; slots?: number }[] = []
+  const body: { id: number; is_open?: number; slots?: number; permanent_staff?: number | null }[] = []
   for (const item of raw) {
     if (typeof item !== 'object' || item === null) return NextResponse.json({ error: 'Ogiltigt pass.' }, { status: 400 })
     const r = item as Record<string, unknown>
@@ -24,7 +24,15 @@ export async function PUT(req: NextRequest) {
     const slots_val = r.slots !== undefined ? int(r.slots, { min: 1, max: 50 }) : undefined
     if (r.is_open !== undefined && is_open_val === null) return NextResponse.json(fieldError('is_open'), { status: 400 })
     if (r.slots !== undefined && slots_val === null) return NextResponse.json(fieldError('slots'), { status: 400 })
-    body.push({ id, is_open: is_open_val ?? undefined, slots: slots_val ?? undefined })
+    // permanent_staff: null resets to the weekday default; a number (0–200) overrides it.
+    let permanent_val: number | null | undefined
+    if (r.permanent_staff === null) {
+      permanent_val = null
+    } else if (r.permanent_staff !== undefined) {
+      permanent_val = int(r.permanent_staff, { min: 0, max: 200 })
+      if (permanent_val === null) return NextResponse.json(fieldError('permanent_staff'), { status: 400 })
+    }
+    body.push({ id, is_open: is_open_val ?? undefined, slots: slots_val ?? undefined, permanent_staff: permanent_val })
   }
 
   // Batch-fetch all shift dates in one round-trip
@@ -54,7 +62,7 @@ export async function PUT(req: NextRequest) {
   }
 
   // Run all updates in parallel
-  await Promise.all(body.map(s => shiftRepo.update(s.id, { is_open: s.is_open, slots: s.slots })))
+  await Promise.all(body.map(s => shiftRepo.update(s.id, { is_open: s.is_open, slots: s.slots, permanent_staff: s.permanent_staff })))
 
   // Auto-apply long-term bookings to opened shifts (in parallel)
   const { applyLongTermToShift } = await import('@/lib/apply-long-term')
