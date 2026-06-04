@@ -71,6 +71,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [rejectReason, setRejectReason] = useState('')
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
   const [withdrawReason, setWithdrawReason] = useState('')
+  // Driver (user id) awaiting confirmation before being booked in from "Övriga".
+  const [confirmBookId, setConfirmBookId] = useState<string | null>(null)
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   // Ids the user just optimistically removed ("Ta bort helt"). Prevents an
   // in-flight server poll — which still has the row — from re-introducing it.
@@ -803,27 +805,48 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           {others.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Alla chaufförer har anmält sig eller är redan inbokade.</p>
             : others.map(d => (
-              <div key={d.id} className="applicant-row">
-                <div className="avatar lg">{initials(d.name)}</div>
-                <div className="info">
-                  <div className="name">{d.name}</div>
-                  <div className="meta">
-                    {d.phone && <><Phone className="svg-ico svg-ico-sm" />{d.phone}</>}
+              <div key={d.id}>
+                <div className="applicant-row">
+                  <div className="avatar lg">{initials(d.name)}</div>
+                  <div className="info">
+                    <div className="name">{d.name}</div>
+                    <div className="meta">
+                      {d.phone && <><Phone className="svg-ico svg-ico-sm" />{d.phone}</>}
+                    </div>
+                  </div>
+                  <div className="actions">
+                    {onBookDriver && (
+                      <button
+                        className="btn btn-sm btn-success"
+                        disabled={bookingId === d.id}
+                        onClick={() => setConfirmBookId(d.id)}
+                        title="Boka in chauffören"
+                      >
+                        <Check className="svg-ico svg-ico-sm" />
+                        {bookingId === d.id ? 'Bokar…' : 'Boka in'}
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="actions">
-                  {onBookDriver && (
-                    <button
-                      className="btn btn-sm btn-success"
-                      disabled={bookingId === d.id}
-                      onClick={() => handleBookDriver(d.id, d.name)}
-                      title="Boka in chauffören"
-                    >
-                      <Check className="svg-ico svg-ico-sm" />
-                      {bookingId === d.id ? 'Bokar…' : 'Boka in'}
-                    </button>
-                  )}
-                </div>
+                {confirmBookId === d.id && onBookDriver && (
+                  <div className="reject-form">
+                    <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                      Boka in <strong>{d.name}</strong> på {dayLabel} {shift ? fmt(shift.date) : ''}?
+                      Chauffören godkänns direkt och får en notis.
+                    </p>
+                    <div className="reject-form-actions">
+                      <button className="btn btn-sm btn-ghost" onClick={() => setConfirmBookId(null)}>Avbryt</button>
+                      <button
+                        className="btn btn-sm btn-success"
+                        disabled={bookingId === d.id}
+                        onClick={() => { setConfirmBookId(null); handleBookDriver(d.id, d.name) }}
+                      >
+                        <Check className="svg-ico svg-ico-sm" />
+                        Ja, boka in
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           }
