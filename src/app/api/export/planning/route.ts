@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { getDb } from '@/lib/db'
+import { getDb, ensureMigrated } from '@/lib/db'
 import { weekInfoFromNumbers } from '@/lib/weeks'
 import ExcelJS from 'exceljs'
 
@@ -16,10 +16,19 @@ export async function GET(req: NextRequest) {
 
   const info = weekInfoFromNumbers(weekYear, weekNumber)
   const sql = getDb()
+  await ensureMigrated()
 
-  // Approved drivers
-  const approvedRows = await sql<{ day_index: number; name: string }[]>`
-    SELECT s.day_index, u.name
+  // When was this week's planning last exported? Drivers approved after this
+  // are flagged as "NYA". Null on the first-ever export (nothing is "new").
+  const [lastExportRow] = await sql<{ exported_at: Date }[]>`
+    SELECT exported_at FROM export_log
+    WHERE week_year = ${weekYear} AND week_number = ${weekNumber}
+  `
+  const lastExport: Date | null = lastExportRow?.exported_at ?? null
+
+  // Approved drivers (with approval time so we can tell which are new)
+  const approvedRows = await sql<{ day_index: number; name: string; approved_at: Date }[]>`
+    SELECT s.day_index, u.name, ap.approved_at
     FROM approvals ap
     JOIN applications a ON a.id = ap.application_id
     JOIN shifts s ON s.id = a.shift_id
@@ -44,10 +53,11 @@ export async function GET(req: NextRequest) {
     ORDER BY s.day_index, a.applied_at
   `
 
-  const approvedByDay = new Map<number, string[]>()
+  const approvedByDay = new Map<number, { name: string; isNew: boolean }[]>()
   for (const r of approvedRows) {
     if (!approvedByDay.has(r.day_index)) approvedByDay.set(r.day_index, [])
-    approvedByDay.get(r.day_index)!.push(r.name)
+    const isNew = lastExport != null && new Date(r.approved_at) > lastExport
+    approvedByDay.get(r.day_index)!.push({ name: r.name, isNew })
   }
   const reservesByDay = new Map<number, string[]>()
   for (const r of reserveRows) {
@@ -90,14 +100,24 @@ export async function GET(req: NextRequest) {
     const ws = wb.addWorksheet(sheetName)
     ws.getColumn(1).width = 32
 
-    // Approved section
-    if (approved.length > 0) {
-      const formatted = approved.map(formatName).sort((a, b) => a.localeCompare(b, 'sv'))
-      formatted.forEach(name => {
-        const row = ws.addRow([name])
-        row.getCell(1).font = { name: 'Calibri', size: 14 }
-        row.getCell(1).border = cellBorder
-      })
+    // Approved section — already-exported names first (unchanged layout), then
+    // any drivers booked since the last export under a "NYA" heading.
+    const oldNames = approved.filter(a => !a.isNew).map(a => formatName(a.name)).sort((a, b) => a.localeCompare(b, 'sv'))
+    const newNames = approved.filter(a => a.isNew).map(a => formatName(a.name)).sort((a, b) => a.localeCompare(b, 'sv'))
+
+    const addNameRow = (name: string) => {
+      const row = ws.addRow([name])
+      row.getCell(1).font = { name: 'Calibri', size: 14 }
+      row.getCell(1).border = cellBorder
+    }
+
+    oldNames.forEach(addNameRow)
+
+    if (newNames.length > 0) {
+      if (oldNames.length > 0) ws.addRow([]) // blank separator
+      const header = ws.addRow(['NYA'])
+      header.getCell(1).font = { name: 'Calibri', size: 14, bold: true }
+      newNames.forEach(addNameRow)
     }
 
     // Reserve section — appended with a blank row + "Reserver" header.
@@ -128,7 +148,7 @@ export async function GET(req: NextRequest) {
           {
             type: 'expression',
             priority: 1,
-            formulae: ['AND(A1<>"",A1<>"Reserver",COUNTIF(A:A,A1)>1)'],
+            formulae: ['AND(A1<>"",A1<>"Reserver",A1<>"NYA",COUNTIF(A:A,A1)>1)'],
             style: {
               font: { name: 'Calibri', size: 14, color: { argb: 'FF9C0006' } },
               fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } },
@@ -143,6 +163,14 @@ export async function GET(req: NextRequest) {
     const ws = wb.addWorksheet('Inga pass')
     ws.addRow(['Inga godkända chaufförer eller reserver denna vecka.'])
   }
+
+  // Record this export as the new baseline so the next export flags only the
+  // drivers booked after now.
+  await sql`
+    INSERT INTO export_log (week_year, week_number, exported_at)
+    VALUES (${weekYear}, ${weekNumber}, NOW())
+    ON CONFLICT (week_year, week_number) DO UPDATE SET exported_at = NOW()
+  `
 
   const buf = await wb.xlsx.writeBuffer()
   return new NextResponse(buf, {

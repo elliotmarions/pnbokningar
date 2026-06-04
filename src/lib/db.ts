@@ -197,6 +197,33 @@ async function migrate() {
     console.error('[migrate] activity_log migration failed (non-fatal):', err)
   }
 
+  // Planning-export log: when each week's planning was last exported, so the
+  // export can flag drivers booked since the previous export under a "NYA"
+  // heading.
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS export_log (
+        week_year    INTEGER NOT NULL,
+        week_number  INTEGER NOT NULL,
+        exported_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (week_year, week_number)
+      )
+    `
+    await sql`ALTER TABLE export_log ENABLE ROW LEVEL SECURITY`
+    await sql.unsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_policies
+          WHERE tablename = 'export_log' AND policyname = 'service_role_all'
+        ) THEN
+          EXECUTE 'CREATE POLICY service_role_all ON export_log FOR ALL TO service_role USING (true) WITH CHECK (true)';
+        END IF;
+      END $$
+    `)
+  } catch (err) {
+    console.error('[migrate] export_log migration failed (non-fatal):', err)
+  }
+
   // Custom closed days (admin-defined, with reason + color)
   await sql`
     CREATE TABLE IF NOT EXISTS custom_closed_days (
