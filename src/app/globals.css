@@ -813,7 +813,8 @@ a { color: inherit; text-decoration: none; }
 }
 .month-cell-count.full { color: var(--red); }
 .month-cell-closed { font-size: 10px; color: var(--text-tertiary); }
-.month-cell-past-count { font-size: 11px; font-weight: 700; color: var(--green); font-variant-numeric: tabular-nums; }
+.month-cell-past-count { font-size: 10.5px; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; }
+.month-cell-extra { font-size: 9.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; margin-top: 1px; }
 .month-cell-pending { font-size: 10.5px; color: var(--text-tertiary); display: flex; align-items: center; }
 .month-cell-reserves { font-size: 9.5px; color: var(--text-tertiary); opacity: 0.6; font-variant-numeric: tabular-nums; }
 

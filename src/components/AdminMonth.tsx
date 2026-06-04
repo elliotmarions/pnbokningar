@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Phone } from './Icons'
 import { useAdminCache } from './AdminCacheProvider'
 import { getHolidayMap, HolidayInfo } from '../lib/holidays'
 import { ViewToggle, type OverviewView } from './ViewToggle'
+import { resolvePermanentStaff } from '../lib/weeks'
 
 interface MonthShift {
   id: number
@@ -15,6 +16,7 @@ interface MonthShift {
   approved: number
   pending: number
   reserves: number
+  permanent_staff: number | null
 }
 interface Driver {
   id: number
@@ -170,6 +172,14 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
     [customClosed]
   )
 
+  // Grand total = permanent staff (per-weekday default, red days → 0, per-week
+  // overrides honoured) + approved extras, summed across every shift in range.
+  const totalStaff = useMemo(
+    () => shifts.reduce((sum, s) =>
+      sum + resolvePermanentStaff(s.permanent_staff, s.day_index, holidayMap.get(s.date) != null) + s.approved, 0),
+    [shifts, holidayMap]
+  )
+
   return (
     <div>
       <div className="cfg-top">
@@ -213,7 +223,7 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
 
           {/* Totals */}
           <div className="week-stats">
-            Tillsatta <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
+            Totalt <strong>{totalStaff}</strong> · Extra <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
           </div>
         </div>
 
@@ -251,6 +261,8 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                   const drivers     = shift ? driversMap[shift.id] : undefined
                   const holiday     = holidayMap.get(d.date)
                   const customDay   = customClosedMap[d.date]
+                  const permanent   = shift ? resolvePermanentStaff(shift.permanent_staff, shift.day_index, holiday != null) : 0
+                  const total       = shift ? permanent + shift.approved : 0
 
                   const HOLIDAY_COLOR: Record<string, string> = {
                     holiday: '#ef4444',
@@ -288,11 +300,15 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                         {showClosed ? (
                           <span className="month-cell-closed">Stängd</span>
                         ) : shift?.is_open === 1 ? (
-                          <span className="month-cell-count">
-                            {shift.approved}
+                          <span className="month-cell-count" title={`${permanent} fast + ${shift.approved} extra`}>
+                            {total}
                           </span>
                         ) : null}
                       </div>
+
+                      {shift?.is_open === 1 && (
+                        <div className="month-cell-extra">{shift.approved} extra</div>
+                      )}
 
                       {calLabel && (
                         <div style={{ fontSize: 9, color: calColor ?? 'var(--text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -301,7 +317,9 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                       )}
 
                       {showClosed && shift && shift.approved > 0 && (
-                        <div className="month-cell-past-count">{shift.approved} st</div>
+                        <div className="month-cell-past-count" title={`${permanent} fast + ${shift.approved} extra`}>
+                          {total} totalt · {shift.approved} extra
+                        </div>
                       )}
 
                       {shift?.is_open === 1 && shift.pending > 0 && (
