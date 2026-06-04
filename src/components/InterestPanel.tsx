@@ -66,7 +66,7 @@ function fmtAppliedFull(iso: string) {
 
 export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
-  const [activeTab, setActiveTab] = useState<'applications' | 'reserves'>('applications')
+  const [activeTab, setActiveTab] = useState<'applications' | 'reserves' | 'others'>('applications')
   const [rejectingId, setRejectingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
@@ -198,16 +198,17 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  // Fetch all drivers once when panel opens (for booking)
+  // Fetch all drivers when the panel opens — used both for manual booking and
+  // for the "Övriga" tab (drivers with no involvement in this shift).
   useEffect(() => {
-    if (!open || !onBookDriver) return
+    if (!open) return
     fetch('/api/users')
       .then(r => r.json())
       .then((data: (Driver & { role: string })[]) => {
         setAllDrivers(data.filter(u => u.role === 'driver'))
       })
       .catch(() => {})
-  }, [open, onBookDriver])
+  }, [open])
 
   // Focus search input when booking section opens
   useEffect(() => {
@@ -268,6 +269,13 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const rejected = applicants.filter(a => a.rejected && !a.reserve)
   const withdrawn = applicants.filter(a => a.withdrawn && !a.approved && !a.reserve)
   const reserves = applicants.filter(a => a.reserve === 1 && !a.approved)
+
+  // Drivers with no involvement in this shift at all — not applied, approved,
+  // rejected, withdrawn or on the reserve list. Available to book in directly.
+  const involvedIds = new Set(applicants.map(a => a.user_id))
+  const others = allDrivers
+    .filter(d => !involvedIds.has(d.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
 
   // Stable applied-order rank: #1 is the first to apply, #2 the second, etc.
   // Computed across the entire shift (any status) so approving/rejecting one
@@ -441,6 +449,15 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             Reserver
             {reserves.length > 0 && (
               <span className="ip-tab-badge">{reserves.length}</span>
+            )}
+          </button>
+          <button
+            className={`ip-tab ${activeTab === 'others' ? 'active' : ''}`}
+            onClick={() => setActiveTab('others')}
+          >
+            Övriga
+            {others.length > 0 && (
+              <span className="ip-tab-badge">{others.length}</span>
             )}
           </button>
         </div>
@@ -769,6 +786,41 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       onClick={() => handleDeleteApplication(a.id)}
                     >
                       <X className="svg-ico svg-ico-sm" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          }
+          </>}
+
+          {activeTab === 'others' && <>
+          {/* Drivers with no involvement in this shift — available to book in. */}
+          <div className="list-group-h">
+            <span>Ej anmälda chaufförer</span>
+            {others.length > 0 && <span className="badge b-closed">{others.length}</span>}
+          </div>
+          {others.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Alla chaufförer har anmält sig eller är redan inbokade.</p>
+            : others.map(d => (
+              <div key={d.id} className="applicant-row">
+                <div className="avatar lg">{initials(d.name)}</div>
+                <div className="info">
+                  <div className="name">{d.name}</div>
+                  <div className="meta">
+                    {d.phone && <><Phone className="svg-ico svg-ico-sm" />{d.phone}</>}
+                  </div>
+                </div>
+                <div className="actions">
+                  {onBookDriver && (
+                    <button
+                      className="btn btn-sm btn-success"
+                      disabled={bookingId === d.id}
+                      onClick={() => handleBookDriver(d.id, d.name)}
+                      title="Boka in chauffören"
+                    >
+                      <Check className="svg-ico svg-ico-sm" />
+                      {bookingId === d.id ? 'Bokar…' : 'Boka in'}
                     </button>
                   )}
                 </div>
