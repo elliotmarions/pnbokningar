@@ -52,6 +52,7 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
   const [weekNumber, setWeekNumber] = useState(0)
   const [shifts, setShifts] = useState<Shift[]>([])
   const [days, setDays] = useState<DayInfo[]>([])
+  const [unexportedApprovals, setUnexportedApprovals] = useState(0)
   const [loading, setLoading] = useState(true)
   const { toast, show: showToast, clear: clearToast } = useToast()
   const cache = useAdminCache()
@@ -96,12 +97,13 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
     const { isoYear, isoWeek } = isoFromOffset(offset)
     const cacheKey = `weeks-${isoYear}-${isoWeek}`
 
-    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[]; applicantsByShift?: Record<number, unknown[]> }) => {
+    const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[]; applicantsByShift?: Record<number, unknown[]>; unexportedApprovals?: number }) => {
       setWeekYear(data.weekYear)
       setWeekNumber(data.weekNumber)
       setShifts(data.shifts)
       setDays(data.days)
       if (data.applicantsByShift) setApplicantsByShift(data.applicantsByShift)
+      setUnexportedApprovals(data.unexportedApprovals ?? 0)
       setLoading(false)
     }
 
@@ -148,6 +150,7 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
         if (!res.ok) return
         const data = await res.json()
         setShifts(data.shifts)
+        setUnexportedApprovals(data.unexportedApprovals ?? 0)
         if (data.applicantsByShift) {
           setApplicantsByShift(data.applicantsByShift)
           // Update driver/reserve maps for any expanded cards using the fresh data
@@ -294,6 +297,14 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
           <button className="btn btn-sm" onClick={handleExportPlanning}>
             <FileSpreadsheet className="svg-ico svg-ico-sm" />
             Exportera till planering
+            {unexportedApprovals > 0 && (
+              <span
+                className="export-new-badge"
+                title={`${unexportedApprovals} nya godkända sedan senaste exporten`}
+              >
+                {unexportedApprovals} NYA
+              </span>
+            )}
           </button>
         </div>
       </div>

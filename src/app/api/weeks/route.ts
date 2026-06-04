@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
-import { shiftRepo, applicationRepo, customClosedRepo } from '@/lib/db'
+import { shiftRepo, applicationRepo, customClosedRepo, getDb } from '@/lib/db'
 import { weekInfoFromNumbers, currentWeekInfo } from '@/lib/weeks'
 import { getHolidayInfo } from '@/lib/holidays'
 
@@ -68,5 +68,22 @@ export async function GET(req: NextRequest) {
     applicantsByShift[a.shift_id].push(a)
   }
 
-  return NextResponse.json({ weekYear, weekNumber, shifts, days, applicantsByShift })
+  // How many drivers were approved after this week's planning was last exported?
+  // These are the "NYA" names that aren't in the exported file yet — the
+  // overview shows a small marker so the admin knows to re-export. Treat a
+  // never-exported week as "everything approved is unexported" (epoch baseline).
+  const sql = getDb()
+  const [{ n: unexportedApprovals }] = await sql<{ n: number }[]>`
+    SELECT COUNT(*)::int AS n
+    FROM approvals ap
+    JOIN applications a ON a.id = ap.application_id
+    JOIN shifts s ON s.id = a.shift_id
+    WHERE s.week_year = ${weekYear} AND s.week_number = ${weekNumber}
+      AND ap.approved_at > COALESCE(
+        (SELECT exported_at FROM export_log WHERE week_year = ${weekYear} AND week_number = ${weekNumber}),
+        'epoch'::timestamptz
+      )
+  `
+
+  return NextResponse.json({ weekYear, weekNumber, shifts, days, applicantsByShift, unexportedApprovals })
 }
