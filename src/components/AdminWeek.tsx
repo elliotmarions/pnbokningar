@@ -378,7 +378,7 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
                 <div>
                   <div className="wk-meter">
                     <span className="num">{total}</span>
-                    <span className="denom">totalt i tjänst</span>
+                    <span className="denom">totalt</span>
                   </div>
                   <div className="wk-staff-split">
                     <span className="wk-staff-perm">{permanent} fast</span>
