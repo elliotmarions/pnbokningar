@@ -23,7 +23,7 @@
     "web-push": "^3.6.7"
   },
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "devDependencies": {
     "@types/node": "^20.17.57",
