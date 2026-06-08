@@ -73,6 +73,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [withdrawReason, setWithdrawReason] = useState('')
   // Driver (user id) awaiting confirmation before being booked in from "Övriga".
   const [confirmBookId, setConfirmBookId] = useState<string | null>(null)
+  const [confirmPromoteId, setConfirmPromoteId] = useState<number | null>(null)
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   // Ids the user just optimistically removed ("Ta bort helt"). Prevents an
   // in-flight server poll — which still has the row — from re-introducing it.
@@ -814,40 +815,59 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           {reserves.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Ingen på reservlistan.</p>
             : reserves.map((a, i) => (
-              <div key={a.id} className="applicant-row reserve-row">
-                <div className="avatar lg" style={{ background: '#1a2a3a' }}>{initials(a.user_name)}</div>
-                <div className="info">
-                  <div className="name">
-                    <span className="order-tag">#{i + 1}</span>
-                    {a.user_name}
+              <div key={a.id}>
+                <div className="applicant-row reserve-row">
+                  <div className="avatar lg" style={{ background: '#1a2a3a' }}>{initials(a.user_name)}</div>
+                  <div className="info">
+                    <div className="name">
+                      <span className="order-tag">#{i + 1}</span>
+                      {a.user_name}
+                    </div>
+                    <div className="meta">
+                      {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
+                    </div>
                   </div>
-                  <div className="meta">
-                    {a.user_phone && <><Phone className="svg-ico svg-ico-sm" />{a.user_phone}</>}
+                  <div className="actions">
+                    {onPromoteReserve && (
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => setConfirmPromoteId(a.id)}
+                        title="Flytta till godkänd"
+                      >
+                        <Check className="svg-ico svg-ico-sm" />
+                        Boka in
+                      </button>
+                    )}
+                    {onDeleteApplication && (
+                      <button
+                        className="btn btn-sm btn-danger-ghost btn-icon"
+                        title="Ta bort från reservlista"
+
+                        onClick={() => handleDeleteApplication(a.id)}
+                      >
+                        <X className="svg-ico svg-ico-sm" />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="actions">
-                  {onPromoteReserve && (
-                    <button
-                      className="btn btn-sm btn-success"
-
-                      onClick={() => handlePromoteReserve(a.id)}
-                      title="Flytta till godkänd"
-                    >
-                      <Check className="svg-ico svg-ico-sm" />
-                      Boka in
-                    </button>
-                  )}
-                  {onDeleteApplication && (
-                    <button
-                      className="btn btn-sm btn-danger-ghost btn-icon"
-                      title="Ta bort från reservlista"
-
-                      onClick={() => handleDeleteApplication(a.id)}
-                    >
-                      <X className="svg-ico svg-ico-sm" />
-                    </button>
-                  )}
-                </div>
+                {confirmPromoteId === a.id && onPromoteReserve && (
+                  <div className="reject-form">
+                    <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                      Boka in <strong>{a.user_name}</strong> på {dayLabel} {shift ? fmt(shift.date) : ''}?
+                      Reserven flyttas till godkänd och får en notis.
+                    </p>
+                    <div className="reject-form-actions">
+                      <button className="btn btn-sm btn-ghost" onClick={() => setConfirmPromoteId(null)}>Avbryt</button>
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => { setConfirmPromoteId(null); handlePromoteReserve(a.id) }}
+                      >
+                        <Check className="svg-ico svg-ico-sm" />
+                        Ja, boka in
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           }
