@@ -752,8 +752,65 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           {/* Reserve list */}
           <div className="list-group-h">
             <span>Reservlista</span>
-            {reserves.length > 0 && <span className="badge b-reserve">{reserves.length}</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {reserves.length > 0 && <span className="badge b-reserve">{reserves.length}</span>}
+              {onBookDriver && (
+                <button
+                  className="btn btn-sm btn-ghost"
+                  style={{ padding: '2px 8px', fontSize: 11, gap: 4 }}
+                  onClick={() => { setShowBooking(b => !b); setDriverSearch('') }}
+                >
+                  <Plus className="svg-ico" style={{ width: 11, height: 11 }} />
+                  Boka manuellt
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Inline driver booking */}
+          {showBooking && onBookDriver && (() => {
+            const bookedIds = new Set(applicants.map(a => a.user_id))
+            const filtered = allDrivers.filter(d =>
+              !bookedIds.has(d.id) &&
+              d.name.toLowerCase().includes(driverSearch.toLowerCase())
+            )
+            return (
+              <div className="book-driver-panel">
+                <input
+                  ref={searchRef}
+                  className="book-driver-search"
+                  placeholder="Sök chaufför…"
+                  value={driverSearch}
+                  onChange={e => setDriverSearch(e.target.value)}
+                />
+                <div className="book-driver-list">
+                  {filtered.length === 0
+                    ? <div className="book-driver-empty">Inga chaufförer att visa</div>
+                    : filtered.map(d => (
+                        <button
+                          key={d.id}
+                          className="book-driver-row"
+                          disabled={bookingId === d.id}
+                          onClick={() => handleBookDriver(d.id, d.name)}
+                        >
+                          <div className="avatar" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}>
+                            {initials(d.name)}
+                          </div>
+                          <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{d.name}</div>
+                            {d.phone && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{d.phone}</div>}
+                          </div>
+                          {bookingId === d.id
+                            ? <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bokar…</span>
+                            : <span style={{ fontSize: 11, color: 'var(--primary)' }}>Boka</span>
+                          }
+                        </button>
+                      ))
+                  }
+                </div>
+              </div>
+            )
+          })()}
           {reserves.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Ingen på reservlistan.</p>
             : reserves.map((a, i) => (
