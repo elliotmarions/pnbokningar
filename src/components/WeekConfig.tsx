@@ -580,10 +580,11 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
           const shift = local.find(s => s.day_index === day.dayIndex)
           if (!shift) return null
           const isOpen = !!shift.is_open
-          const isFull = !isOpen && !!shift.is_full
           const now = new Date()
           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
           const isPast = day.date < todayStr
+          // A passed day is shown as fully closed — fullbokad no longer applies.
+          const isFull = !isOpen && !!shift.is_full && !isPast
           const lock = getLockReason(day)
           const isLocked = lock !== null
           const isBooked  = highlight?.booked.has(shift.id) ?? false
@@ -683,9 +684,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                 />
               </div>
               {isFull && (
-                <div className="cfg-full-note">
-                  {isPast ? 'Fullbokad — dagen har passerat.' : 'Fullbokad — chaufförer kan anmäla sig som reserv.'}
-                </div>
+                <div className="cfg-full-note">Fullbokad — chaufförer kan anmäla sig som reserv.</div>
               )}
             </div>
           )
