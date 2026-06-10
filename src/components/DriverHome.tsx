@@ -727,6 +727,11 @@ function DayCard({ day, app, onApply, onWithdraw, onApplyReserve }: {
   onApplyReserve: (id: number) => void
 }) {
   const status = statusFor(day.shift, app)
+  // Has this day already passed? Past days can't be signed up for, so the
+  // reserve button is hidden (a disabled label is shown instead).
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const isPast = day.date < todayStr
   const isHoliday = status === 'closed' && day.holiday?.type === 'holiday'
   const isEve     = status === 'closed' && day.holiday?.type === 'eve'
   const cardClass = `day-card is-${status}${isHoliday ? ' is-holiday' : ''}${isEve ? ' is-eve' : ''}`
@@ -769,8 +774,11 @@ function DayCard({ day, app, onApply, onWithdraw, onApplyReserve }: {
       {status === 'open' && day.shift && (
         <button className="day-action is-apply" onClick={() => onApply(day.shift!.id)}>Anmäl intresse</button>
       )}
-      {status === 'full' && day.shift && (
+      {status === 'full' && day.shift && !isPast && (
         <button className="day-action is-reserve" onClick={() => onApplyReserve(day.shift!.id)}>Anmäl som reserv</button>
+      )}
+      {status === 'full' && isPast && (
+        <button className="day-action is-disabled" disabled>Fullbokad</button>
       )}
       {status === 'pending' && app && (
         <button className="day-action is-cancel" onClick={() => onWithdraw(app.id)}>Återta anmälan</button>
