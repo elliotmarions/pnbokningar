@@ -8,7 +8,7 @@ import { PushNudge } from './PushNudge'
 import { CurrentWeekBadge } from './CurrentWeekBadge'
 
 interface ShiftDay {
-  shift: { id: number; is_open: number; slots: number; day_index: number; date: string } | null
+  shift: { id: number; is_open: number; is_full?: number; slots: number; day_index: number; date: string } | null
   dayIndex: number
   date: string
   label: string
@@ -39,7 +39,7 @@ function dayLabelFromIndex(idx?: number) {
 interface WeekData {
   weekYear: number
   weekNumber: number
-  shifts: { id: number; day_index: number; date: string; is_open: number; slots: number; approved?: number; pending?: number }[]
+  shifts: { id: number; day_index: number; date: string; is_open: number; is_full?: number; slots: number; approved?: number; pending?: number }[]
   days: { dayIndex: number; date: string; label: string; shortLabel: string; startTime: string; endTime: string; holiday: { name: string; type: 'holiday' | 'eve' } | null }[]
 }
 
@@ -57,7 +57,19 @@ function initials(name?: string | null) {
 type DayStatus = 'closed' | 'confirmed' | 'pending' | 'rejected' | 'withdrawn' | 'full' | 'open' | 'reserve'
 
 function statusFor(shift: ShiftDay['shift'], app?: Application): DayStatus {
-  if (!shift || !shift.is_open) return 'closed'
+  if (!shift) return 'closed'
+  if (!shift.is_open) {
+    // Closed day. If admin marked it fullbokad, drivers can still join the
+    // reserve list — but the driver's own existing status takes precedence.
+    if (shift.is_full) {
+      if (app?.approved) return 'confirmed'
+      if (app?.reserve === 1) return 'reserve'
+      if (app?.rejected) return 'rejected'
+      if (app?.withdrawn) return 'withdrawn'
+      return 'full'
+    }
+    return 'closed'
+  }
   if (app?.approved) return 'confirmed'
   if (app?.rejected) return 'rejected'
   if (app?.withdrawn) return 'withdrawn'

@@ -12,6 +12,7 @@ interface Shift {
   day_index: number
   date: string
   is_open: number
+  is_full?: number
   slots: number
   approved?: number
   pending?: number
@@ -64,6 +65,10 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
   // Shift ids that will be opened by the "Öppna vecka" dialog.
   const [openWeekIds, setOpenWeekIds] = useState<number[]>([])
   const [closeWeekDialog, setCloseWeekDialog] = useState(false)
+  // When stänga veckan, whether to mark the closed days as fullbokade (reserves allowed).
+  const [closeWeekFull, setCloseWeekFull] = useState(false)
+  // Per-day close dialog — pick "stäng helt" vs "markera som fullbokad".
+  const [closeDayId, setCloseDayId] = useState<number | null>(null)
   // Custom-closed days (sommarstängt, midsommar, jul etc) — keyed by date string
   const [customClosed, setCustomClosed] = useState<Record<string, { reason: string; color: string }>>({})
   const { toast, show: showToast, clear: clearToast } = useToast()
@@ -233,22 +238,25 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [weekOffset, cache])
 
-  const update = async (id: number, field: 'is_open', value: number) => {
+  // Set a day's status. is_open=1 opens it (and clears fullbokad); is_open=0
+  // closes it, optionally marking it fullbokad (is_full=1) so drivers can still
+  // join the reserve list.
+  const saveStatus = async (id: number, isOpen: number, isFull: number) => {
     const currentShift = local.find(s => s.id === id)
     if (!currentShift) return
     // Block opening a day that's locked by holiday/eve/custom-closed
     const day = days.find(d => d.dayIndex === currentShift.day_index)
-    if (day && field === 'is_open' && value === 1 && getLockReason(day)) {
+    if (day && isOpen === 1 && getLockReason(day)) {
       const reason = getLockReason(day)!
       showToast(`Den här dagen kan inte öppnas — ${reason.label.toLowerCase()} (${reason.detail}).`, 'error')
       return
     }
-    const updatedShift = { ...currentShift, [field]: value }
+    const updatedShift = { ...currentShift, is_open: isOpen, is_full: isFull }
     setLocal(prev => prev.map(s => s.id === id ? updatedShift : s))
     const res = await fetch('/api/shifts', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ id: updatedShift.id, is_open: updatedShift.is_open }]),
+      body: JSON.stringify([{ id, is_open: isOpen, is_full: isFull }]),
     })
     if (res.ok) showToast('Autosparad')
     else showToast('Fel vid sparande', 'error')
@@ -461,8 +469,8 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     const updateIds = new Set(updates.map(u => u.id))
     const previousLocal = local
     const previousShifts = shifts
-    setLocal(prev => prev.map(s => updateIds.has(s.id) ? { ...s, is_open: 1 } : s))
-    setShifts(prev => prev.map(s => updateIds.has(s.id) ? { ...s, is_open: 1 } : s))
+    setLocal(prev => prev.map(s => updateIds.has(s.id) ? { ...s, is_open: 1, is_full: 0 } : s))
+    setShifts(prev => prev.map(s => updateIds.has(s.id) ? { ...s, is_open: 1, is_full: 0 } : s))
     setOpenWeekDialog(false)
     showToast(`${updates.length} pass öppnade.`)
 
@@ -491,16 +499,18 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
       setCloseWeekDialog(false)
       return
     }
-    const updates = toClose.map(s => ({ id: s.id, is_open: 0 }))
+    const full = closeWeekFull ? 1 : 0
+    const updates = toClose.map(s => ({ id: s.id, is_open: 0, is_full: full }))
 
     // Optimistic: close instantly, dismiss dialog, show toast.
     const previousLocal = local
     const previousShifts = shifts
     const closeIds = new Set(toClose.map(s => s.id))
-    setLocal(prev => prev.map(s => closeIds.has(s.id) ? { ...s, is_open: 0 } : s))
-    setShifts(prev => prev.map(s => closeIds.has(s.id) ? { ...s, is_open: 0 } : s))
+    setLocal(prev => prev.map(s => closeIds.has(s.id) ? { ...s, is_open: 0, is_full: full } : s))
+    setShifts(prev => prev.map(s => closeIds.has(s.id) ? { ...s, is_open: 0, is_full: full } : s))
     setCloseWeekDialog(false)
-    showToast(`${toClose.length} pass stängda.`)
+    setCloseWeekFull(false)
+    showToast(full ? `${toClose.length} pass markerade som fullbokade.` : `${toClose.length} pass stängda.`)
 
     withInflight(async () => {
       try {
@@ -570,6 +580,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
           const shift = local.find(s => s.day_index === day.dayIndex)
           if (!shift) return null
           const isOpen = !!shift.is_open
+          const isFull = !isOpen && !!shift.is_full
           const lock = getLockReason(day)
           const isLocked = lock !== null
           const isBooked  = highlight?.booked.has(shift.id) ?? false
@@ -580,7 +591,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
           return (
             <div
               key={day.dayIndex}
-              className={`cfg-card ${isOpen ? 'is-open' : 'is-closed'} ${isLocked ? 'is-locked' : ''} ${isHit ? 'is-driver-hit' : ''} ${isApplied ? 'is-driver-applied' : ''} ${isDim ? 'is-driver-dim' : ''}`}
+              className={`cfg-card ${isOpen ? 'is-open' : isFull ? 'is-full' : 'is-closed'} ${isLocked ? 'is-locked' : ''} ${isHit ? 'is-driver-hit' : ''} ${isApplied ? 'is-driver-applied' : ''} ${isDim ? 'is-driver-dim' : ''}`}
             >
               <div className="top">
                 <div>
@@ -588,8 +599,8 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                   <div className="day-date">{fmt(day.date)}</div>
                   <div className="hours"><Clock className="svg-ico svg-ico-sm" style={{ verticalAlign: 'middle', marginRight: 4 }} />{day.startTime}–{day.endTime}</div>
                 </div>
-                <span className={`badge ${isOpen ? 'b-open' : 'b-closed'}`}>
-                  <span className="pip" />{isOpen ? 'Öppen' : 'Stängd'}
+                <span className={`badge ${isOpen ? 'b-open' : isFull ? 'b-full' : 'b-closed'}`}>
+                  <span className="pip" />{isOpen ? 'Öppen' : isFull ? 'Fullbokad' : 'Stängd'}
                 </span>
               </div>
 
@@ -657,7 +668,10 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                       showToast(`Den här dagen kan inte öppnas — ${lock.label.toLowerCase()} (${lock.detail}).`, 'error')
                       return
                     }
-                    update(shift.id, 'is_open', isOpen ? 0 : 1)
+                    // Closing an open day → ask how (helt stängd vs fullbokad).
+                    // Opening a closed/fullbokad day → open it (clears fullbokad).
+                    if (isOpen) setCloseDayId(shift.id)
+                    else saveStatus(shift.id, 1, 0)
                   }}
                   role="switch"
                   aria-checked={isOpen}
@@ -665,6 +679,9 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                   title={isLocked ? `Låst — ${lock.label}: ${lock.detail}` : undefined}
                 />
               </div>
+              {isFull && (
+                <div className="cfg-full-note">Fullbokad — chaufförer kan anmäla sig som reserv.</div>
+              )}
             </div>
           )
         })}
@@ -727,7 +744,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
         const openShifts = local.filter(s => s.is_open === 1)
         const approvedTotal = openShifts.reduce((sum, s) => sum + (counts[s.id]?.approved ?? 0), 0)
         return (
-          <div className="modal-backdrop" onClick={() => setCloseWeekDialog(false)}>
+          <div className="modal-backdrop" onClick={() => { setCloseWeekDialog(false); setCloseWeekFull(false) }}>
             <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
               <div className="modal-title">Stäng vecka {weekNumber}</div>
               <p className="modal-sub">
@@ -737,15 +754,56 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
                      {approvedTotal > 0 && <> Redan godkända chaufförer ({approvedTotal} st) påverkas inte — de behåller sin bokning.</>}
                      <br />Nya anmälningar kan inte göras tills veckan öppnas igen.</>}
               </p>
+              {openShifts.length > 0 && (
+                <label className="cfg-full-check">
+                  <input type="checkbox" checked={closeWeekFull} onChange={e => setCloseWeekFull(e.target.checked)} />
+                  <span>Markera dagarna som <strong>fullbokade</strong> — chaufförer ser dem som fullbokade och kan anmäla sig som reserv.</span>
+                </label>
+              )}
               <div className="modal-actions">
-                <button className="btn btn-sm btn-ghost" onClick={() => setCloseWeekDialog(false)}>Avbryt</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => { setCloseWeekDialog(false); setCloseWeekFull(false) }}>Avbryt</button>
                 <button
                   className="btn btn-sm"
                   style={{ background: 'var(--red, #DC2626)', color: '#fff', fontWeight: 600 }}
                   onClick={handleCloseWeek}
                   disabled={openShifts.length === 0}
                 >
-                  Stäng pass
+                  {closeWeekFull ? 'Stäng som fullbokat' : 'Stäng pass'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {closeDayId !== null && (() => {
+        const shift = local.find(s => s.id === closeDayId)
+        const day = shift ? days.find(d => d.dayIndex === shift.day_index) : null
+        const approved = counts[closeDayId]?.approved ?? 0
+        if (!day) return null
+        return (
+          <div className="modal-backdrop" onClick={() => setCloseDayId(null)}>
+            <div className="modal-box" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-title">Stäng {day.label} {fmt(day.date)}</div>
+              <p className="modal-sub">
+                Hur vill du stänga dagen?
+                {approved > 0 && <> Redan godkända chaufförer ({approved} st) påverkas inte.</>}
+                <br /><strong>Fullbokad</strong> visar dagen som fullbokad för chaufförerna och låter dem anmäla sig som <strong>reserv</strong>.
+              </p>
+              <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
+                <button className="btn btn-sm btn-ghost" onClick={() => setCloseDayId(null)}>Avbryt</button>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: 'var(--red, #DC2626)', color: '#fff', fontWeight: 600 }}
+                  onClick={() => { saveStatus(closeDayId, 0, 1); setCloseDayId(null) }}
+                >
+                  Markera som fullbokad
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => { saveStatus(closeDayId, 0, 0); setCloseDayId(null) }}
+                >
+                  Stäng helt
                 </button>
               </div>
             </div>

@@ -115,6 +115,12 @@ async function migrate() {
   await sql`
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS permanent_staff INTEGER
   `
+  // "Fullbokad" — a closed day (is_open = 0) that admin marked as fully booked.
+  // Drivers see it as fullbokad and can still join the reserve list. Cleared
+  // automatically whenever a day is (re)opened. Only meaningful when is_open = 0.
+  await sql`
+    ALTER TABLE shifts ADD COLUMN IF NOT EXISTS is_full INTEGER NOT NULL DEFAULT 0
+  `
   // Backfill: mark shifts as ever_opened if they are currently open OR have had applicants
   await sql`
     UPDATE shifts SET ever_opened = 1
@@ -454,6 +460,7 @@ export interface DbShift {
   date: string
   is_open: number
   ever_opened: number
+  is_full: number
   slots: number
   permanent_staff: number | null
   created_at: string
@@ -533,14 +540,18 @@ export const shiftRepo = {
     return { shifts, created: true }
   },
 
-  async update(id: number, fields: { is_open?: number; slots?: number; permanent_staff?: number | null }): Promise<void> {
+  async update(id: number, fields: { is_open?: number; slots?: number; permanent_staff?: number | null; is_full?: number }): Promise<void> {
     if (fields.is_open !== undefined) {
       if (fields.is_open === 1) {
-        // Mark as ever_opened when admin opens a shift
-        await sql`UPDATE shifts SET is_open = 1, ever_opened = 1 WHERE id = ${id}`
+        // Mark as ever_opened when admin opens a shift. Opening always clears
+        // the "fullbokad" flag — a day can't be both open and fullbokad.
+        await sql`UPDATE shifts SET is_open = 1, ever_opened = 1, is_full = 0 WHERE id = ${id}`
       } else {
-        await sql`UPDATE shifts SET is_open = ${fields.is_open} WHERE id = ${id}`
+        await sql`UPDATE shifts SET is_open = 0 WHERE id = ${id}`
       }
+    }
+    if (fields.is_full !== undefined) {
+      await sql`UPDATE shifts SET is_full = ${fields.is_full} WHERE id = ${id}`
     }
     if (fields.slots !== undefined) {
       await sql`UPDATE shifts SET slots = ${fields.slots} WHERE id = ${id}`
