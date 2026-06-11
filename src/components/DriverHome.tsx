@@ -66,6 +66,10 @@ function statusFor(shift: ShiftDay['shift'], app?: Application): DayStatus {
       if (app?.reserve === 1) return 'reserve'
       if (app?.rejected) return 'rejected'
       if (app?.withdrawn) return 'withdrawn'
+      // Driver applied while the day was open, then admin closed it as
+      // fullbokad. Keep showing their pending "Sökt" status (not the generic
+      // Fullbokad/reserve state) so it's clear they're still in the running.
+      if (app) return 'pending'
       return 'full'
     }
     return 'closed'
