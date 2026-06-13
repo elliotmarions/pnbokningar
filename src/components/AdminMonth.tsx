@@ -11,6 +11,7 @@ interface MonthShift {
   day_index: number
   date: string
   is_open: number
+  is_full: number
   ever_opened: number
   slots: number
   approved: number
@@ -256,6 +257,9 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                   const isToday     = d.date === todayStr
                   const isOpen      = shift?.is_open === 1
                   const showClosed  = d.inRange && !isOpen
+                  // Closed-but-fullbokad days get a red "Fullbokad" label, unless
+                  // the day has passed (then it's just a normal closed day).
+                  const isFull      = showClosed && shift?.is_full === 1 && d.date >= todayStr
                   const isClickable = isOpen || (showClosed && !!shift && shift.approved > 0)
                   const isExpanded  = shift ? expandedIds.has(shift.id) : false
                   const drivers     = shift ? driversMap[shift.id] : undefined
@@ -298,7 +302,7 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
                       <div className="month-cell-top">
                         <span className="month-cell-day" style={calColor ? { color: calColor } : undefined}>{d.n}</span>
                         {showClosed ? (
-                          <span className="month-cell-closed">Stängd</span>
+                          <span className={`month-cell-closed${isFull ? ' full' : ''}`}>{isFull ? 'Fullbokad' : 'Stängd'}</span>
                         ) : shift?.is_open === 1 ? (
                           <span className="month-cell-count" title={`${permanent} fast + ${shift.approved} extra`}>
                             {total}

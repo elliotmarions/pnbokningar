@@ -12,6 +12,7 @@ interface Shift {
   day_index: number
   date: string
   is_open: number
+  is_full: number
   slots: number
   approved: number
   pending: number
@@ -263,6 +264,9 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
   const totalApproved = useMemo(() => shifts.reduce((s, c) => s + (c.approved ?? 0), 0), [shifts])
   const totalPending = useMemo(() => shifts.reduce((s, c) => s + (c.pending ?? 0), 0), [shifts])
 
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
   return (
     <>
       <div className="cfg-top">
@@ -336,8 +340,12 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
             const c = { approved: shift.approved ?? 0, pending: shift.pending ?? 0, reserves: shift.reserves ?? 0 }
             const permanent = resolvePermanentStaff(shift.permanent_staff, day.dayIndex, day.holiday != null)
             const total = permanent + c.approved
-            const badgeClass   = !shift.is_open ? 'b-closed' : 'b-open'
-            const badgeLabel   = !shift.is_open ? 'Stängd' : 'Öppen'
+            // A closed day the admin marked fullbokad shows a red "Fullbokad"
+            // pill. Once the day has passed it reverts to a plain "Stängd" day
+            // (drivers can no longer join the reserve list), matching DriverHome.
+            const isFull       = !shift.is_open && shift.is_full === 1 && day.date >= todayStr
+            const badgeClass   = shift.is_open ? 'b-open' : isFull ? 'b-full' : 'b-closed'
+            const badgeLabel   = shift.is_open ? 'Öppen' : isFull ? 'Fullbokad' : 'Stängd'
             const isExpanded = expandedIds.has(shift.id)
             const isBooked  = highlight?.booked.has(shift.id) ?? false
             const isApplied = !isBooked && (highlight?.applied.has(shift.id) ?? false)
