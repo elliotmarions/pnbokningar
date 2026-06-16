@@ -1,4 +1,4 @@
-# Passbokning — PostNord Trafikledning
+# Passbokning — PostNord
 
 Webbaserat schemaläggningssystem för extraanställda chaufförer. Chaufförer anmäler
 intresse via mobil/dator, trafikledaren godkänner i adminvyn, och bekräftelser
