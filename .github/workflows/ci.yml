@@ -37,11 +37,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build
 
-      # Non-blocking for now. ESLint surfaces pre-existing findings in code that
-      # predates it; `continue-on-error` keeps the step visible without failing
-      # the run (note: it also reports the step conclusion as "success" even when
-      # eslint exits non-zero). Fas 2 sweeps the findings, then this flips to a
-      # real blocking gate.
+      # Blocking gate: fails the run on any ESLint error. (Aggressive new
+      # react-hooks v7 rules are downgraded to warnings in eslint.config.mjs.)
       - name: Lint
         run: npm run lint
-        continue-on-error: true
