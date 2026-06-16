@@ -37,9 +37,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build
 
-      # Non-blocking for now: ESLint was added to a codebase written before it,
-      # so it may surface pre-existing findings. Kept visible (not removed) so we
-      # can sweep them in Fas 2, then drop `continue-on-error` to make it a gate.
+      # ESLint passed clean on the very first run, so it's a blocking gate from
+      # the start — no pre-existing debt to sweep. (Stricter type-aware rules,
+      # next/typescript and --max-warnings 0, come in Fas 2.)
       - name: Lint
         run: npm run lint
-        continue-on-error: true
