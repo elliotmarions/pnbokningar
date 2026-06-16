@@ -45,3 +45,13 @@ jobs:
       - name: Lint
         run: npm run lint
         continue-on-error: true
+
+      # Temporary diagnostic: publish eslint findings as annotations so they're
+      # readable via the public check-runs API (raw log download is blocked on
+      # some corporate networks). Removed once lint is clean and blocking.
+      - name: Lint findings (annotations)
+        if: always()
+        continue-on-error: true
+        run: |
+          npx eslint . -f json -o eslint-report.json || true
+          node scripts/eslint-annotate.mjs
