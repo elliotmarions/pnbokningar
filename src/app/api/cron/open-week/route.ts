@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { shiftRepo, customClosedRepo, getDb } from '@/lib/db'
+import { shiftRepo, customClosedRepo, getDb, pushSubscriptionRepo } from '@/lib/db'
 import { nextWeekInfo } from '@/lib/weeks'
 import { isHolidayOrEve } from '@/lib/holidays'
 import { applyLongTermToShift } from '@/lib/apply-long-term'
@@ -87,6 +87,19 @@ export async function GET(req: NextRequest) {
       url: '/',
       tag: `week-open-${info.weekYear}-${info.weekNumber}`,
     })
+  }
+
+  // Prune long-tail stale push subscriptions. This used to be its own daily
+  // cron, but Vercel's Hobby plan caps us at 2 cron jobs and the two open-week
+  // triggers (DST coverage) take both slots. Folding it in here is enough:
+  // truly-dead endpoints are already deleted inline on a 404/410 at send time,
+  // and the broadcast above just touched every live driver subscription, so a
+  // weekly 30-day sweep keeps the "notiser på" indicator honest. Best-effort —
+  // never let it break the actual week-open.
+  try {
+    await pushSubscriptionRepo.pruneStale(30)
+  } catch (err) {
+    console.error('[open-week] prune stale push subscriptions failed', err)
   }
 
   return NextResponse.json({
