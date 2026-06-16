@@ -37,21 +37,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build
 
-      # Non-blocking for now. ESLint surfaces pre-existing findings in code that
-      # predates it; `continue-on-error` keeps the step visible without failing
-      # the run (note: it also reports the step conclusion as "success" even when
-      # eslint exits non-zero). Fas 2 sweeps the findings, then this flips to a
-      # real blocking gate.
+      # Blocking gate: fails the run on any ESLint error. (Two noisy rules are
+      # downgraded to warnings in eslint.config.mjs — see the note there.)
       - name: Lint
         run: npm run lint
-        continue-on-error: true
-
-      # Temporary diagnostic: publish eslint findings as annotations so they're
-      # readable via the public check-runs API (raw log download is blocked on
-      # some corporate networks). Removed once lint is clean and blocking.
-      - name: Lint findings (annotations)
-        if: always()
-        continue-on-error: true
-        run: |
-          npx eslint . -f json -o eslint-report.json || true
-          node scripts/eslint-annotate.mjs
