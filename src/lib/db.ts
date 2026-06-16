@@ -969,6 +969,14 @@ export const pushSubscriptionRepo = {
     await sql`DELETE FROM push_subscriptions WHERE endpoint = ${endpoint}`
   },
 
+  // Scoped variant: only deletes the endpoint if it belongs to the given user,
+  // so one logged-in user can't remove another user's device subscription by
+  // passing its endpoint. Used by the unsubscribe route.
+  async deleteByEndpointForUser(endpoint: string, userId: string): Promise<void> {
+    await ensureMigrated()
+    await sql`DELETE FROM push_subscriptions WHERE endpoint = ${endpoint} AND user_id = ${userId}`
+  },
+
   async deleteForUser(userId: string): Promise<void> {
     await ensureMigrated()
     await sql`DELETE FROM push_subscriptions WHERE user_id = ${userId}`

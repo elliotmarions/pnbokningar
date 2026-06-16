@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
   const endpoint = typeof raw.endpoint === 'string' ? raw.endpoint : null
 
   if (endpoint) {
-    await pushSubscriptionRepo.deleteByEndpoint(endpoint)
+    // Scope to the current user so nobody can unsubscribe someone else's device.
+    await pushSubscriptionRepo.deleteByEndpointForUser(endpoint, session.user.id)
   } else {
     // No endpoint provided → remove all subscriptions for the user.
     await pushSubscriptionRepo.deleteForUser(session.user.id)
