@@ -37,16 +37,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build
 
-      # Blocking gate: fails the run on any ESLint error. (Two noisy rules are
-      # downgraded to warnings in eslint.config.mjs — see the note there.)
+      # Blocking gate: fails the run on any ESLint error. (Aggressive new
+      # react-hooks v7 rules are downgraded to warnings in eslint.config.mjs.)
       - name: Lint
         run: npm run lint
-
-      # Temporary diagnostic: group eslint findings by rule into an annotation so
-      # the full error set is readable via the public API. Removed once green.
-      - name: Lint findings (annotations)
-        if: always()
-        continue-on-error: true
-        run: |
-          npx eslint . -f json -o eslint-report.json || true
-          node scripts/eslint-annotate.mjs
