@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { shiftRepo, customClosedRepo, getDb, pushSubscriptionRepo } from '@/lib/db'
-import { nextWeekInfo } from '@/lib/weeks'
+import { nextWeekInfo, shouldAutoOpen } from '@/lib/weeks'
 import { isHolidayOrEve } from '@/lib/holidays'
 import { applyLongTermToShift } from '@/lib/apply-long-term'
 import { sendPushToAllDrivers } from '@/lib/push'
@@ -45,10 +45,7 @@ export async function GET(req: NextRequest) {
   const weekday = parts.find(p => p.type === 'weekday')?.value ?? ''
   const hour = parseInt(parts.find(p => p.type === 'hour')?.value ?? '-1', 10)
 
-  const isWednesday = weekday === 'Wednesday'
-  const inWindow = hour >= 18 && hour <= 22
-
-  if (!force && !(isWednesday && inWindow)) {
+  if (!shouldAutoOpen(weekday, hour, force)) {
     return NextResponse.json({ ok: true, skipped: true, reason: `Not Wed 18:00–22:59 (Sthlm: ${weekday} ${hour}:00)` })
   }
 
