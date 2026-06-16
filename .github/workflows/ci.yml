@@ -41,3 +41,12 @@ jobs:
       # downgraded to warnings in eslint.config.mjs — see the note there.)
       - name: Lint
         run: npm run lint
+
+      # Temporary diagnostic: group eslint findings by rule into an annotation so
+      # the full error set is readable via the public API. Removed once green.
+      - name: Lint findings (annotations)
+        if: always()
+        continue-on-error: true
+        run: |
+          npx eslint . -f json -o eslint-report.json || true
+          node scripts/eslint-annotate.mjs
