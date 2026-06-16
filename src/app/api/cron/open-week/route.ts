@@ -99,6 +99,20 @@ export async function GET(req: NextRequest) {
     console.error('[open-week] prune stale push subscriptions failed', err)
   }
 
+  // Dead-man's-switch: ping an external monitor so a *missed* weekly run alerts
+  // us, instead of being discovered by a driver (the original auto-open bug).
+  // We reach this point only on a real Wednesday run (or ?force=1). The monitor
+  // (e.g. a free Healthchecks.io check) expects a ping every Wednesday evening
+  // and emails if one doesn't arrive. No-op when HEALTHCHECK_PING_URL is unset.
+  const pingUrl = process.env.HEALTHCHECK_PING_URL
+  if (pingUrl) {
+    try {
+      await fetch(pingUrl, { method: 'POST' })
+    } catch (err) {
+      console.error('[open-week] healthcheck ping failed', err)
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     week: `${info.weekNumber}/${info.weekYear}`,

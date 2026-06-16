@@ -68,13 +68,14 @@ async function migrate() {
       id              SERIAL PRIMARY KEY,
       application_id  INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE UNIQUE,
       approved_by     TEXT    NOT NULL REFERENCES users(id),
-      approved_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      sms_sent        INTEGER NOT NULL DEFAULT 0,
-      reminder_sent   INTEGER NOT NULL DEFAULT 0
+      approved_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
   // Drop legacy password_hash column from the credentials-auth era.
   await sql`ALTER TABLE users DROP COLUMN IF EXISTS password_hash`
+  // Drop legacy SMS columns from the removed Twilio integration (never read).
+  await sql`ALTER TABLE approvals DROP COLUMN IF EXISTS sms_sent`
+  await sql`ALTER TABLE approvals DROP COLUMN IF EXISTS reminder_sent`
   // Add withdrawn column (admin removed previously-approved driver)
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS withdrawn INTEGER NOT NULL DEFAULT 0
@@ -870,8 +871,6 @@ export interface DbApproval {
   application_id: number
   approved_by: string
   approved_at: string
-  sms_sent: number
-  reminder_sent: number
 }
 
 export const approvalRepo = {
@@ -882,7 +881,7 @@ export const approvalRepo = {
       ON CONFLICT (application_id) DO NOTHING
     `
     const [approval] = await sql<DbApproval[]>`
-      SELECT id, application_id, approved_by, (approved_at AT TIME ZONE 'Europe/Stockholm')::text AS approved_at, sms_sent, reminder_sent
+      SELECT id, application_id, approved_by, (approved_at AT TIME ZONE 'Europe/Stockholm')::text AS approved_at
       FROM approvals WHERE application_id = ${applicationId}
     `
     return approval
