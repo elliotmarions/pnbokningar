@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # Using `npm install` (not `npm ci`) so the lockfile is reconciled with the
+      # newly added dev tooling. Switch to `npm ci` once the lockfile is
+      # regenerated on a machine with Node installed.
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Dummy values so the production build (which evaluates client/server
+          # modules) doesn't fail on missing env. No real secrets are needed to
+          # compile — the app connects to these only at request time.
+          DATABASE_URL: postgres://user:pass@localhost:5432/db
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build
+
+      # ESLint passed clean on the very first run, so it's a blocking gate from
+      # the start — no pre-existing debt to sweep. (Stricter type-aware rules,
+      # next/typescript and --max-warnings 0, come in Fas 2.)
+      - name: Lint
+        run: npm run lint

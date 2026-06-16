@@ -1,204 +1,135 @@
 # Passbokning — PostNord Trafikledning
 
-Webbaserat schemaläggningssystem för extraanställda chaufförer.  
-Chaufförer anmäler intresse via mobil/dator. Trafikledaren godkänner via adminvy. SMS-bekräftelse och påminnelse skickas automatiskt via Twilio.
+Webbaserat schemaläggningssystem för extraanställda chaufförer. Chaufförer anmäler
+intresse via mobil/dator, trafikledaren godkänner i adminvyn, och bekräftelser
+skickas som **web push-notiser** (PWA). Nästa veckas pass öppnas automatiskt varje
+onsdag kväll.
 
----
+## Teknik
+
+| Lager | Val |
+| --- | --- |
+| Frontend/Backend | Next.js 16 (App Router), React 18 |
+| Auth | Supabase Auth med **Azure AD / Microsoft Entra** som OAuth-provider |
+| Databas | Supabase Postgres, åtkomst via [`postgres`](https://github.com/porsager/postgres) (transaction pooler, port 6543) |
+| Notiser | Web Push (VAPID) — inga SMS |
+| Export | Excel via `exceljs` |
+| Hosting | Vercel (region `dub1`, samma som databasen), Vercel Cron |
+
+> **Obs:** Tidigare versioner använde SQLite, NextAuth och Twilio-SMS. Allt det är
+> utbytt — se tabellen ovan för vad som faktiskt körs idag.
 
 ## Kom igång (lokalt)
 
 ### 1. Förutsättningar
+- **Node.js 24+** ([nodejs.org](https://nodejs.org))
+- Ett Supabase-projekt (för auth + databas)
 
-- **Node.js 20+** — [nodejs.org](https://nodejs.org)
-- **Git**
-
-### 2. Klona och installera
-
+### 2. Installera
 ```bash
-git clone <repo-url>
-cd postnord-passbokning
+git clone https://github.com/elliotmarions/pnbokningar.git
+cd pnbokningar
 npm install
 ```
 
 ### 3. Miljövariabler
-
 ```bash
 cp .env.example .env.local
 ```
-
-Fyll i `.env.local` — se avsnitten nedan om Azure AD och Twilio.
+Fyll i värdena — se [Miljövariabler](#miljövariabler) nedan.
 
 ### 4. Starta
-
 ```bash
 npm run dev
 ```
+Öppna [http://localhost:3000](http://localhost:3000). Databasschemat skapas/migreras
+automatiskt vid första anropet (se [Databas & migrationer](#databas--migrationer)).
 
-Öppna [http://localhost:3000](http://localhost:3000).
+## Miljövariabler
 
-### 5. Seed-data (testdata utan riktiga konton)
+| Variabel | Krävs | Beskrivning |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase projekt-URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon-nyckel (säker i klienten, skyddad av RLS) |
+| `DATABASE_URL` | ✅ | Postgres transaction pooler-URL (port 6543) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | ✅ (notiser) | Web Push-nycklar, genereras med `npm run gen-vapid` |
+| `CRON_SECRET` | ✅ (prod) | Delad hemlighet för Vercel Cron-anrop |
+| `ADMIN_USER_IDS` | ⬜ | Komma-separerade Azure-Object-IDs som blir admin automatiskt |
+| `INTEGRATION_API_KEY` | ⬜ | Inkommande API-nyckel för partnerintegration |
+| `INTEGRATION_WEBHOOK_URL` / `INTEGRATION_WEBHOOK_SECRET` | ⬜ | Utgående bokningswebhooks till externt system |
 
-```bash
-npm run seed
-```
+## Inloggning (Supabase + Azure AD)
 
-Skapar testanvändare, shifts för innevarande vecka och lite exempeldata.
+Inloggningen sker via Supabase Auth med `azure`-providern. Azure-appregistreringen
+konfigureras i **Supabase-dashboarden → Authentication → Providers → Azure**, inte via
+app-miljövariabler.
 
-**OBS:** För att logga in utan riktigt Azure AD-konto under utveckling,  
-lägg till `NEXTAUTH_DEBUG=true` och använd `FORCE_USER`-env — se "Dev-inloggning" nedan.
+1. Registrera en app i Azure (Microsoft Entra) → App registrations → New registration.
+2. Lägg in **Client ID**, **Client Secret** och **Tenant** i Supabase Azure-providern.
+3. Registrera Supabase callback-URL:en i Azure under Redirect URIs:
+   `https://<ditt-projekt>.supabase.co/auth/v1/callback`.
+4. Appens egen `/auth/callback`-route växlar in koden mot en session (PKCE).
 
----
+## Admin-roll
 
-## Azure AD-appregistrering (görs av kollega med Azure-behörighet)
+- **Automatiskt:** lägg användarens Azure Object ID i `ADMIN_USER_IDS`.
+- **Via UI:** en befintlig admin går till **Admin → Chaufförer** och trycker
+  "Gör till admin".
 
-### Steg-för-steg
+## Databas & migrationer
 
-1. Logga in på [portal.azure.com](https://portal.azure.com) och gå till **Azure Active Directory → App registrations → New registration**.
+Schemat lever i `src/lib/db.ts`. `ensureMigrated()` körs (en gång per process) vid
+första requesten och är idempotent: `CREATE TABLE IF NOT EXISTS` /
+`ALTER TABLE ... IF NOT EXISTS` för struktur, plus versionerade engångs-backfills som
+gateas via tabellen `schema_migrations`. RLS är påslaget på alla tabeller med en
+`service_role`-policy (se [SECURITY.md](SECURITY.md) när den finns).
 
-2. Fyll i:
-   - **Name:** `Passbokning PostNord`
-   - **Supported account types:** *Accounts in this organizational directory only*
-   - **Redirect URI:** Välj *Web* och ange `http://localhost:3000/api/auth/callback/azure-ad`  
-     (Lägg till produktions-URL senare, t.ex. `https://passbokning.postnord.se/api/auth/callback/azure-ad`)
-
-3. Klicka **Register**.
-
-4. Kopiera värden till `.env.local`:
-   - **Application (client) ID** → `AZURE_AD_CLIENT_ID`
-   - **Directory (tenant) ID** → `AZURE_AD_TENANT_ID`
-
-5. Gå till **Certificates & secrets → New client secret**:
-   - Välj en giltighetstid (t.ex. 24 månader)
-   - Kopiera det genererade värdet → `AZURE_AD_CLIENT_SECRET`  
-     ⚠️ Värdet visas bara en gång!
-
-6. Gå till **API permissions**:
-   - Kontrollera att `User.Read` (Microsoft Graph, Delegated) finns med
-   - Klicka **Grant admin consent**
-
-7. Gå till **Token configuration → Add optional claim**:
-   - Token type: **ID**
-   - Claim: **oid** (Object ID — stabil identifierare som lagras i databasen)
-   - Klicka Add
-
-### Redirect URIs för produktion
-
-Lägg till ytterligare Redirect URIs under **Authentication**:
-```
-https://din-domän.se/api/auth/callback/azure-ad
-```
-
----
-
-## Twilio — SMS-konfiguration
-
-1. Skapa ett konto på [twilio.com](https://www.twilio.com)
-2. Köp ett telefonnummer med SMS-kapacitet (välj ett svenskt +46-nummer om möjligt)
-3. Gå till **Console dashboard** och kopiera:
-   - **Account SID** → `TWILIO_ACCOUNT_SID`
-   - **Auth Token** → `TWILIO_AUTH_TOKEN`
-4. Kopiera telefonnumret (E.164-format, t.ex. `+46701234567`) → `TWILIO_PHONE_NUMBER`
-
-**Trial-konto:** Med ett gratis Twilio-konto kan du bara skicka SMS till verifierade nummer. Verifiera testmottagarnas nummer under *Verified Caller IDs*.
-
----
-
-## Sätt admin-roll på en användare
-
-### Via databasen (enklast)
+## Web Push / VAPID
 
 ```bash
-# Öppna SQLite-databasen (kräver sqlite3-klienten)
-sqlite3 data/passbokning.db
-UPDATE users SET role = 'admin' WHERE email = 'anna.karlen@postnord.se';
-.quit
+npm run gen-vapid   # skriver ut ett VAPID-nyckelpar
 ```
+Lägg nycklarna i `.env.local` (och i Vercel för prod). Utan dem är notiser avstängda
+(appen fungerar ändå).
 
-### Via miljövariabel (automatisk vid inloggning)
+## Veckoöppning (Vercel Cron)
 
-Lägg till Azure AD Object IDs (OIDs) i `.env.local`:
-```
-ADMIN_USER_IDS=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
-```
+Nästa veckas pass öppnas automatiskt onsdag kväll av `/api/cron/open-week`. Två
+cron-jobb i [`vercel.json`](vercel.json) (16:00 och 17:00 UTC) täcker både sommar- och
+vintertid; tidsgrinden (`shouldAutoOpen` i `src/lib/weeks.ts`) accepterar onsdag
+18:00–22:59 svensk tid eftersom Vercel-cron är "best-effort". Driftnoter finns i
+[`DRIFT.md`](DRIFT.md).
 
-Hitta OID: Azure portal → Users → sök på personen → Object ID.
-
-### Via adminvyn (kräver att minst en admin redan finns)
-
-Gå till **Admin → Chaufförer** → klicka "Gör till admin" på önskad användare.
-
----
-
-## Dev-inloggning utan Azure AD
-
-Under utveckling utan riktiga Azure-credentials, kör med:
+## Kvalitetsgrindar
 
 ```bash
-# I .env.local:
-NEXTAUTH_SECRET=dev-secret-minst-32-tecken-lång-sträng
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint
+npm run test        # vitest (enhetstester för lib/)
+npm run build       # produktionsbygge
 ```
+Samma steg körs i CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) på varje
+push och pull request.
 
-Lägg till en CredentialsProvider manuellt i `src/lib/auth.ts` (finns kommenterat nedan)  
-eller kör seed-scriptet och sätt `NEXTAUTH_BYPASS_USER=test-admin-001` för att skippa auth.
+## Produktion (Vercel)
 
-Alternativt: använd [`next-auth-mock`](https://github.com/justincy/next-auth-mock) i testmiljö.
-
----
-
-## SMS-påminnelser (cron-jobb)
-
-### Alternativ 1: Manuellt script (enklast)
-
-```bash
-npm run remind
-```
-
-Schelägg med **Windows Task Scheduler** att köra var 15:e minut:
-- Action: `cmd /c "cd C:\path\to\app && npm run remind"`
-- Trigger: Every 15 minutes
-
-### Alternativ 2: HTTP-endpoint
-
-Anropa `GET /api/cron/reminders` med header `x-cron-secret: <CRON_SECRET>` var 15:e minut.  
-Kan triggas med t.ex. [cron-job.org](https://cron-job.org) (gratis), Vercel Cron, eller en intern scheduler.
-
----
-
-## Databasplats
-
-SQLite-filen lagras som standard på `./data/passbokning.db`.  
-Ändra med `DATABASE_PATH` i `.env.local`.
-
-**Backup:** Kopiera `passbokning.db`-filen — det är hela databasen.
-
----
+Deployas från `main` till Vercel. Sätt alla miljövariabler ovan i Vercel-projektet.
+Cron-jobben är begränsade av Vercels Hobby-plan (max 2) — se `vercel.json`.
 
 ## Projektstruktur
 
 ```
-postnord-passbokning/
+pnbokningar/
 ├── src/
 │   ├── app/
-│   │   ├── api/          API-routes (auth, shifts, applications, approvals, users, export, cron)
-│   │   ├── driver/       Chaufförsvy
-│   │   └── admin/        Adminvyer (overview, config, drivers, export)
-│   ├── components/       React-komponenter
-│   └── lib/              db.ts · auth.ts · sms.ts · weeks.ts
-├── scripts/
-│   ├── seed.ts           Testdata
-│   └── remind.ts         SMS-påminnelser (kan schemaläggas)
-├── data/                 SQLite-databas (skapas automatiskt)
-├── .env.example
-└── README.md
+│   │   ├── api/        API-routes (shifts, applications, approvals, users, export, cron, integration, push)
+│   │   ├── auth/       OAuth-callback
+│   │   ├── driver/     Chaufförsvy
+│   │   └── admin/      Adminvyer (overview, config, drivers, export, log, …)
+│   ├── components/     React-komponenter
+│   └── lib/            db.ts · auth.ts · weeks.ts · holidays.ts · push.ts · validate.ts · …
+├── scripts/            seed, gen-vapid, loadtest
+├── .github/workflows/  CI
+├── vercel.json         Cron + region
+└── DRIFT.md            Driftnoter
 ```
-
----
-
-## Produktion
-
-```bash
-npm run build
-npm start
-```
-
-Sätt `NEXTAUTH_URL` till produktions-URLen. Rekommenderas att köra bakom en reverse proxy (nginx/Caddy) med HTTPS.

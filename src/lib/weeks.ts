@@ -40,6 +40,21 @@ export function nextWeekInfo(): WeekInfo {
   return weekInfoFor(addDays(new Date(), 7))
 }
 
+/**
+ * Time-gate for the weekly auto-open. Accepts any Wednesday 18:00–22:59
+ * Stockholm time — a deliberately permissive window because Vercel cron timing
+ * is best-effort and can be delayed; a strict `hour === 18` check would silently
+ * skip the whole week if a trigger landed even an hour late. `force` bypasses
+ * the check for manual runs.
+ *
+ * Pure function extracted from the open-week cron route so it can be unit-tested
+ * (this is exactly the logic behind the missed-auto-open bug).
+ */
+export function shouldAutoOpen(weekday: string, hour: number, force: boolean): boolean {
+  if (force) return true
+  return weekday === 'Wednesday' && hour >= 18 && hour <= 22
+}
+
 export function formatSwedishDate(dateStr: string): string {
   const months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
   const d = new Date(dateStr + 'T12:00:00')
