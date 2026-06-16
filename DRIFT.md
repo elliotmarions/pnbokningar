@@ -38,3 +38,16 @@ Snabbguide att ha till hands när en ny vecka öppnas och många anmäler sig sa
 - **Hosting:** Vercel, funktioner i `dub1`
 - **Aviseringar:** Web Push (ej SMS)
 - **Pollning:** chaufförsvy var 10:e s, admin var 3:e s
+
+## Hälsolarm för veckoöppningen
+
+För att aldrig mer upptäcka en missad veckoöppning via en chaufför finns en
+**dead-man's-switch**: `/api/cron/open-week` pingar `HEALTHCHECK_PING_URL` varje
+gång den faktiskt kör en onsdag. Sätt upp så här (engångs):
+
+1. Skapa en gratis check på [Healthchecks.io](https://healthchecks.io) med schema
+   "varje onsdag" (period 1 vecka, lite slack för Vercels 1-timmesfönster).
+2. Kopiera dess ping-URL till `HEALTHCHECK_PING_URL` i Vercel.
+3. Klart — om cronen inte kör en onsdag uteblir pingen och Healthchecks mejlar dig.
+
+Lämnas variabeln tom är pingen en no-op (inget går sönder).
