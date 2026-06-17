@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { shiftRepo, customClosedRepo, getDb } from '@/lib/db'
 import { int, fieldError } from '@/lib/validate'
 import { getHolidayInfo } from '@/lib/holidays'
+import { sendPushToAllDrivers } from '@/lib/push'
 
 export async function PUT(req: NextRequest) {
   const session = await requireAdmin()
@@ -40,10 +41,11 @@ export async function PUT(req: NextRequest) {
   // Batch-fetch all shift dates in one round-trip
   const sql = getDb()
   const ids = body.map(b => b.id)
-  const rows = await sql<{ id: number; date: string }[]>`
-    SELECT id, date FROM shifts WHERE id IN ${sql(ids)}
+  const rows = await sql<{ id: number; date: string; week_year: number; week_number: number }[]>`
+    SELECT id, date, week_year, week_number FROM shifts WHERE id IN ${sql(ids)}
   `
   const dateById = new Map(rows.map(r => [r.id, r.date]))
+  const weekById = new Map(rows.map(r => [r.id, { year: r.week_year, number: r.week_number }]))
 
   // Block opening shifts that fall on a holiday/eve or custom-closed day.
   // Check holidays locally + batch-fetch custom-closed for all relevant dates.
@@ -77,6 +79,28 @@ export async function PUT(req: NextRequest) {
         return date ? applyLongTermToShift(s.id, date, adminId) : Promise.resolve()
       })
   )
+
+  // Optionally broadcast a "new shifts open" push to all drivers. Opt-in via
+  // ?notify=1 — used when an admin opens a week/day manually and wants drivers
+  // pinged the same way the weekly auto-open does. Only fires when shifts were
+  // actually opened. Best-effort: a push failure must not fail the open itself.
+  const notify = new URL(req.url).searchParams.get('notify') === '1'
+  const openedIds = body.filter(s => s.is_open === 1).map(s => s.id)
+  if (notify && openedIds.length > 0) {
+    const week = weekById.get(openedIds[0])
+    try {
+      await sendPushToAllDrivers({
+        title: 'Nya pass öppna! 📅',
+        body: openedIds.length === 1
+          ? 'Ett nytt pass har öppnats för bokning. Säkra din plats!'
+          : `Vecka ${week?.number} är nu öppen för bokning. Säkra dina pass!`,
+        url: '/',
+        tag: week ? `week-open-${week.year}-${week.number}` : 'week-open',
+      })
+    } catch (err) {
+      console.error('[shifts] notify broadcast failed', err)
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }
