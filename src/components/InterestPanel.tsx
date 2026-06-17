@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { X, Clock, Phone, Check, Plus } from './Icons'
+import { X, Clock, Phone, Check, Plus, Search } from './Icons'
 
 interface Applicant {
   id: number
@@ -67,6 +67,8 @@ function fmtAppliedFull(iso: string) {
 export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves' | 'others'>('applications')
+  // Free-text filter for the visible list (matches name or phone).
+  const [listSearch, setListSearch] = useState('')
   const [rejectingId, setRejectingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [withdrawingId, setWithdrawingId] = useState<number | null>(null)
@@ -96,6 +98,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
 
   useEffect(() => {
     if (!shift) return
+    setListSearch('') // start each shift with an empty filter
     // Sync applicants only when the panel opens for a (new) shift — NOT when the parent refetches
     // and pushes a new initialApplicants reference. Otherwise an optimistic update gets clobbered
     // mid-action which causes the visible "hopping" behavior.
@@ -279,6 +282,19 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const others = allDrivers
     .filter(d => !involvedIds.has(d.id))
     .sort((a, b) => a.name.localeCompare(b.name, 'sv'))
+
+  // Apply the free-text filter (name or phone) to whichever rows are shown.
+  const listQuery = listSearch.trim().toLowerCase()
+  const matchQuery = (name: string, phone?: string | null) =>
+    !listQuery ||
+    name.toLowerCase().includes(listQuery) ||
+    (phone ?? '').toLowerCase().includes(listQuery)
+  const fApproved  = approved.filter(a => matchQuery(a.user_name, a.user_phone))
+  const fPending   = pending.filter(a => matchQuery(a.user_name, a.user_phone))
+  const fRejected  = rejected.filter(a => matchQuery(a.user_name, a.user_phone))
+  const fWithdrawn = withdrawn.filter(a => matchQuery(a.user_name, a.user_phone))
+  const fReserves  = reserves.filter(a => matchQuery(a.user_name, a.user_phone))
+  const fOthers    = others.filter(d => matchQuery(d.name, d.phone))
 
   // Stable applied-order rank: #1 is the first to apply, #2 the second, etc.
   // Computed across the entire shift (any status) so approving/rejecting one
@@ -465,6 +481,21 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </button>
         </div>
 
+        <div className="ip-search">
+          <Search className="svg-ico svg-ico-sm" />
+          <input
+            className="ip-search-input"
+            placeholder="Sök chaufför…"
+            value={listSearch}
+            onChange={e => setListSearch(e.target.value)}
+          />
+          {listSearch && (
+            <button className="ip-search-clear" onClick={() => setListSearch('')} aria-label="Rensa sökning">
+              <X className="svg-ico svg-ico-sm" />
+            </button>
+          )}
+        </div>
+
         <div className="side-panel-list">
           {activeTab === 'applications' && <>
           {/* Approved group */}
@@ -529,9 +560,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
               </div>
             )
           })()}
-          {approved.length === 0
-            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga godkända ännu.</p>
-            : approved.map(a => (
+          {fApproved.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Inga godkända ännu.'}</p>
+            : fApproved.map(a => (
               <div key={a.id}>
                 <div className="applicant-row approved">
                   <div className="avatar lg">{initials(a.user_name)}</div>
@@ -592,9 +623,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             <span>Väntar på godkännande</span>
             <span className="badge b-pending"><span className="pip" />{pending.length}</span>
           </div>
-          {pending.length === 0
-            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga väntande sökande.</p>
-            : pending.map(a => (
+          {fPending.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Inga väntande sökande.'}</p>
+            : fPending.map(a => (
               <div key={a.id}>
                 <div className="applicant-row">
                   <div className="avatar lg">{initials(a.user_name)}</div>
@@ -666,9 +697,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             <span>Nekade</span>
             {rejected.length > 0 && <span className="badge b-closed">{rejected.length}</span>}
           </div>
-          {rejected.length === 0
-            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga nekade.</p>
-            : rejected.map(a => (
+          {fRejected.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Inga nekade.'}</p>
+            : fRejected.map(a => (
               <div key={a.id} className="applicant-row" style={{ opacity: 0.7 }}>
                 <div className="avatar lg" style={{ background: '#3f1a1a' }}>{initials(a.user_name)}</div>
                 <div className="info">
@@ -706,9 +737,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             <span>Avbokade</span>
             {withdrawn.length > 0 && <span className="badge b-closed">{withdrawn.length}</span>}
           </div>
-          {withdrawn.length === 0
-            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Inga avbokade.</p>
-            : withdrawn.map(a => (
+          {fWithdrawn.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Inga avbokade.'}</p>
+            : fWithdrawn.map(a => (
               <div key={a.id} className="applicant-row" style={{ opacity: 0.7 }}>
                 <div className="avatar lg" style={{ background: '#3a2f1a' }}>{initials(a.user_name)}</div>
                 <div className="info">
@@ -812,15 +843,15 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
               </div>
             )
           })()}
-          {reserves.length === 0
-            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Ingen på reservlistan.</p>
-            : reserves.map((a, i) => (
+          {fReserves.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Ingen på reservlistan.'}</p>
+            : fReserves.map(a => (
               <div key={a.id}>
                 <div className="applicant-row reserve-row">
                   <div className="avatar lg" style={{ background: '#1a2a3a' }}>{initials(a.user_name)}</div>
                   <div className="info">
                     <div className="name">
-                      <span className="order-tag">#{i + 1}</span>
+                      <span className="order-tag">#{reserves.indexOf(a) + 1}</span>
                       {a.user_name}
                     </div>
                     <div className="meta">
@@ -879,9 +910,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             <span>Ej anmälda chaufförer</span>
             {others.length > 0 && <span className="badge b-closed">{others.length}</span>}
           </div>
-          {others.length === 0
-            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>Alla chaufförer har anmält sig eller är redan inbokade.</p>
-            : others.map(d => (
+          {fOthers.length === 0
+            ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Alla chaufförer har anmält sig eller är redan inbokade.'}</p>
+            : fOthers.map(d => (
               <div key={d.id}>
                 <div className="applicant-row">
                   <div className="avatar lg">{initials(d.name)}</div>
