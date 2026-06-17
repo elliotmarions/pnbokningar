@@ -2,7 +2,10 @@
 import { createContext, useContext, useRef } from 'react'
 
 interface AdminCacheCtx {
-  get: (key: string) => unknown
+  // maxAgeMs (optional): if given, entries older than this are treated as a
+  // miss (returns undefined) so the caller paints a loading state instead of
+  // stale data. Omit it to read regardless of age (legacy behaviour).
+  get: (key: string, maxAgeMs?: number) => unknown
   set: (key: string, data: unknown) => void
   del: (key: string) => void
 }
@@ -56,7 +59,12 @@ export function AdminCacheProvider({ children }: { children: React.ReactNode }) 
 
   return (
     <AdminCache.Provider value={{
-      get: (key) => store.current[key]?.data,
+      get: (key, maxAgeMs) => {
+        const entry = store.current[key]
+        if (!entry) return undefined
+        if (typeof maxAgeMs === 'number' && Date.now() - entry.ts > maxAgeMs) return undefined
+        return entry.data
+      },
       set: (key, data) => {
         store.current[key] = { data, ts: Date.now() }
         schedulePersist()

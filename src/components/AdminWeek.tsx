@@ -49,6 +49,11 @@ function byFirstName(a: Driver, b: Driver) {
   return a.user_name.localeCompare(b.user_name, 'sv')
 }
 
+// How long a cached week is trusted for instant paint. Beyond this we show the
+// skeleton instead of stale shifts and wait for the fresh fetch — adjacent
+// weeks are prefetched on every navigation, so normal stepping stays instant.
+const WEEK_CACHE_MAX_AGE_MS = 20000
+
 export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: OverviewView) => void }) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [weekYear, setWeekYear] = useState(0)
@@ -110,11 +115,12 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
       setLoading(false)
     }
 
-    const cached = cache.get(cacheKey)
+    const cached = cache.get(cacheKey, WEEK_CACHE_MAX_AGE_MS)
     if (cached) {
       apply(cached as Parameters<typeof apply>[0])
     } else {
-      // No cached data — show skeleton instead of stale shifts from previous week
+      // No fresh cache — show skeleton instead of stale shifts (either the
+      // previous week's, or this week's data from a much earlier snapshot)
       setShifts([])
       setLoading(true)
       // Show the new week number/year in the header immediately, even before data lands
@@ -200,7 +206,8 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
     const prefetch = (offset: number) => {
       const { isoYear, isoWeek } = isoFromOffset(offset)
       const key = `weeks-${isoYear}-${isoWeek}`
-      if (cache.get(key)) return
+      // Re-warm neighbours whose cache has gone stale so stepping back stays instant
+      if (cache.get(key, WEEK_CACHE_MAX_AGE_MS)) return
       fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data) cache.set(key, data) })

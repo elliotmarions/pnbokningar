@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useEffect, useState, useMemo } from 'react'
+import { Fragment, useEffect, useState, useMemo, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Phone } from './Icons'
 import { useAdminCache } from './AdminCacheProvider'
 import { getHolidayMap, HolidayInfo } from '../lib/holidays'
@@ -85,6 +85,11 @@ function monthTo(year: number, month: number): string {
   return `${year}-${String(month).padStart(2,'0')}-${String(last).padStart(2,'0')}`
 }
 
+// Trust a cached month for instant paint only this long; older entries fall
+// through to the skeleton so we never show stale data while the fresh fetch
+// is in flight.
+const MONTH_CACHE_MAX_AGE_MS = 20000
+
 export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval'; view: OverviewView; onView: (v: OverviewView) => void }) {
   const now = new Date()
   const todayStr = fmt(now)
@@ -103,6 +108,9 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
   const [driversMap,  setDriversMap]  = useState<Record<number, Driver[] | 'loading'>>({})
   const [customClosed, setCustomClosed] = useState<CustomClosedDay[]>([])
   const cache = useAdminCache()
+  // Guards against a slow fetch for a previous range clobbering a newer one
+  // after a fast month switch (which would flash the old month's data back).
+  const loadId = useRef(0)
 
   useEffect(() => {
     fetch('/api/custom-closed')
@@ -119,14 +127,19 @@ export function AdminMonth({ mode, view, onView }: { mode: 'month' | 'interval';
     setExpandedIds(new Set())
     setDriversMap({})
     if (from > to) { setLoading(false); setShifts([]); return }
-    setLoading(true)
+    const id = ++loadId.current
     const key = `month-${from}-${to}`
-    const cached = cache.get(key) as { shifts: MonthShift[] } | undefined
+    const cached = cache.get(key, MONTH_CACHE_MAX_AGE_MS) as { shifts: MonthShift[] } | undefined
     if (cached) { setShifts(cached.shifts); setLoading(false) }
+    else { setShifts([]); setLoading(true) }
     fetch(`/api/months?from=${from}&to=${to}`)
       .then(r => r.json())
-      .then(data => { cache.set(key, data); setShifts(data.shifts ?? []); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then(data => {
+        cache.set(key, data)
+        if (id !== loadId.current) return // stale — a newer range was requested
+        setShifts(data.shifts ?? []); setLoading(false)
+      })
+      .catch(() => { if (id === loadId.current) setLoading(false) })
   }, [from, to, cache])
 
   const prevMonth = () => {
