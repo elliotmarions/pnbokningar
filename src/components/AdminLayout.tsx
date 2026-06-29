@@ -57,7 +57,7 @@ export function AdminLayout({ children, title, sub }: { children: React.ReactNod
 
         <Link href="/profile" prefetch className="nav-foot nav-foot-link" title="Min profil">
           <div className="avatar">{initials(user?.name)}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="nav-foot-id" style={{ flex: 1, minWidth: 0 }}>
             <div className="who">{user?.name ?? '—'}</div>
             <div className="role">Trafikledare</div>
           </div>
