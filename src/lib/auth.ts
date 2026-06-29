@@ -8,6 +8,7 @@
 
 import { createClient } from './supabase/server'
 import { userRepo } from './db'
+import { displayName } from './names'
 
 export interface AppSession {
   user: {
@@ -30,13 +31,15 @@ export async function getSession(): Promise<AppSession | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  // Azure provides name in user_metadata.full_name (or .name depending on claims)
+  // Azure provides name in user_metadata.full_name (or .name depending on claims).
+  // Strip the ", Company" suffix Azure appends (e.g. "Elliot Marions, PostNord").
   const meta = user.user_metadata as Record<string, unknown> | undefined
-  const displayName =
+  const rawName =
     (meta?.full_name as string | undefined) ??
     (meta?.name as string | undefined) ??
     user.email ??
     'Okänd användare'
+  const cleanName = displayName(rawName) || rawName
 
   // Ensure the application's users table has a row for this user.
   // First login through Azure → create it; later logins → just read the role.
@@ -44,7 +47,7 @@ export async function getSession(): Promise<AppSession | null> {
   try {
     dbUser = await userRepo.getById(user.id)
     if (!dbUser) {
-      await userRepo.upsert({ id: user.id, name: displayName, email: user.email ?? null })
+      await userRepo.upsert({ id: user.id, name: cleanName, email: user.email ?? null })
       dbUser = await userRepo.getById(user.id)
     }
   } catch {
@@ -54,7 +57,7 @@ export async function getSession(): Promise<AppSession | null> {
   return {
     user: {
       id: user.id,
-      name: dbUser?.name ?? displayName,
+      name: displayName(dbUser?.name) || cleanName,
       email: user.email ?? null,
       role: (dbUser?.role as 'driver' | 'admin' | undefined) ?? 'driver',
       phone: dbUser?.phone ?? null,

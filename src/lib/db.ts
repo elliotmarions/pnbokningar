@@ -369,6 +369,34 @@ async function migrate() {
   } catch (err) {
     console.error('[migrate] long-term backfill failed (non-fatal):', err)
   }
+
+  // One-time backfill: strip the ", Company" suffix Azure/M365 appends to
+  // display names (e.g. "Elliot Marions, PostNord" → "Elliot Marions") so the
+  // UI shows plain "Förnamn Efternamn". New logins are already cleaned in auth.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1005`
+    if (!done) {
+      await sql`
+        UPDATE users
+        SET name = TRIM(SPLIT_PART(name, ',', 1))
+        WHERE name LIKE '%,%' AND TRIM(SPLIT_PART(name, ',', 1)) <> ''
+      `
+      // Activity log stores denormalized name snapshots — clean those too.
+      await sql`
+        UPDATE activity_log
+        SET driver_name = TRIM(SPLIT_PART(driver_name, ',', 1))
+        WHERE driver_name LIKE '%,%' AND TRIM(SPLIT_PART(driver_name, ',', 1)) <> ''
+      `
+      await sql`
+        UPDATE activity_log
+        SET actor_name = TRIM(SPLIT_PART(actor_name, ',', 1))
+        WHERE actor_name LIKE '%,%' AND TRIM(SPLIT_PART(actor_name, ',', 1)) <> ''
+      `
+      await sql`INSERT INTO schema_migrations (version) VALUES (1005) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] name suffix cleanup failed (non-fatal):', err)
+  }
 }
 
 // --------------- Users ---------------

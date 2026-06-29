@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from './client'
+import { displayName } from '@/lib/names'
 
 export interface AppUser {
   id: string
@@ -54,7 +55,7 @@ export function useUser() {
         const meta = raw.user_metadata as Record<string, unknown> | undefined
         const next: AppUser = {
           id: raw.id,
-          name: (meta?.full_name as string) ?? (meta?.name as string) ?? raw.email ?? null,
+          name: displayName((meta?.full_name as string) ?? (meta?.name as string) ?? raw.email ?? null) || null,
           email: raw.email ?? null,
         }
         setUser(next)
