@@ -20,6 +20,14 @@ export async function applyLongTermToShift(shiftId: number, date: string, adminI
     `
     let appId: number
     if (existing) {
+      // Respect an admin's deliberate removal. If this driver was avbokad
+      // (withdrawn=1) or nekad (rejected=1) for this specific shift, that
+      // decision stands — auto-applying the long-term booking must NOT bring
+      // them back. Otherwise re-opening the week (or any is_open:1 save) silently
+      // resurrects a driver the admin removed for the day. To undo a removal the
+      // admin re-books the driver directly, clicks "Ångra avbokning", or
+      // re-selects the day in Schemalägg (which deletes this row first).
+      if (existing.rejected === 1 || existing.withdrawn === 1) continue
       // Re-activate an existing application but DON'T overwrite its source —
       // if the driver booked this day themselves, it stays 'driver' so that
       // excluding the day later still warns the admin.
