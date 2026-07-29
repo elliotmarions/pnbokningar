@@ -1033,6 +1033,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast .ind { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: 0 0 8px; }
 .toast.error .ind { background: var(--red); }
+/* Reserve/"not booked yet" states — yellow so they don't read as a confirmation. */
+.toast.warn .ind { background: var(--yellow); }
 
 /* ===== Icon helper ===== */
 .svg-ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }

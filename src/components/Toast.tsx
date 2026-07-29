@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 
+type ToastType = 'success' | 'error' | 'warn'
+
 interface ToastProps {
   message: string
-  type?: 'success' | 'error'
+  type?: ToastType
   onDismiss?: () => void
 }
 
@@ -21,7 +23,7 @@ export function Toast({ message, type = 'success', onDismiss }: ToastProps) {
   }, [message, onDismiss])
 
   return (
-    <div className={`toast ${visible ? 'show' : ''} ${type === 'error' ? 'error' : ''}`}>
+    <div className={`toast ${visible ? 'show' : ''} ${type !== 'success' ? type : ''}`}>
       <span className="ind" />
       {message}
     </div>
@@ -29,8 +31,8 @@ export function Toast({ message, type = 'success', onDismiss }: ToastProps) {
 }
 
 export function useToast() {
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' }>({ msg: '', type: 'success' })
-  const show = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
+  const [toast, setToast] = useState<{ msg: string; type: ToastType }>({ msg: '', type: 'success' })
+  const show = (msg: string, type: ToastType = 'success') => setToast({ msg, type })
   const clear = () => setToast({ msg: '', type: 'success' })
   return { toast, show, clear }
 }

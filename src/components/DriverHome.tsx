@@ -323,7 +323,7 @@ export function DriverHome() {
       withdrawn: false, reserve: 1, applied_at: new Date().toISOString(),
     }
     setApplications(prev => [...prev, optimisticApp])
-    showToast('Du är tillagd på reservlistan!')
+    showToast('Du är tillagd på reservlistan!', 'warn')
 
     await withInflight(async () => {
       try {
