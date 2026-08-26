@@ -12,6 +12,7 @@ interface Driver {
   phone: string | null
   role: 'driver' | 'admin'
   push_enabled?: boolean
+  last_sign_in_at?: string | null
 }
 
 function initials(name: string) {
@@ -20,8 +21,34 @@ function initials(name: string) {
 
 const CACHE_KEY = 'users'
 
+// Days of silence after which an account is flagged as likely departed.
+// A driver who leaves PostNord loses their Azure account, so they can never
+// sign in again — a long silence is the closest thing we have to a "has quit"
+// signal without querying Azure directly.
+const INACTIVE_DAYS = 90
+
+// Whole days since a sign-in timestamp. The server sends Stockholm local time
+// with no zone marker, matching the rest of the app; at day granularity the
+// hour of skew that introduces doesn't matter.
+function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const t = new Date(iso.replace(' ', 'T')).getTime()
+  if (isNaN(t)) return null
+  return Math.floor((Date.now() - t) / 86_400_000)
+}
+
+function fmtLastSeen(days: number | null): string {
+  if (days === null) return '—'
+  if (days <= 0) return 'Idag'
+  if (days === 1) return 'Igår'
+  if (days < 30) return `${days} dagar sedan`
+  if (days < 365) return `${Math.floor(days / 30)} mån sedan`
+  const years = Math.floor(days / 365)
+  return years === 1 ? '1 år sedan' : `${years} år sedan`
+}
+
 type RoleFilter = 'all' | 'admin' | 'driver'
-type SortDir = 'asc' | 'desc'
+type SortMode = 'name-asc' | 'name-desc' | 'inactive'
 
 export function DriversTable() {
   const cache = useAdminCache()
@@ -35,7 +62,9 @@ export function DriversTable() {
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
   // Default: alphabetical ascending (A→Ö)
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [sortMode, setSortMode] = useState<SortMode>('name-asc')
+  // Narrow the list to accounts silent for INACTIVE_DAYS or more.
+  const [inactiveOnly, setInactiveOnly] = useState(false)
 
   useEffect(() => {
     fetch('/api/users')
@@ -117,31 +146,60 @@ export function DriversTable() {
     }
   }
 
+  // True once at least one account carries a sign-in timestamp. Stays false if
+  // the DB role can't read Supabase's `auth` schema — the column and the
+  // inactivity filter are then meaningless, so we hide them.
+  const hasSignInData = useMemo(() => drivers.some(d => d.last_sign_in_at), [drivers])
+
   // Apply search + filters + sort
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = drivers.filter(d => {
       if (roleFilter !== 'all' && d.role !== roleFilter) return false
+      if (inactiveOnly) {
+        const days = daysSince(d.last_sign_in_at)
+        if (days === null || days < INACTIVE_DAYS) return false
+      }
       if (q) {
         const hay = `${d.name} ${d.email ?? ''} ${d.phone ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-    // Locale-aware Swedish sort (handles å/ä/ö correctly)
-    list.sort((a, b) =>
-      sortDir === 'asc'
-        ? a.name.localeCompare(b.name, 'sv')
-        : b.name.localeCompare(a.name, 'sv')
-    )
+    if (sortMode === 'inactive') {
+      // Longest-silent first — the order you want when clearing out accounts.
+      // Unknown timestamps sort last: we can't judge them either way.
+      list.sort((a, b) => {
+        const da = daysSince(a.last_sign_in_at)
+        const db = daysSince(b.last_sign_in_at)
+        if (da === null && db === null) return a.name.localeCompare(b.name, 'sv')
+        if (da === null) return 1
+        if (db === null) return -1
+        return db - da
+      })
+    } else {
+      // Locale-aware Swedish sort (handles å/ä/ö correctly)
+      list.sort((a, b) =>
+        sortMode === 'name-asc'
+          ? a.name.localeCompare(b.name, 'sv')
+          : b.name.localeCompare(a.name, 'sv')
+      )
+    }
     return list
-  }, [drivers, query, roleFilter, sortDir])
+  }, [drivers, query, roleFilter, sortMode, inactiveOnly])
 
   const admins = filtered.filter(d => d.role === 'admin')
   const driverOnly = filtered.filter(d => d.role === 'driver')
-  const hasActiveFilters = query.trim() !== '' || roleFilter !== 'all'
+  const hasActiveFilters = query.trim() !== '' || roleFilter !== 'all' || inactiveOnly
 
-  const clearAll = () => { setQuery(''); setRoleFilter('all') }
+  const clearAll = () => { setQuery(''); setRoleFilter('all'); setInactiveOnly(false) }
+
+  // How many accounts the inactivity filter would surface — shown on the chip
+  // so the count is visible before clicking it.
+  const inactiveCount = useMemo(
+    () => drivers.filter(d => { const n = daysSince(d.last_sign_in_at); return n !== null && n >= INACTIVE_DAYS }).length,
+    [drivers],
+  )
 
   const renderRows = (list: Driver[]) => list.map(d => (
     <tr key={d.id}>
@@ -190,6 +248,22 @@ export function DriversTable() {
           <span className="pip" />{d.role === 'admin' ? 'Trafikledare' : 'Chaufför'}
         </span>
       </td>
+      {hasSignInData && (() => {
+        const days = daysSince(d.last_sign_in_at)
+        const stale = days !== null && days >= INACTIVE_DAYS
+        return (
+          <td
+            data-label="Senast inloggad"
+            style={{ fontSize: 12.5, color: stale ? '#F59E0B' : 'var(--text-secondary)' }}
+            title={d.last_sign_in_at ? `Senast inloggad ${d.last_sign_in_at.slice(0, 16)}` : 'Ingen inloggning registrerad'}
+          >
+            {fmtLastSeen(days)}
+            {stale && (
+              <span className="badge b-reserve" style={{ marginLeft: 6, fontSize: 10.5 }}>Inaktiv</span>
+            )}
+          </td>
+        )
+      })()}
       <td data-label="">
         <div className="drivers-row-actions" style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
           <button className="btn btn-sm" onClick={() => toggleRole(d)}>
@@ -224,8 +298,11 @@ export function DriversTable() {
     <>
       <div className="drivers-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Personal ({drivers.length})</h2>
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'right' }}>
           Konton skapas automatiskt när chauffören loggar in med Microsoft första gången.
+          {hasSignInData && (
+            <><br />Slutar någon försvinner Microsoft-kontot — då går det inte att logga in igen.</>
+          )}
         </div>
       </div>
 
@@ -256,20 +333,48 @@ export function DriversTable() {
         <div className="filter-chips">
           <span className="filter-label">Sortera:</span>
           <button
-            className={`filter-chip ${sortDir === 'asc' ? 'active' : ''}`}
-            onClick={() => setSortDir('asc')}
+            className={`filter-chip ${sortMode === 'name-asc' ? 'active' : ''}`}
+            onClick={() => setSortMode('name-asc')}
             title="Alfabetisk stigande (A → Ö)"
           >
             A → Ö
           </button>
           <button
-            className={`filter-chip ${sortDir === 'desc' ? 'active' : ''}`}
-            onClick={() => setSortDir('desc')}
+            className={`filter-chip ${sortMode === 'name-desc' ? 'active' : ''}`}
+            onClick={() => setSortMode('name-desc')}
             title="Alfabetisk fallande (Ö → A)"
           >
             Ö → A
           </button>
+          {hasSignInData && (
+            <button
+              className={`filter-chip ${sortMode === 'inactive' ? 'active' : ''}`}
+              onClick={() => setSortMode('inactive')}
+              title="Längst sedan inloggning först"
+            >
+              Längst inaktiv
+            </button>
+          )}
         </div>
+
+        {hasSignInData && (
+          <div className="filter-chips">
+            <span className="filter-label">Status:</span>
+            <button
+              className={`filter-chip ${!inactiveOnly ? 'active' : ''}`}
+              onClick={() => setInactiveOnly(false)}
+            >
+              Alla
+            </button>
+            <button
+              className={`filter-chip ${inactiveOnly ? 'active' : ''}`}
+              onClick={() => setInactiveOnly(true)}
+              title={`Konton utan inloggning på minst ${INACTIVE_DAYS} dagar`}
+            >
+              Inaktiva {inactiveCount > 0 && `(${inactiveCount})`}
+            </button>
+          </div>
+        )}
 
         {hasActiveFilters && (
           <button className="btn btn-sm btn-ghost" onClick={clearAll} style={{ marginLeft: 'auto' }}>
@@ -295,6 +400,7 @@ export function DriversTable() {
                 <th>E-post</th>
                 <th>Telefon</th>
                 <th>Roll</th>
+                {hasSignInData && <th>Senast inloggad</th>}
                 <th></th>
               </tr>
             </thead>
@@ -302,7 +408,7 @@ export function DriversTable() {
               {admins.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={hasSignInData ? 6 : 5}>
                       <div className="list-group-h" style={{ margin: '4px 0 2px' }}>
                         <span>Trafikledare</span>
                         <span className="badge b-confirmed"><span className="pip" />{admins.length}</span>
@@ -316,7 +422,7 @@ export function DriversTable() {
               {driverOnly.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={hasSignInData ? 6 : 5}>
                       <div className="list-group-h" style={{ margin: '12px 0 2px' }}>
                         <span>Chaufförer</span>
                         <span>{driverOnly.length}</span>
