@@ -33,6 +33,7 @@ interface Props {
   onApprove: (appId: number) => Promise<void>
   onUnapprove: (appId: number, reason?: string) => Promise<void>
   onBookDriver?: (shiftId: number, userId: string) => Promise<void>
+  onReserveDriver?: (shiftId: number, userId: string) => Promise<void>
   onReject?: (appId: number, reason?: string) => Promise<void>
   onUnreject?: (appId: number) => Promise<void>
   onUnwithdraw?: (appId: number) => Promise<void>
@@ -64,7 +65,7 @@ function fmtAppliedFull(iso: string) {
   return `Anmäld ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} kl. ${fmtTime(iso)}`
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReserveDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves' | 'others'>('applications')
   // Free-text filter for the visible list (matches name or phone).
@@ -75,6 +76,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [withdrawReason, setWithdrawReason] = useState('')
   // Driver (user id) awaiting confirmation before being booked in from "Övriga".
   const [confirmBookId, setConfirmBookId] = useState<string | null>(null)
+  // Driver (user id) awaiting confirmation before being added to the reserve
+  // list from "Övriga". Mutually exclusive with confirmBookId.
+  const [confirmReserveId, setConfirmReserveId] = useState<string | null>(null)
   const [confirmPromoteId, setConfirmPromoteId] = useState<number | null>(null)
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   // Ids the user just optimistically removed ("Ta bort helt"). Prevents an
@@ -221,14 +225,20 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     if (showBooking) setTimeout(() => searchRef.current?.focus(), 50)
   }, [showBooking])
 
-  const handleBookDriver = async (userId: string, userName: string) => {
-    if (!shift || !onBookDriver) return
+  // Manually add a driver to this shift — either booked in as approved
+  // ("Boka manuellt" under Godkända) or straight onto the reserve list
+  // ("Lägg till reserv" under Reservlistan).
+  const addDriver = async (userId: string, userName: string, mode: 'book' | 'reserve') => {
+    if (!shift) return
+    const handler = mode === 'reserve' ? onReserveDriver : onBookDriver
+    if (!handler) return
     const driver = allDrivers.find(d => d.id === userId)
     setBookingId(userId)
 
-    // Optimistic: close the booking UI, drop an approved applicant into the list
+    // Optimistic: close the booking UI, drop the applicant into the list
     // immediately. Temp negative id; replaced by canonical data once the
     // background refetch resolves.
+    const asReserve = mode === 'reserve'
     const tempId = -Date.now()
     const optimisticEntry: Applicant = {
       id: tempId,
@@ -236,12 +246,12 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       user_name: userName,
       user_phone: driver?.phone ?? null,
       applied_at: new Date().toISOString(),
-      approved: true,
+      approved: !asReserve,
       rejected: false,
       rejection_reason: null,
       withdrawn: false,
       withdrawal_reason: null,
-      reserve: 0,
+      reserve: asReserve ? 1 : 0,
     }
     const snapshot = applicants
     // If the driver already has an application (e.g. previously withdrawn),
@@ -249,7 +259,15 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     const existingIdx = applicants.findIndex(a => a.user_id === userId)
     if (existingIdx >= 0) {
       setApplicants(prev => prev.map(a => a.user_id === userId
-        ? { ...a, approved: true, rejected: false, withdrawn: false, rejection_reason: null, withdrawal_reason: null, reserve: 0 }
+        ? {
+            ...a,
+            approved: !asReserve,
+            rejected: false,
+            withdrawn: false,
+            rejection_reason: null,
+            withdrawal_reason: null,
+            reserve: asReserve ? 1 : 0,
+          }
         : a))
     } else {
       setApplicants(prev => [...prev, optimisticEntry])
@@ -258,7 +276,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     setDriverSearch('')
 
     try {
-      await onBookDriver(shift.id, userId)
+      await handler(shift.id, userId)
       // Reconcile with canonical data — replaces temp id, fixes any field drift.
       const d = await fetch(`/api/shifts/${shift.id}`).then(r => r.json())
       setApplicants(d.applicants ?? [])
@@ -269,6 +287,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
       setBookingId(null)
     }
   }
+
+  const handleBookDriver = (userId: string, userName: string) => addDriver(userId, userName, 'book')
+  const handleReserveDriver = (userId: string, userName: string) => addDriver(userId, userName, 'reserve')
 
   const approved = applicants.filter(a => a.approved && !a.reserve)
   const pending = applicants.filter(a => !a.approved && !a.rejected && !a.withdrawn && !a.reserve)
@@ -424,6 +445,55 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
     }
   }
 
+  // Inline "pick a driver" list, shared by the two manual-add buttons.
+  // `book` approves the driver directly, `reserve` puts them on the reserve list.
+  const bookingPanel = (mode: 'book' | 'reserve') => {
+    const involved = new Set(applicants.map(a => a.user_id))
+    const filtered = allDrivers.filter(d =>
+      !involved.has(d.id) &&
+      d.name.toLowerCase().includes(driverSearch.toLowerCase())
+    )
+    const actionLabel = mode === 'reserve' ? 'Lägg till' : 'Boka'
+    const busyLabel = mode === 'reserve' ? 'Lägger till…' : 'Bokar…'
+    const onPick = mode === 'reserve' ? handleReserveDriver : handleBookDriver
+    return (
+      <div className="book-driver-panel">
+        <input
+          ref={searchRef}
+          className="book-driver-search"
+          placeholder="Sök chaufför…"
+          value={driverSearch}
+          onChange={e => setDriverSearch(e.target.value)}
+        />
+        <div className="book-driver-list">
+          {filtered.length === 0
+            ? <div className="book-driver-empty">Inga chaufförer att visa</div>
+            : filtered.map(d => (
+                <button
+                  key={d.id}
+                  className="book-driver-row"
+                  disabled={bookingId === d.id}
+                  onClick={() => onPick(d.id, d.name)}
+                >
+                  <div className="avatar" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}>
+                    {initials(d.name)}
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{d.name}</div>
+                    {d.phone && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{d.phone}</div>}
+                  </div>
+                  {bookingId === d.id
+                    ? <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{busyLabel}</span>
+                    : <span style={{ fontSize: 11, color: 'var(--primary)' }}>{actionLabel}</span>
+                  }
+                </button>
+              ))
+          }
+        </div>
+      </div>
+    )
+  }
+
   const startTime = shift?.day_index === 5 ? '09:45' : '16:00'
   const endTime = shift?.day_index === 5 ? '18:00' : '22:00'
 
@@ -454,7 +524,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
         <div className="ip-tabs">
           <button
             className={`ip-tab ${activeTab === 'applications' ? 'active' : ''}`}
-            onClick={() => setActiveTab('applications')}
+            onClick={() => { setActiveTab('applications'); setShowBooking(false); setConfirmBookId(null); setConfirmReserveId(null) }}
           >
             Ansökningar
             {(approved.length + pending.length) > 0 && (
@@ -463,7 +533,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </button>
           <button
             className={`ip-tab ${activeTab === 'reserves' ? 'active' : ''}`}
-            onClick={() => setActiveTab('reserves')}
+            onClick={() => { setActiveTab('reserves'); setShowBooking(false); setConfirmBookId(null); setConfirmReserveId(null) }}
           >
             Reserver
             {reserves.length > 0 && (
@@ -472,7 +542,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </button>
           <button
             className={`ip-tab ${activeTab === 'others' ? 'active' : ''}`}
-            onClick={() => setActiveTab('others')}
+            onClick={() => { setActiveTab('others'); setShowBooking(false); setConfirmBookId(null); setConfirmReserveId(null) }}
           >
             Övriga
             {others.length > 0 && (
@@ -516,50 +586,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             </div>
           </div>
 
-          {/* Inline driver booking */}
-          {showBooking && onBookDriver && (() => {
-            const bookedIds = new Set(applicants.map(a => a.user_id))
-            const filtered = allDrivers.filter(d =>
-              !bookedIds.has(d.id) &&
-              d.name.toLowerCase().includes(driverSearch.toLowerCase())
-            )
-            return (
-              <div className="book-driver-panel">
-                <input
-                  ref={searchRef}
-                  className="book-driver-search"
-                  placeholder="Sök chaufför…"
-                  value={driverSearch}
-                  onChange={e => setDriverSearch(e.target.value)}
-                />
-                <div className="book-driver-list">
-                  {filtered.length === 0
-                    ? <div className="book-driver-empty">Inga chaufförer att visa</div>
-                    : filtered.map(d => (
-                        <button
-                          key={d.id}
-                          className="book-driver-row"
-                          disabled={bookingId === d.id}
-                          onClick={() => handleBookDriver(d.id, d.name)}
-                        >
-                          <div className="avatar" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}>
-                            {initials(d.name)}
-                          </div>
-                          <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{d.name}</div>
-                            {d.phone && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{d.phone}</div>}
-                          </div>
-                          {bookingId === d.id
-                            ? <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bokar…</span>
-                            : <span style={{ fontSize: 11, color: 'var(--primary)' }}>Boka</span>
-                          }
-                        </button>
-                      ))
-                  }
-                </div>
-              </div>
-            )
-          })()}
+          {/* Inline driver picker — books the driver in as approved */}
+          {showBooking && onBookDriver && bookingPanel('book')}
           {fApproved.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Inga godkända ännu.'}</p>
             : fApproved.map(a => (
@@ -786,63 +814,21 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
             <span>Reservlista</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {reserves.length > 0 && <span className="badge b-reserve">{reserves.length}</span>}
-              {onBookDriver && (
+              {onReserveDriver && (
                 <button
                   className="btn btn-sm btn-ghost"
                   style={{ padding: '2px 8px', fontSize: 11, gap: 4 }}
                   onClick={() => { setShowBooking(b => !b); setDriverSearch('') }}
                 >
                   <Plus className="svg-ico" style={{ width: 11, height: 11 }} />
-                  Boka manuellt
+                  Lägg till reserv
                 </button>
               )}
             </div>
           </div>
 
-          {/* Inline driver booking */}
-          {showBooking && onBookDriver && (() => {
-            const bookedIds = new Set(applicants.map(a => a.user_id))
-            const filtered = allDrivers.filter(d =>
-              !bookedIds.has(d.id) &&
-              d.name.toLowerCase().includes(driverSearch.toLowerCase())
-            )
-            return (
-              <div className="book-driver-panel">
-                <input
-                  ref={searchRef}
-                  className="book-driver-search"
-                  placeholder="Sök chaufför…"
-                  value={driverSearch}
-                  onChange={e => setDriverSearch(e.target.value)}
-                />
-                <div className="book-driver-list">
-                  {filtered.length === 0
-                    ? <div className="book-driver-empty">Inga chaufförer att visa</div>
-                    : filtered.map(d => (
-                        <button
-                          key={d.id}
-                          className="book-driver-row"
-                          disabled={bookingId === d.id}
-                          onClick={() => handleBookDriver(d.id, d.name)}
-                        >
-                          <div className="avatar" style={{ width: 26, height: 26, fontSize: 10, flexShrink: 0 }}>
-                            {initials(d.name)}
-                          </div>
-                          <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>{d.name}</div>
-                            {d.phone && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{d.phone}</div>}
-                          </div>
-                          {bookingId === d.id
-                            ? <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bokar…</span>
-                            : <span style={{ fontSize: 11, color: 'var(--primary)' }}>Boka</span>
-                          }
-                        </button>
-                      ))
-                  }
-                </div>
-              </div>
-            )
-          })()}
+          {/* Inline driver picker — adds to the reserve list */}
+          {showBooking && onReserveDriver && bookingPanel('reserve')}
           {fReserves.length === 0
             ? <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic', fontSize: 12.5, padding: '0 6px' }}>{listQuery ? 'Inga träffar.' : 'Ingen på reservlistan.'}</p>
             : fReserves.map(a => (
@@ -905,7 +891,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </>}
 
           {activeTab === 'others' && <>
-          {/* Drivers with no involvement in this shift — available to book in. */}
+          {/* Drivers with no involvement in this shift — bookable in directly
+              or placeable on the reserve list. */}
           <div className="list-group-h">
             <span>Ej anmälda chaufförer</span>
             {others.length > 0 && <span className="badge b-closed">{others.length}</span>}
@@ -923,11 +910,21 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     </div>
                   </div>
                   <div className="actions">
+                    {onReserveDriver && (
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        disabled={bookingId === d.id}
+                        onClick={() => { setConfirmBookId(null); setConfirmReserveId(d.id) }}
+                        title="Lägg till på reservlistan"
+                      >
+                        Reserv
+                      </button>
+                    )}
                     {onBookDriver && (
                       <button
                         className="btn btn-sm btn-success"
                         disabled={bookingId === d.id}
-                        onClick={() => setConfirmBookId(d.id)}
+                        onClick={() => { setConfirmReserveId(null); setConfirmBookId(d.id) }}
                         title="Boka in chauffören"
                       >
                         <Check className="svg-ico svg-ico-sm" />
@@ -951,6 +948,24 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       >
                         <Check className="svg-ico svg-ico-sm" />
                         Ja, boka in
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {confirmReserveId === d.id && onReserveDriver && (
+                  <div className="reject-form">
+                    <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                      Lägg <strong>{d.name}</strong> på reservlistan för {dayLabel} {shift ? fmt(shift.date) : ''}?
+                      Chauffören blir <strong>inte</strong> inbokad, men får en notis om att hen står som reserv.
+                    </p>
+                    <div className="reject-form-actions">
+                      <button className="btn btn-sm btn-ghost" onClick={() => setConfirmReserveId(null)}>Avbryt</button>
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        disabled={bookingId === d.id}
+                        onClick={() => { setConfirmReserveId(null); handleReserveDriver(d.id, d.name) }}
+                      >
+                        {bookingId === d.id ? 'Lägger till…' : 'Ja, lägg till som reserv'}
                       </button>
                     </div>
                   </div>

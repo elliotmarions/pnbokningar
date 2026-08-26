@@ -461,6 +461,38 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     })
   }
 
+  // Add driver straight to the reserve list — the manual counterpart to
+  // handleBookDriver. Same optimistic pattern: bump the badge count and let
+  // refreshCounts sync applicantsByShift in the background.
+  const handleReserveDriver = async (shiftId: number, userId: string) => {
+    const snapCounts = counts
+    setCounts(prev => ({
+      ...prev,
+      [shiftId]: {
+        approved: prev[shiftId]?.approved ?? 0,
+        pending: prev[shiftId]?.pending ?? 0,
+        reserves: (prev[shiftId]?.reserves ?? 0) + 1,
+      },
+    }))
+
+    return withInflight(async () => {
+      try {
+        const res = await fetch(`/api/shifts/${shiftId}/reserve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        })
+        if (!res.ok) throw new Error('reserve failed')
+        showToast('Tillagd på reservlistan.', 'warn')
+        refreshCounts()
+      } catch (err) {
+        setCounts(snapCounts)
+        showToast('Fel vid tillägg som reserv.', 'error')
+        throw err
+      }
+    })
+  }
+
   const handleOpenWeek = async () => {
     const updates = openWeekIds.map(id => ({ id, is_open: 1 }))
     if (updates.length === 0) {
@@ -706,6 +738,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
         onApprove={handleApprove}
         onUnapprove={handleUnapprove}
         onBookDriver={handleBookDriver}
+        onReserveDriver={handleReserveDriver}
         onReject={handleReject}
         onUnreject={handleUnreject}
         onUnwithdraw={handleUnwithdraw}
