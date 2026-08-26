@@ -76,6 +76,9 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   const [withdrawReason, setWithdrawReason] = useState('')
   // Driver (user id) awaiting confirmation before being booked in from "Övriga".
   const [confirmBookId, setConfirmBookId] = useState<string | null>(null)
+  // Driver (user id) awaiting confirmation before being added to the reserve
+  // list from "Övriga". Mutually exclusive with confirmBookId.
+  const [confirmReserveId, setConfirmReserveId] = useState<string | null>(null)
   const [confirmPromoteId, setConfirmPromoteId] = useState<number | null>(null)
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   // Ids the user just optimistically removed ("Ta bort helt"). Prevents an
@@ -521,7 +524,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
         <div className="ip-tabs">
           <button
             className={`ip-tab ${activeTab === 'applications' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('applications'); setShowBooking(false) }}
+            onClick={() => { setActiveTab('applications'); setShowBooking(false); setConfirmBookId(null); setConfirmReserveId(null) }}
           >
             Ansökningar
             {(approved.length + pending.length) > 0 && (
@@ -530,7 +533,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </button>
           <button
             className={`ip-tab ${activeTab === 'reserves' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('reserves'); setShowBooking(false) }}
+            onClick={() => { setActiveTab('reserves'); setShowBooking(false); setConfirmBookId(null); setConfirmReserveId(null) }}
           >
             Reserver
             {reserves.length > 0 && (
@@ -539,7 +542,7 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </button>
           <button
             className={`ip-tab ${activeTab === 'others' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('others'); setShowBooking(false) }}
+            onClick={() => { setActiveTab('others'); setShowBooking(false); setConfirmBookId(null); setConfirmReserveId(null) }}
           >
             Övriga
             {others.length > 0 && (
@@ -888,7 +891,8 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
           </>}
 
           {activeTab === 'others' && <>
-          {/* Drivers with no involvement in this shift — available to book in. */}
+          {/* Drivers with no involvement in this shift — bookable in directly
+              or placeable on the reserve list. */}
           <div className="list-group-h">
             <span>Ej anmälda chaufförer</span>
             {others.length > 0 && <span className="badge b-closed">{others.length}</span>}
@@ -906,11 +910,21 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                     </div>
                   </div>
                   <div className="actions">
+                    {onReserveDriver && (
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        disabled={bookingId === d.id}
+                        onClick={() => { setConfirmBookId(null); setConfirmReserveId(d.id) }}
+                        title="Lägg till på reservlistan"
+                      >
+                        Reserv
+                      </button>
+                    )}
                     {onBookDriver && (
                       <button
                         className="btn btn-sm btn-success"
                         disabled={bookingId === d.id}
-                        onClick={() => setConfirmBookId(d.id)}
+                        onClick={() => { setConfirmReserveId(null); setConfirmBookId(d.id) }}
                         title="Boka in chauffören"
                       >
                         <Check className="svg-ico svg-ico-sm" />
@@ -934,6 +948,24 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
                       >
                         <Check className="svg-ico svg-ico-sm" />
                         Ja, boka in
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {confirmReserveId === d.id && onReserveDriver && (
+                  <div className="reject-form">
+                    <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                      Lägg <strong>{d.name}</strong> på reservlistan för {dayLabel} {shift ? fmt(shift.date) : ''}?
+                      Chauffören blir <strong>inte</strong> inbokad, men får en notis om att hen står som reserv.
+                    </p>
+                    <div className="reject-form-actions">
+                      <button className="btn btn-sm btn-ghost" onClick={() => setConfirmReserveId(null)}>Avbryt</button>
+                      <button
+                        className="btn btn-sm btn-ghost ip-reserve-btn"
+                        disabled={bookingId === d.id}
+                        onClick={() => { setConfirmReserveId(null); handleReserveDriver(d.id, d.name) }}
+                      >
+                        {bookingId === d.id ? 'Lägger till…' : 'Ja, lägg till som reserv'}
                       </button>
                     </div>
                   </div>
