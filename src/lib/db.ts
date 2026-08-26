@@ -409,6 +409,9 @@ export interface DbUser {
   role: 'driver' | 'admin'
   created_at: string
   push_enabled?: boolean
+  // Last successful sign-in, read from Supabase's managed `auth` schema.
+  // Undefined when that schema isn't readable by our DB role (see all()).
+  last_sign_in_at?: string | null
 }
 
 export const userRepo = {
@@ -434,12 +437,31 @@ export const userRepo = {
 
   async all(): Promise<DbUser[]> {
     await ensureMigrated()
-    return sql<DbUser[]>`
-      SELECT u.*,
-        EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled
-      FROM users u
-      ORDER BY u.name
-    `
+    // `last_sign_in_at` lives in Supabase's managed `auth` schema, on the same
+    // database our DATABASE_URL points at. It's the best signal we have for
+    // "has this person left?": losing the Azure account makes signing in
+    // impossible, so a long silence means the account is dead.
+    //
+    // The pooler role can normally read `auth.users`, but that grant isn't
+    // guaranteed — fall back to the plain query so the drivers list still
+    // loads (the column just renders empty) rather than 500-ing.
+    try {
+      return await sql<DbUser[]>`
+        SELECT u.*,
+          EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled,
+          (au.last_sign_in_at AT TIME ZONE 'Europe/Stockholm')::text AS last_sign_in_at
+        FROM users u
+        LEFT JOIN auth.users au ON au.id::text = u.id
+        ORDER BY u.name
+      `
+    } catch {
+      return sql<DbUser[]>`
+        SELECT u.*,
+          EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled
+        FROM users u
+        ORDER BY u.name
+      `
+    }
   },
 
   async updatePhone(id: string, phone: string): Promise<void> {
