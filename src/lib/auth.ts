@@ -50,6 +50,11 @@ export async function getSession(): Promise<AppSession | null> {
       await userRepo.upsert({ id: user.id, name: cleanName, email: user.email ?? null })
       dbUser = await userRepo.getById(user.id)
     }
+    // Stamp presence here rather than at sign-in: Supabase only records a sign-in
+    // when someone runs the Azure flow again, and our sessions refresh silently
+    // for months, so sign-in time says nothing about who still uses the app.
+    // Self-throttling — see userRepo.touchLastSeen.
+    await userRepo.touchLastSeen(user.id)
   } catch {
     // DB not yet available (build-time) — fall back to bare auth user.
   }
