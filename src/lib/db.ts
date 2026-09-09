@@ -92,6 +92,11 @@ async function migrate() {
   // lazily the first time a driver exports their schedule.
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token TEXT`
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_calendar_token ON users(calendar_token) WHERE calendar_token IS NOT NULL`
+  // When we last saw the user make an authenticated request. Supabase's
+  // `auth.users.last_sign_in_at` only moves on a fresh sign-in, and our
+  // sessions refresh silently for months, so that column says nothing about
+  // whether someone still uses the app. This one does — see touchLastSeen().
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`
   await sql`CREATE INDEX IF NOT EXISTS idx_applications_withdrawn_by ON applications(withdrawn_by)`
   // Track how an application was created so excluding a long-term day can warn
   // when it would remove a booking the driver made independently.
@@ -409,10 +414,18 @@ export interface DbUser {
   role: 'driver' | 'admin'
   created_at: string
   push_enabled?: boolean
-  // Last successful sign-in, read from Supabase's managed `auth` schema.
-  // Undefined when that schema isn't readable by our DB role (see all()).
-  last_sign_in_at?: string | null
+  // Last time the account was actually used, as Stockholm local time.
+  // Undefined on queries that don't compute it (see all()).
+  last_active_at?: string | null
 }
+
+// Presence stamps we've already written from this instance, so a burst of
+// requests from one user costs one UPDATE rather than one per request. Kept in
+// step with the SQL interval below; serverless instances are short-lived, so
+// this is a best-effort cache, not the source of truth.
+const LAST_SEEN_THROTTLE_MS = 15 * 60 * 1000
+const LAST_SEEN_CACHE_MAX = 500
+const lastSeenStamps = new Map<string, number>()
 
 export const userRepo = {
   async upsert(u: { id: string; name: string; email?: string | null }): Promise<DbUser> {
@@ -437,19 +450,25 @@ export const userRepo = {
 
   async all(): Promise<DbUser[]> {
     await ensureMigrated()
-    // `last_sign_in_at` lives in Supabase's managed `auth` schema, on the same
-    // database our DATABASE_URL points at. It's the best signal we have for
-    // "has this person left?": losing the Azure account makes signing in
-    // impossible, so a long silence means the account is dead.
+    // "Is this account still in use?" is answered by u.last_seen_at, which we
+    // stamp on every authenticated request (touchLastSeen).
+    //
+    // auth.users.last_sign_in_at is folded in as a floor, not as the answer:
+    // it only moves when someone goes through the Azure flow again, and our
+    // Supabase sessions refresh silently, so on its own it makes daily users
+    // look like they vanished months ago. It's still the only thing we know
+    // about accounts that haven't been back since last_seen_at shipped, so
+    // GREATEST of the two gives the best available answer during the changeover
+    // and stops mattering once everyone has been seen once. (Postgres GREATEST
+    // skips NULLs, so either side alone works.)
     //
     // The pooler role can normally read `auth.users`, but that grant isn't
-    // guaranteed — fall back to the plain query so the drivers list still
-    // loads (the column just renders empty) rather than 500-ing.
+    // guaranteed — fall back to last_seen_at alone rather than 500-ing.
     try {
       return await sql<DbUser[]>`
         SELECT u.*,
           EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled,
-          (au.last_sign_in_at AT TIME ZONE 'Europe/Stockholm')::text AS last_sign_in_at
+          (GREATEST(u.last_seen_at, au.last_sign_in_at) AT TIME ZONE 'Europe/Stockholm')::text AS last_active_at
         FROM users u
         LEFT JOIN auth.users au ON au.id::text = u.id
         ORDER BY u.name
@@ -457,10 +476,37 @@ export const userRepo = {
     } catch {
       return sql<DbUser[]>`
         SELECT u.*,
-          EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled
+          EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id) AS push_enabled,
+          (u.last_seen_at AT TIME ZONE 'Europe/Stockholm')::text AS last_active_at
         FROM users u
         ORDER BY u.name
       `
+    }
+  },
+
+  // Record that the user just made an authenticated request.
+  //
+  // Called from getSession() on every request, so it has to stay cheap: the
+  // WHERE clause turns all but one write per THROTTLE_MS into a no-op, and the
+  // in-process guard keeps even that round trip off the hot path. Losing a
+  // stamp costs nothing — the next request re-stamps it.
+  async touchLastSeen(id: string): Promise<void> {
+    const now = Date.now()
+    const stamped = lastSeenStamps.get(id)
+    if (stamped !== undefined && now - stamped < LAST_SEEN_THROTTLE_MS) return
+    if (lastSeenStamps.size >= LAST_SEEN_CACHE_MAX) lastSeenStamps.clear()
+    lastSeenStamps.set(id, now)
+    try {
+      await ensureMigrated()
+      await sql`
+        UPDATE users SET last_seen_at = NOW()
+        WHERE id = ${id}
+          AND (last_seen_at IS NULL OR last_seen_at < NOW() - INTERVAL '15 minutes')
+      `
+    } catch (err) {
+      // Never let presence tracking break the request it's riding along on.
+      lastSeenStamps.delete(id)
+      console.error('[touchLastSeen] failed (non-fatal):', err)
     }
   },
 

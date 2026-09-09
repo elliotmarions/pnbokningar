@@ -4,6 +4,7 @@ import { Phone, Search, X, Bell } from './Icons'
 import { formatSwedishPhone } from '@/lib/phone'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
+import { INACTIVE_DAYS, daysSince, fmtLastSeen, isInactive } from '@/lib/last-seen'
 
 interface Driver {
   id: string
@@ -12,7 +13,7 @@ interface Driver {
   phone: string | null
   role: 'driver' | 'admin'
   push_enabled?: boolean
-  last_sign_in_at?: string | null
+  last_active_at?: string | null
 }
 
 function initials(name: string) {
@@ -20,32 +21,6 @@ function initials(name: string) {
 }
 
 const CACHE_KEY = 'users'
-
-// Days of silence after which an account is flagged as likely departed.
-// A driver who leaves PostNord loses their Azure account, so they can never
-// sign in again — a long silence is the closest thing we have to a "has quit"
-// signal without querying Azure directly.
-const INACTIVE_DAYS = 90
-
-// Whole days since a sign-in timestamp. The server sends Stockholm local time
-// with no zone marker, matching the rest of the app; at day granularity the
-// hour of skew that introduces doesn't matter.
-function daysSince(iso: string | null | undefined): number | null {
-  if (!iso) return null
-  const t = new Date(iso.replace(' ', 'T')).getTime()
-  if (isNaN(t)) return null
-  return Math.floor((Date.now() - t) / 86_400_000)
-}
-
-function fmtLastSeen(days: number | null): string {
-  if (days === null) return '—'
-  if (days <= 0) return 'Idag'
-  if (days === 1) return 'Igår'
-  if (days < 30) return `${days} dagar sedan`
-  if (days < 365) return `${Math.floor(days / 30)} mån sedan`
-  const years = Math.floor(days / 365)
-  return years === 1 ? '1 år sedan' : `${years} år sedan`
-}
 
 type RoleFilter = 'all' | 'admin' | 'driver'
 type SortMode = 'name-asc' | 'name-desc' | 'inactive'
@@ -146,20 +121,17 @@ export function DriversTable() {
     }
   }
 
-  // True once at least one account carries a sign-in timestamp. Stays false if
-  // the DB role can't read Supabase's `auth` schema — the column and the
+  // True once at least one account carries an activity timestamp. Stays false
+  // on a fresh database where nobody has been seen yet — the column and the
   // inactivity filter are then meaningless, so we hide them.
-  const hasSignInData = useMemo(() => drivers.some(d => d.last_sign_in_at), [drivers])
+  const hasActivityData = useMemo(() => drivers.some(d => d.last_active_at), [drivers])
 
   // Apply search + filters + sort
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = drivers.filter(d => {
       if (roleFilter !== 'all' && d.role !== roleFilter) return false
-      if (inactiveOnly) {
-        const days = daysSince(d.last_sign_in_at)
-        if (days === null || days < INACTIVE_DAYS) return false
-      }
+      if (inactiveOnly && !isInactive(d.last_active_at)) return false
       if (q) {
         const hay = `${d.name} ${d.email ?? ''} ${d.phone ?? ''}`.toLowerCase()
         if (!hay.includes(q)) return false
@@ -170,8 +142,8 @@ export function DriversTable() {
       // Longest-silent first — the order you want when clearing out accounts.
       // Unknown timestamps sort last: we can't judge them either way.
       list.sort((a, b) => {
-        const da = daysSince(a.last_sign_in_at)
-        const db = daysSince(b.last_sign_in_at)
+        const da = daysSince(a.last_active_at)
+        const db = daysSince(b.last_active_at)
         if (da === null && db === null) return a.name.localeCompare(b.name, 'sv')
         if (da === null) return 1
         if (db === null) return -1
@@ -197,7 +169,7 @@ export function DriversTable() {
   // How many accounts the inactivity filter would surface — shown on the chip
   // so the count is visible before clicking it.
   const inactiveCount = useMemo(
-    () => drivers.filter(d => { const n = daysSince(d.last_sign_in_at); return n !== null && n >= INACTIVE_DAYS }).length,
+    () => drivers.filter(d => isInactive(d.last_active_at)).length,
     [drivers],
   )
 
@@ -248,16 +220,15 @@ export function DriversTable() {
           <span className="pip" />{d.role === 'admin' ? 'Trafikledare' : 'Chaufför'}
         </span>
       </td>
-      {hasSignInData && (() => {
-        const days = daysSince(d.last_sign_in_at)
-        const stale = days !== null && days >= INACTIVE_DAYS
+      {hasActivityData && (() => {
+        const stale = isInactive(d.last_active_at)
         return (
           <td
-            data-label="Senast inloggad"
+            data-label="Senast aktiv"
             style={{ fontSize: 12.5, color: stale ? '#F59E0B' : 'var(--text-secondary)' }}
-            title={d.last_sign_in_at ? `Senast inloggad ${d.last_sign_in_at.slice(0, 16)}` : 'Ingen inloggning registrerad'}
+            title={d.last_active_at ? `Senast aktiv ${d.last_active_at.slice(0, 16)}` : 'Ingen aktivitet registrerad'}
           >
-            {fmtLastSeen(days)}
+            {fmtLastSeen(d.last_active_at)}
             {stale && (
               <span className="badge b-reserve" style={{ marginLeft: 6, fontSize: 10.5 }}>Inaktiv</span>
             )}
@@ -300,7 +271,7 @@ export function DriversTable() {
         <h2>Personal ({drivers.length})</h2>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'right' }}>
           Konton skapas automatiskt när chauffören loggar in med Microsoft första gången.
-          {hasSignInData && (
+          {hasActivityData && (
             <><br />Slutar någon försvinner Microsoft-kontot — då går det inte att logga in igen.</>
           )}
         </div>
@@ -346,18 +317,18 @@ export function DriversTable() {
           >
             Ö → A
           </button>
-          {hasSignInData && (
+          {hasActivityData && (
             <button
               className={`filter-chip ${sortMode === 'inactive' ? 'active' : ''}`}
               onClick={() => setSortMode('inactive')}
-              title="Längst sedan inloggning först"
+              title="Längst sedan senaste aktivitet först"
             >
               Längst inaktiv
             </button>
           )}
         </div>
 
-        {hasSignInData && (
+        {hasActivityData && (
           <div className="filter-chips">
             <span className="filter-label">Status:</span>
             <button
@@ -369,7 +340,7 @@ export function DriversTable() {
             <button
               className={`filter-chip ${inactiveOnly ? 'active' : ''}`}
               onClick={() => setInactiveOnly(true)}
-              title={`Konton utan inloggning på minst ${INACTIVE_DAYS} dagar`}
+              title={`Konton utan aktivitet på minst ${INACTIVE_DAYS} dagar`}
             >
               Inaktiva {inactiveCount > 0 && `(${inactiveCount})`}
             </button>
@@ -400,7 +371,7 @@ export function DriversTable() {
                 <th>E-post</th>
                 <th>Telefon</th>
                 <th>Roll</th>
-                {hasSignInData && <th>Senast inloggad</th>}
+                {hasActivityData && <th>Senast aktiv</th>}
                 <th></th>
               </tr>
             </thead>
@@ -408,7 +379,7 @@ export function DriversTable() {
               {admins.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={hasSignInData ? 6 : 5}>
+                    <td colSpan={hasActivityData ? 6 : 5}>
                       <div className="list-group-h" style={{ margin: '4px 0 2px' }}>
                         <span>Trafikledare</span>
                         <span className="badge b-confirmed"><span className="pip" />{admins.length}</span>
@@ -422,7 +393,7 @@ export function DriversTable() {
               {driverOnly.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={hasSignInData ? 6 : 5}>
+                    <td colSpan={hasActivityData ? 6 : 5}>
                       <div className="list-group-h" style={{ margin: '12px 0 2px' }}>
                         <span>Chaufförer</span>
                         <span>{driverOnly.length}</span>
