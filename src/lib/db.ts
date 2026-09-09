@@ -402,6 +402,39 @@ async function migrate() {
   } catch (err) {
     console.error('[migrate] name suffix cleanup failed (non-fatal):', err)
   }
+
+  // One-time backfill of last_seen_at from what the account has actually done.
+  // touchLastSeen only knows about requests made after it shipped, which would
+  // leave every existing driver looking dormant until they next open the app —
+  // and the sign-in fallback is exactly the number that was wrong to begin
+  // with. Bookings and admin actions are timestamped and keyed by user id, so
+  // they give us the real history for free.
+  //
+  // Only fills rows we know nothing about: anyone already seen since the
+  // feature shipped has a truer timestamp than any of this.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1006`
+    if (!done) {
+      await sql`
+        UPDATE users u
+        SET last_seen_at = h.ts
+        FROM (
+          SELECT id, MAX(ts) AS ts FROM (
+            SELECT user_id     AS id, applied_at AS ts FROM applications
+            UNION ALL
+            SELECT approved_by AS id, approved_at     FROM approvals
+            UNION ALL
+            SELECT created_by  AS id, created_at      FROM long_term_bookings
+          ) events
+          GROUP BY id
+        ) h
+        WHERE h.id = u.id AND u.last_seen_at IS NULL
+      `
+      await sql`INSERT INTO schema_migrations (version) VALUES (1006) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] last_seen_at backfill failed (non-fatal):', err)
+  }
 }
 
 // --------------- Users ---------------
