@@ -4,7 +4,7 @@ Dokumentation för externa system som ska synka bokningar mot passbokningen.
 Det här dokumentet kan skickas vidare till partnern. **API-nyckeln skickas
 separat, aldrig i det här dokumentet.**
 
-- **Bas-URL:** `https://<din-app>.vercel.app`
+- **Bas-URL:** `https://pnbokningar.vercel.app` (byt till er egna domän om en sådan sätts upp)
 - **Format:** JSON över HTTPS, server-till-server (nyckeln hör hemma i en
   backend — aldrig i en webbläsare eller mobilapp).
 - **Tidszon:** datum är `YYYY-MM-DD` i svensk lokaltid, tider är `HH:MM`.
@@ -135,7 +135,7 @@ gärna om den vid behov — partnern ska upserta på `bookingId`.
 
 ```bash
 curl -sS -H "Authorization: Bearer $NYCKEL" \
-  "https://<din-app>.vercel.app/api/integration/bookings?from=2026-09-01&to=2026-09-30"
+  "https://pnbokningar.vercel.app/api/integration/bookings?from=2026-09-01&to=2026-09-30"
 ```
 
 Förväntat: `200` med en JSON-array. Får ni `401` är nyckeln fel eller inte
