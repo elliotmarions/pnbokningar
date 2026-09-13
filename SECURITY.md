@@ -21,7 +21,7 @@ av Fas 2 (säkerhetshärdning) i [sälj-grund-planen](DRIFT.md).
 | --- | --- | --- |
 | Webbsession (förare/admin) | Supabase-cookie → `requireUser`/`requireAdmin` | `src/lib/auth.ts` |
 | Cron (veckoöppning, prune) | `CRON_SECRET` (Bearer eller `?secret=`) | `src/app/api/cron/*` |
-| Partnerintegration (inkommande) | `INTEGRATION_API_KEY`, **konstant-tids-jämförd** | `src/lib/integration.ts` (`verifyIntegrationKey` → `crypto.timingSafeEqual`) |
+| Partnerintegration (inkommande) | `INTEGRATION_API_KEY` — en nyckel per partner, **konstant-tids-jämförd** | `src/lib/integration.ts` (`authenticatePartner` → SHA-256 + `crypto.timingSafeEqual`) |
 | Kalenderfeed | Hemlig per-användar-token i URL:en | `src/app/api/calendar/[token]` |
 | VAPID-publik nyckel | Publik (bara den publika nyckeln) | `src/app/api/push/vapid-key` |
 
@@ -44,7 +44,9 @@ av Fas 2 (säkerhetshärdning) i [sälj-grund-planen](DRIFT.md).
 - `weeks`, `shifts/[id]/counts` — inloggad; förare får **inte** sökandelistor (data­minimering).
 
 **Server-till-server / token:**
-`integration/bookings` GET · `integration/bookings/[id]/cancel` POST — `INTEGRATION_API_KEY`.
+`integration/bookings` GET · `integration/bookings/[id]/cancel` POST — `INTEGRATION_API_KEY`
+(kommaseparerade `etikett:nyckel`-par; etiketten loggas vid avbokning, och en enskild
+nyckel kan spärras/roteras utan avbrott — se [INTEGRATION.md](INTEGRATION.md)).
 `cron/*` — `CRON_SECRET`. `calendar/[token]` — token.
 
 ## Dataskydd
@@ -86,6 +88,9 @@ logiken men behåller headers.
   `CRON_SECRET`, `INTEGRATION_*`, `VAPID_PRIVATE_KEY` m.fl. är server-only.
 - Alla variabler dokumenteras i `.env.example`.
 - Utgående webhooks signeras med HMAC-SHA256 (`INTEGRATION_WEBHOOK_SECRET`).
+- Partnernycklar genereras med `npm run gen-integration-key` (256 bitars entropi) och
+  jämförs som SHA-256-digest, så jämförelsen är konstant tid och läcker inte heller
+  nyckelns längd. Nycklar lagras bara i miljövariabler — aldrig i repot.
 
 ## Fynd & åtgärder (denna genomgång)
 

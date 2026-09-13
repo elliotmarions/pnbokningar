@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
-import { verifyIntegrationKey } from '@/lib/integration'
+import { authenticatePartner } from '@/lib/integration'
 import { shiftHours } from '@/lib/weeks'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -11,7 +11,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
  * realtime booking.confirmed / booking.cancelled webhooks).
  *
  *   GET /api/integration/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD
- *   Authorization: Bearer <INTEGRATION_API_KEY>   (same key as the cancel endpoint)
+ *   Authorization: Bearer <partner-nyckel>   (same key as the cancel endpoint)
  *
  * Returns every confirmed (approved, not withdrawn, not rejected) shift in the
  * range — i.e. exactly what should currently exist on the partner side. Fields
@@ -21,7 +21,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
  *   [{ bookingId, driverName, date, startTime, endTime }, ...]
  */
 export async function GET(req: NextRequest) {
-  if (!verifyIntegrationKey(req.headers.get('authorization'))) {
+  if (!authenticatePartner(req.headers.get('authorization'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

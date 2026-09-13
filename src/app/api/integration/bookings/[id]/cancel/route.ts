@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { approvalRepo, applicationRepo, getDb, logActivityAsync } from '@/lib/db'
-import { verifyIntegrationKey } from '@/lib/integration'
+import { authenticatePartner } from '@/lib/integration'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate } from '@/lib/weeks'
 
 /**
- * Partner → us: cancel a confirmed booking. Protected by INTEGRATION_API_KEY
+ * Partner → us: cancel a confirmed booking. Protected by a partner API key
  * (Bearer token, server-to-server only). Performs the same withdrawal as the
- * admin "Avboka" action, and notifies the driver via push.
+ * admin "Avboka" action, and notifies the driver via push. The key's label is
+ * recorded in the activity log so we can see which partner cancelled.
  *
  * Deliberately does NOT emit a booking.cancelled webhook back to the partner —
  * the partner initiated this, so echoing would be redundant and risk a loop.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!verifyIntegrationKey(req.headers.get('authorization'))) {
+  const partner = authenticatePartner(req.headers.get('authorization'))
+  if (!partner) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   logActivityAsync({
     action: 'cancelled',
-    actorName: 'Partnersystem',
+    actorName: `Partnersystem (${partner})`,
     driverName: info.user_name,
     shiftDate: info.date,
     dayIndex: info.day_index,

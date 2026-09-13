@@ -51,18 +51,66 @@ export function sendBookingEventAsync(payload: BookingEventPayload): void {
 }
 
 /**
- * Verify the inbound API key for partner → us calls (booking cancellation).
- * Constant-time compare to avoid timing leaks.
+ * Inbound API keys for partner → us calls.
+ *
+ * `INTEGRATION_API_KEY` holds one or more keys, comma-separated. Each key may
+ * carry a label so we can tell partners apart in the activity log and revoke
+ * one without touching the others:
+ *
+ *   INTEGRATION_API_KEY=akeri:pnb_live_xxx,lager:pnb_live_yyy
+ *
+ * A bare key without a label still works (labelled "partner") — the old
+ * single-key configuration keeps running untouched.
+ *
+ * Rotation: add the new key alongside the old one (same label + "-new" or a
+ * date suffix), let the partner switch over, then remove the old entry.
  */
-export function verifyIntegrationKey(authHeader: string | null): boolean {
-  const expected = process.env.INTEGRATION_API_KEY
-  if (!expected) return false // not configured → reject all
-  if (!authHeader) return false
+export interface PartnerKey {
+  label: string
+  key: string
+}
+
+const KEY_SEPARATOR = ':'
+
+export function parseIntegrationKeys(raw: string | undefined): PartnerKey[] {
+  if (!raw) return []
+  return raw
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean)
+    .map(entry => {
+      const idx = entry.indexOf(KEY_SEPARATOR)
+      // Generated keys are base64url, so a colon can only be a label separator.
+      if (idx <= 0) return { label: 'partner', key: entry }
+      return { label: entry.slice(0, idx).trim() || 'partner', key: entry.slice(idx + 1).trim() }
+    })
+    .filter(k => k.key.length > 0)
+}
+
+/**
+ * Verify the bearer token on an inbound partner request.
+ *
+ * Returns the matching key's label (for logging) or null if no key matched.
+ * Comparison is done over SHA-256 digests so it stays constant-time *and*
+ * leaks nothing about the expected key's length.
+ */
+export function authenticatePartner(authHeader: string | null): string | null {
+  const keys = parseIntegrationKeys(process.env.INTEGRATION_API_KEY)
+  if (keys.length === 0) return null // not configured → reject all
+  if (!authHeader) return null
+
   const provided = authHeader.replace(/^Bearer\s+/i, '').trim()
-  if (provided.length !== expected.length) return false
-  try {
-    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
-  } catch {
-    return false
+  if (!provided) return null
+
+  const providedDigest = crypto.createHash('sha256').update(provided).digest()
+
+  let matched: string | null = null
+  for (const { label, key } of keys) {
+    const expectedDigest = crypto.createHash('sha256').update(key).digest()
+    // Compare every configured key so timing doesn't reveal the key count/order.
+    if (crypto.timingSafeEqual(providedDigest, expectedDigest) && matched === null) {
+      matched = label
+    }
   }
+  return matched
 }

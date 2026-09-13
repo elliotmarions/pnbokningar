@@ -55,7 +55,7 @@ automatiskt vid första anropet (se [Databas & migrationer](#databas--migratione
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | ✅ (notiser) | Web Push-nycklar, genereras med `npm run gen-vapid` |
 | `CRON_SECRET` | ✅ (prod) | Delad hemlighet för Vercel Cron-anrop |
 | `ADMIN_USER_IDS` | ⬜ | Komma-separerade Azure-Object-IDs som blir admin automatiskt |
-| `INTEGRATION_API_KEY` | ⬜ | Inkommande API-nyckel för partnerintegration |
+| `INTEGRATION_API_KEY` | ⬜ | Inkommande API-nycklar för partnerintegration, `etikett:nyckel` kommaseparerat — se [INTEGRATION.md](INTEGRATION.md) |
 | `INTEGRATION_WEBHOOK_URL` / `INTEGRATION_WEBHOOK_SECRET` | ⬜ | Utgående bokningswebhooks till externt system |
 
 ## Inloggning (Supabase + Azure AD)
@@ -91,6 +91,19 @@ npm run gen-vapid   # skriver ut ett VAPID-nyckelpar
 ```
 Lägg nycklarna i `.env.local` (och i Vercel för prod). Utan dem är notiser avstängda
 (appen fungerar ändå).
+
+## Partnerintegration
+
+Externa system kan läsa bekräftade bokningar, avboka pass och ta emot webhooks.
+Skapa en nyckel per partner:
+
+```bash
+npm run gen-integration-key -- akeri   # skriver ut en ny nyckel + webhook-secret
+```
+
+Lägg raden i `INTEGRATION_API_KEY` i Vercel och redeploya. Hela API:t — endpoints,
+payloads, signaturverifiering, rotation — finns i [INTEGRATION.md](INTEGRATION.md),
+som också är dokumentet man skickar till partnern.
 
 ## Veckoöppning (Vercel Cron)
 
