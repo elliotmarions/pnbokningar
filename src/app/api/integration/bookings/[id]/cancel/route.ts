@@ -31,8 +31,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch { /* body optional */ }
 
   const sql = getDb()
-  const [info] = await sql<{ user_id: string; day_index: number; date: string; user_name: string; was_approved: number }[]>`
-    SELECT a.user_id, s.day_index, s.date, u.name AS user_name,
+  const [info] = await sql<{
+    user_id: string; day_index: number; date: string; user_name: string
+    was_approved: number; booked_from_reserve: number
+  }[]>`
+    SELECT a.user_id, s.day_index, s.date, u.name AS user_name, a.booked_from_reserve,
            CASE WHEN ap.id IS NOT NULL THEN 1 ELSE 0 END AS was_approved
     FROM applications a
     JOIN shifts s ON s.id = a.shift_id
@@ -46,13 +49,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await approvalRepo.unapprove(appId)
-  // withdrawn_by left undefined — the cancellation came from the partner system, not an admin.
-  await applicationRepo.markWithdrawn(appId, reason ?? 'Avbokad via integration', undefined)
 
-  // Tell the driver their shift was cancelled (same as an admin cancel).
+  // A booking the partner made off our reserve list goes back to being a
+  // reserve: the driver said they were available that day, and cancelling the
+  // booking doesn't retract that. Anything else is withdrawn as before.
+  const backToReserve = info.booked_from_reserve === 1
+  if (backToReserve) {
+    await sql`
+      UPDATE applications
+      SET reserve = 1, booked_from_reserve = 0, withdrawn = 0, withdrawal_reason = NULL
+      WHERE id = ${appId}
+    `
+  } else {
+    // withdrawn_by left undefined — the cancellation came from the partner system, not an admin.
+    await applicationRepo.markWithdrawn(appId, reason ?? 'Avbokad via integration', undefined)
+  }
+
+  // Tell the driver their shift was cancelled (same as an admin cancel), and
+  // say so if they're still queued — otherwise it reads as "you're out".
   sendPushToUserAsync(info.user_id, {
     title: 'Pass avbokat',
-    body: `Ditt godkända pass ${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)} har avbokats.`,
+    body: backToReserve
+      ? `Ditt pass ${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)} har avbokats. Du står kvar som reserv.`
+      : `Ditt godkända pass ${dayLabelFull(info.day_index)} ${formatSwedishDate(info.date)} har avbokats.`,
     url: '/',
     tag: `withdraw-${appId}`,
   })
@@ -63,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     driverName: info.user_name,
     shiftDate: info.date,
     dayIndex: info.day_index,
-    detail: reason ?? 'Avbokad via integration',
+    detail: (reason ?? 'Avbokad via integration') + (backToReserve ? ' — tillbaka till reservlistan' : ''),
   })
 
   return NextResponse.json({ ok: true, bookingId: appId })

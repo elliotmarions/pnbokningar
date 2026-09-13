@@ -75,7 +75,86 @@ Anropet skickar medvetet **ingen** `booking.cancelled`-webhook tillbaka —
 partnern initierade avbokningen, så ekot skulle riskera en loop. Upprepade
 anrop på samma bokning är ofarliga.
 
-## 3. Webhooks (oss → partner)
+## 3. Lista reserver (partner → oss)
+
+```
+GET /api/integration/reserves?from=2026-09-01&to=2026-09-30
+Authorization: Bearer <nyckel>
+```
+
+Svar `200` — bara reserver som fortfarande går att boka (inte återkallade,
+inte avvisade, inte redan godkända):
+
+```json
+[
+  {
+    "reserveId": 512,
+    "driverName": "Anna Andersson",
+    "date": "2026-09-15",
+    "startTime": "16:00",
+    "endTime": "22:00",
+    "appliedAt": "2026-09-10 12:34:56"
+  }
+]
+```
+
+**En reserv hör alltid till ett datum.** Det finns ingen allmän "kan hoppa
+in"-lista — varje reservanmälan gäller ett specifikt pass. Det finns ett pass
+per dag, så det finns ingen dag/kväll-uppdelning; tiderna följer veckodagen:
+
+| Dag | Tider |
+| --- | --- |
+| Måndag–fredag | 16:00–22:00 |
+| Lördag | 09:45–18:00 |
+
+`appliedAt` är när chauffören anmälde sig, i svensk tid. Listan är sorterad på
+datum och sedan anmälningstid, vilket är den rättvisa köordningen — visa gärna
+den i planeringsvyn.
+
+Telefonnummer ingår inte (dataminimering, se SECURITY.md).
+
+## 4. Boka en reserv (partner → oss)
+
+```
+POST /api/integration/reserves/512/book
+Authorization: Bearer <nyckel>
+Content-Type: application/json
+
+{ "bookedBy": "Namn på planeraren", "bookedByEmail": "planerare@example.com" }
+```
+
+Gör exakt samma sak som när en trafikledare flyttar upp en reserv i appen:
+chauffören får sin vanliga push (`Pass godkänt ✅`), och vi skickar
+`booking.confirmed` tillbaka till er som vanligt.
+
+> **Viktigt:** uppflyttningen behåller samma rad, så `bookingId` i svaret är
+> **samma nummer** som `reserveId`. Det skapas inget andra id.
+
+| Svar | Betydelse |
+| --- | --- |
+| `200 {"bookingId":512}` | Bokad — samma id som reserven |
+| `400` | Ogiltigt id i URL:en |
+| `401` | Fel/saknad nyckel |
+| `404 {"error":"Reserve not found"}` | Okänt id |
+| `409 {"reason":"already_booked"}` | Redan bokad |
+| `409 {"reason":"withdrawn"\|"rejected"}` | Reserven är inte längre aktiv |
+
+`bookedBy` och `bookedByEmail` är valfria och hamnar i aktivitetsloggen, så det
+syns hos oss vem som bokade. Godkännandet har ingen admin bakom sig —
+planeraren är ingen användare i vårt system.
+
+### Om reserven avbokas senare
+
+Avbokar ni en bokning som kom från reservlistan (avsnitt 2) går chauffören
+**tillbaka till reservlistan** i stället för att försvinna: anmälan sa att hen
+var tillgänglig den dagen, och en avbruten bokning tar inte tillbaka det. Hen
+dyker alltså upp i `GET /api/integration/reserves` igen, och får en push som
+säger att passet avbokats men att hen står kvar som reserv.
+
+Avbokning av en bokning som *inte* kom från reservlistan fungerar som förut —
+den försvinner.
+
+## 5. Webhooks (oss → partner)
 
 Om `INTEGRATION_WEBHOOK_URL` är satt postar vi en händelse direkt när en
 bokning bekräftas eller avbokas hos oss:
@@ -141,14 +220,14 @@ Leveransen är *best effort*: vi gör ett försök och loggar fel, men gör inga
 omförsök. Kör därför avstämningen i avsnitt 1 regelbundet (t.ex. varje natt för
 kommande 30 dagar) så att en tappad webhook självläker.
 
-## 4. Engångssynk vid uppstart
+## 6. Engångssynk vid uppstart
 
 När partnersidan är redo kan en admin öppna `/api/integration/sync-all` i
 webbläsaren (inloggad som admin). Då skickas en `booking.confirmed` för varje
 bekräftad bokning från och med idag, så partnern får hela beståndet. Kör
 gärna om den vid behov — partnern ska upserta på `bookingId`.
 
-## 5. Snabbtest
+## 7. Snabbtest
 
 ```bash
 curl -sS -H "Authorization: Bearer $NYCKEL" \
