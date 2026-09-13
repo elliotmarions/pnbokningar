@@ -64,6 +64,17 @@ export function secretFingerprint(secret: string | undefined | null): string | n
 }
 
 export async function sendBookingEvent(payload: BookingEventPayload): Promise<DeliveryResult> {
+  return sendIntegrationEvent(payload.event, { ...payload })
+}
+
+/**
+ * Post one event to the partner. Shared by booking and reserve events so the
+ * signing, timeout and failure logging can only ever behave one way.
+ */
+async function sendIntegrationEvent(
+  eventName: string,
+  payload: Record<string, unknown>,
+): Promise<DeliveryResult> {
   const url = process.env.INTEGRATION_WEBHOOK_URL
   if (!url) return { delivered: false, skipped: true } // not configured yet → no-op
 
@@ -80,7 +91,7 @@ export async function sendBookingEvent(payload: BookingEventPayload): Promise<De
     // A partner that requires signatures answers 401 to every single event, and
     // before this log line that looked exactly like "nothing happened".
     console.error('[integration] INTEGRATION_WEBHOOK_SECRET saknas — skickar OSIGNERAT', {
-      event: payload.event, bookingId: payload.bookingId, target: describeTarget(url),
+      event: eventName, target: describeTarget(url),
     })
   }
 
@@ -93,8 +104,7 @@ export async function sendBookingEvent(payload: BookingEventPayload): Promise<De
     if (!res.ok) {
       const text = (await res.text().catch(() => '')).slice(0, MAX_LOGGED_BODY)
       console.error('[integration] webhook avvisad av partnern', {
-        event: payload.event, bookingId: payload.bookingId,
-        status: res.status, response: text, target: describeTarget(url),
+        event: eventName, status: res.status, response: text, target: describeTarget(url),
       })
       return { delivered: false, status: res.status, error: text }
     }
@@ -103,8 +113,7 @@ export async function sendBookingEvent(payload: BookingEventPayload): Promise<De
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[integration] webhook kunde inte levereras', {
-      event: payload.event, bookingId: payload.bookingId,
-      error: message, target: describeTarget(url),
+      event: eventName, error: message, target: describeTarget(url),
     })
     return { delivered: false, error: message }
   }
@@ -113,6 +122,32 @@ export async function sendBookingEvent(payload: BookingEventPayload): Promise<De
 /** Fire-and-forget wrapper — never blocks the API response on webhook delivery. */
 export function sendBookingEventAsync(payload: BookingEventPayload): void {
   sendBookingEvent(payload).catch((err) => console.error('[integration] async error', err))
+}
+
+/**
+ * Reserve events — the partner's planning view mirrors our reserve list, so it
+ * needs to hear about every change rather than waiting for its next poll.
+ *
+ * `reserve.removed` carries only the id: the partner deletes the row, and the
+ * reason (withdrawn, rejected, booked, deleted) is not theirs to act on.
+ */
+export interface ReserveSnapshot {
+  reserveId: number
+  driverName: string
+  date: string
+  startTime: string
+  endTime: string
+  appliedAt: string          // ISO-8601 UTC
+}
+
+export function sendReserveAddedAsync(snapshot: ReserveSnapshot): void {
+  sendIntegrationEvent('reserve.added', { event: 'reserve.added', ...snapshot })
+    .catch((err) => console.error('[integration] async error', err))
+}
+
+export function sendReserveRemovedAsync(reserveId: number): void {
+  sendIntegrationEvent('reserve.removed', { event: 'reserve.removed', reserveId })
+    .catch((err) => console.error('[integration] async error', err))
 }
 
 /**

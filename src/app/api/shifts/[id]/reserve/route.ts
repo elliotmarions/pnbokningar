@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
 import { formatSwedishDate, dayLabelFull } from '@/lib/weeks'
+import { emitReserveDelta } from '@/lib/reserve-events'
 
 // POST /api/shifts/[id]/reserve
 // Adds a driver straight onto the reserve list for a shift — the manual
@@ -41,6 +42,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const app = await applicationRepo.apply(shiftId, userId, true, 'admin')
     appId = app.id
   }
+
+  await emitReserveDelta(appId, null)
 
   const [info] = await sql<{
     day_index: number; date: string; user_name: string

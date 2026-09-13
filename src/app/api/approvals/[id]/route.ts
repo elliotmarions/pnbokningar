@@ -4,6 +4,7 @@ import { approvalRepo, applicationRepo, getDb, logActivityAsync } from '@/lib/db
 import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, dayLabelFull, formatSwedishDate } from '@/lib/weeks'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 // DELETE = admin removes a previously-approved driver → marks as withdrawn
 export async function DELETE(
@@ -35,8 +36,10 @@ export async function DELETE(
     WHERE a.id = ${appId}
   `
 
+  const beforeReserve = await reserveSnapshot(appId)
   await approvalRepo.unapprove(appId)
   await applicationRepo.markWithdrawn(appId, reason, adminId)
+  await emitReserveDelta(appId, beforeReserve)
 
   if (info) {
     sendPushToUserAsync(info.user_id, {

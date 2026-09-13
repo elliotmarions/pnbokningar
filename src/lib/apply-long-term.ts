@@ -1,5 +1,6 @@
 import { getDb, applicationRepo, approvalRepo, longTermRepo, customClosedRepo } from './db'
 import { isHolidayOrEve } from './holidays'
+import { emitReserveDelta, reserveSnapshot } from './reserve-events'
 
 /**
  * Applies any active long-term bookings to a specific shift.
@@ -19,6 +20,8 @@ export async function applyLongTermToShift(shiftId: number, date: string, adminI
       WHERE shift_id = ${shiftId} AND user_id = ${booking.user_id}
     `
     let appId: number
+    // An existing application may have been sitting on the reserve list.
+    let beforeReserve = null as Awaited<ReturnType<typeof reserveSnapshot>>
     if (existing) {
       // Respect an admin's deliberate removal. If this driver was avbokad
       // (withdrawn=1) or nekad (rejected=1) for this specific shift, that
@@ -31,6 +34,7 @@ export async function applyLongTermToShift(shiftId: number, date: string, adminI
       // Re-activate an existing application but DON'T overwrite its source —
       // if the driver booked this day themselves, it stays 'driver' so that
       // excluding the day later still warns the admin.
+      beforeReserve = await reserveSnapshot(existing.id)
       await sql`UPDATE applications SET rejected=0, withdrawn=0, rejection_reason=NULL, withdrawal_reason=NULL WHERE id=${existing.id}`
       await sql`DELETE FROM approvals WHERE application_id=${existing.id}`
       appId = existing.id
@@ -38,6 +42,8 @@ export async function applyLongTermToShift(shiftId: number, date: string, adminI
       const app = await applicationRepo.apply(shiftId, booking.user_id, false, 'long_term')
       appId = app.id
     }
+    // Approving removes the driver from the reserve list if they were on it.
     await approvalRepo.approve(appId, adminId)
+    await emitReserveDelta(appId, beforeReserve)
   }
 }
