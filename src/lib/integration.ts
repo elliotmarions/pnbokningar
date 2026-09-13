@@ -9,7 +9,8 @@ import crypto from 'crypto'
  *   INTEGRATION_WEBHOOK_SECRET  — shared secret; we sign the body with HMAC-SHA256
  *
  * If the URL isn't configured this is a silent no-op, so the app runs fine
- * before the partner side is ready.
+ * before the partner side is ready. Everything else is logged: a delivery that
+ * the partner rejects must never disappear without a trace.
  */
 
 export type BookingEvent = 'booking.confirmed' | 'booking.cancelled'
@@ -23,25 +24,89 @@ export interface BookingEventPayload {
   endTime: string
 }
 
-export async function sendBookingEvent(payload: BookingEventPayload): Promise<void> {
-  const url = process.env.INTEGRATION_WEBHOOK_URL
-  if (!url) return // not configured yet → no-op
+/** Outcome of one delivery attempt — so callers can report real numbers. */
+export interface DeliveryResult {
+  delivered: boolean
+  /** HTTP status the partner answered with, when we got that far. */
+  status?: number
+  /** Why it failed: the partner's response body, or a transport error. */
+  error?: string
+  /** 'not-configured' when INTEGRATION_WEBHOOK_URL is unset (a deliberate no-op). */
+  skipped?: boolean
+}
 
+const TIMEOUT_MS = 10_000
+/** Partner error bodies can be whole HTML pages — keep the log readable. */
+const MAX_LOGGED_BODY = 500
+
+/**
+ * Host + path of the configured webhook target, for logs. Never secret, and the
+ * quickest way to spot that a stale preview URL is still configured.
+ */
+export function describeTarget(rawUrl: string | undefined): string {
+  if (!rawUrl) return '<ej konfigurerad>'
+  try {
+    const u = new URL(rawUrl)
+    return u.host + u.pathname
+  } catch {
+    return '<ogiltig URL>'
+  }
+}
+
+/**
+ * Short, non-reversible fingerprint of a shared secret. Both sides can compute
+ * it and compare over any channel to confirm they hold the same string —
+ * without either side ever sending the secret itself.
+ */
+export function secretFingerprint(secret: string | undefined | null): string | null {
+  if (!secret) return null
+  return crypto.createHash('sha256').update(secret).digest('hex').slice(0, 12)
+}
+
+export async function sendBookingEvent(payload: BookingEventPayload): Promise<DeliveryResult> {
+  const url = process.env.INTEGRATION_WEBHOOK_URL
+  if (!url) return { delivered: false, skipped: true } // not configured yet → no-op
+
+  // The partner verifies the HMAC over the raw bytes we send, so the string we
+  // sign and the string we send must be the same one — never re-serialised.
   const body = JSON.stringify({ ...payload, sentAt: new Date().toISOString() })
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const secret = process.env.INTEGRATION_WEBHOOK_SECRET
   if (secret) {
-    // HMAC-SHA256 over the exact body the partner receives, so they can verify
-    // the request genuinely came from us.
     const sig = crypto.createHmac('sha256', secret).update(body).digest('hex')
     headers['X-Signature'] = `sha256=${sig}`
+  } else {
+    // A partner that requires signatures answers 401 to every single event, and
+    // before this log line that looked exactly like "nothing happened".
+    console.error('[integration] INTEGRATION_WEBHOOK_SECRET saknas — skickar OSIGNERAT', {
+      event: payload.event, bookingId: payload.bookingId, target: describeTarget(url),
+    })
   }
 
   try {
-    await fetch(url, { method: 'POST', headers, body })
+    const res = await fetch(url, {
+      method: 'POST', headers, body,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+
+    if (!res.ok) {
+      const text = (await res.text().catch(() => '')).slice(0, MAX_LOGGED_BODY)
+      console.error('[integration] webhook avvisad av partnern', {
+        event: payload.event, bookingId: payload.bookingId,
+        status: res.status, response: text, target: describeTarget(url),
+      })
+      return { delivered: false, status: res.status, error: text }
+    }
+
+    return { delivered: true, status: res.status }
   } catch (err) {
-    console.error('[integration] webhook delivery failed', { event: payload.event, bookingId: payload.bookingId, err })
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[integration] webhook kunde inte levereras', {
+      event: payload.event, bookingId: payload.bookingId,
+      error: message, target: describeTarget(url),
+    })
+    return { delivered: false, error: message }
   }
 }
 

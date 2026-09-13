@@ -13,6 +13,7 @@
     "seed": "tsx scripts/seed.ts",
     "gen-vapid": "node scripts/gen-vapid.mjs",
     "gen-integration-key": "node scripts/gen-integration-key.mjs",
+    "test-webhook": "node scripts/test-webhook.mjs",
     "loadtest": "tsx scripts/loadtest.ts"
   },
   "dependencies": {

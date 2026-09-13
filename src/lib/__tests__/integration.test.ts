@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { parseIntegrationKeys, authenticatePartner } from '../integration'
+import { parseIntegrationKeys, authenticatePartner, describeTarget, secretFingerprint } from '../integration'
 
 const ORIGINAL = process.env.INTEGRATION_API_KEY
 
@@ -60,5 +60,38 @@ describe('authenticatePartner', () => {
   it('still supports the old single unlabelled key', () => {
     process.env.INTEGRATION_API_KEY = 'legacy-key'
     expect(authenticatePartner('Bearer legacy-key')).toBe('partner')
+  })
+})
+
+describe('describeTarget', () => {
+  it('reduces a URL to host + path for logging', () => {
+    expect(describeTarget('https://veddestask-pbildashboard.pages.dev/api/integration/bookings'))
+      .toBe('veddestask-pbildashboard.pages.dev/api/integration/bookings')
+  })
+  it('strips query strings but keeps the path', () => {
+    expect(describeTarget('https://example.com/hook?token=abc')).toBe('example.com/hook')
+  })
+  it('flags unset and malformed URLs instead of throwing', () => {
+    expect(describeTarget(undefined)).toBe('<ej konfigurerad>')
+    expect(describeTarget('inte-en-url')).toBe('<ogiltig URL>')
+  })
+})
+
+describe('secretFingerprint', () => {
+  it('is null when no secret is set', () => {
+    expect(secretFingerprint(undefined)).toBeNull()
+    expect(secretFingerprint('')).toBeNull()
+  })
+  it('is stable for the same secret, so both sides can compare', () => {
+    expect(secretFingerprint('delad-hemlighet')).toBe(secretFingerprint('delad-hemlighet'))
+  })
+  it('differs for different secrets', () => {
+    expect(secretFingerprint('hemlighet-a')).not.toBe(secretFingerprint('hemlighet-b'))
+  })
+  it('is short and reveals nothing of the secret', () => {
+    const fp = secretFingerprint('en-ganska-lang-delad-hemlighet-som-aldrig-far-lacka')!
+    expect(fp).toHaveLength(12)
+    expect(fp).toMatch(/^[0-9a-f]{12}$/)
+    expect('en-ganska-lang-delad-hemlighet-som-aldrig-far-lacka').not.toContain(fp)
   })
 })
