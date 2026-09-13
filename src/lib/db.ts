@@ -111,6 +111,16 @@ async function migrate() {
   await sql`
     ALTER TABLE applications ADD COLUMN IF NOT EXISTS reserve INTEGER NOT NULL DEFAULT 0
   `
+  // Bookings made by a partner system from the reserve list. Lets us send the
+  // driver back to the reserve list — rather than dropping them entirely — if
+  // the partner later cancels: signing up as reserve said "I'm available that
+  // day", and a cancelled booking doesn't retract that.
+  await sql`
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS booked_from_reserve INTEGER NOT NULL DEFAULT 0
+  `
+  // Approvals made by a partner system have no admin behind them. Mirrors
+  // applications.withdrawn_by, which is already left NULL for partner cancels.
+  await sql`ALTER TABLE approvals ALTER COLUMN approved_by DROP NOT NULL`
   // Track whether a shift was ever opened by admin (distinguishes "never opened" from "opened then closed")
   await sql`
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS ever_opened INTEGER NOT NULL DEFAULT 0
@@ -901,7 +911,7 @@ export const applicationRepo = {
     `
   },
 
-  async promote(appId: number, adminId: string): Promise<{ user_id: string; user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }> {
+  async promote(appId: number, adminId: string | null): Promise<{ user_id: string; user_name: string; user_phone: string | null; shift_day_index: number; shift_date: string }> {
     // Move from reserve to regular approved application
     await sql`UPDATE applications SET reserve = 0 WHERE id = ${appId}`
     await approvalRepo.approve(appId, adminId)
@@ -998,12 +1008,12 @@ export const applicationRepo = {
 export interface DbApproval {
   id: number
   application_id: number
-  approved_by: string
+  approved_by: string | null
   approved_at: string
 }
 
 export const approvalRepo = {
-  async approve(applicationId: number, approvedBy: string): Promise<DbApproval> {
+  async approve(applicationId: number, approvedBy: string | null): Promise<DbApproval> {
     await sql`
       INSERT INTO approvals (application_id, approved_by)
       VALUES (${applicationId}, ${approvedBy})

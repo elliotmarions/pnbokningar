@@ -46,7 +46,8 @@ hemligheter — aldrig hemligheterna själva) ·
 - `weeks`, `shifts/[id]/counts` — inloggad; förare får **inte** sökandelistor (data­minimering).
 
 **Server-till-server / token:**
-`integration/bookings` GET · `integration/bookings/[id]/cancel` POST — `INTEGRATION_API_KEY`
+`integration/bookings` GET · `integration/bookings/[id]/cancel` POST ·
+`integration/reserves` GET · `integration/reserves/[id]/book` POST — `INTEGRATION_API_KEY`
 (kommaseparerade `etikett:nyckel`-par; etiketten loggas vid avbokning, och en enskild
 nyckel kan spärras/roteras utan avbrott — se [INTEGRATION.md](INTEGRATION.md)).
 `cron/*` — `CRON_SECRET`. `calendar/[token]` — token.
@@ -58,7 +59,9 @@ nyckel kan spärras/roteras utan avbrott — se [INTEGRATION.md](INTEGRATION.md)
 - **Kalenderfeeden** exponerar bara den egna förarens pass­tider — **inga namn eller
   telefonnummer** — och nås via en hemlig token (kalenderappar kan inte logga in).
 - **Excel-export** (innehåller namn + passhistorik) är strikt `requireAdmin`.
-- **Telefonnummer** normaliseras och valideras (`src/lib/phone.ts`, `PHONE_RE`).
+- **Telefonnummer** normaliseras och valideras (`src/lib/phone.ts`, `PHONE_RE`) och lämnar
+  aldrig systemet via partnerintegrationen — `integration/reserves` returnerar namn,
+  datum och tider, inte kontaktuppgifter.
 
 ## Databas / RLS-hållning
 
