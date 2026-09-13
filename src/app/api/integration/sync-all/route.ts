@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { getDb } from '@/lib/db'
-import { sendBookingEvent } from '@/lib/integration'
+import { describeTarget, sendBookingEvent } from '@/lib/integration'
 import { shiftHours } from '@/lib/weeks'
 
 /**
@@ -14,12 +14,17 @@ import { shiftHours } from '@/lib/weeks'
  *
  * Safe to run repeatedly — it only re-sends existing data (the partner side
  * should upsert by bookingId).
+ *
+ * The response reports what the partner actually answered. It used to count
+ * attempts, which made a run where every event was rejected with 401 look
+ * identical to a fully successful one.
  */
 export async function GET() {
   const session = await requireAdmin()
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  if (!process.env.INTEGRATION_WEBHOOK_URL) {
+  const url = process.env.INTEGRATION_WEBHOOK_URL
+  if (!url) {
     return NextResponse.json(
       { error: 'INTEGRATION_WEBHOOK_URL är inte satt — sätt partnerns webhook-URL i Vercel först.' },
       { status: 503 },
@@ -43,7 +48,7 @@ export async function GET() {
 
   // Send sequentially-ish but in parallel batches so we don't hammer the
   // partner with hundreds of simultaneous requests.
-  const results = await Promise.allSettled(
+  const results = await Promise.all(
     rows.map(r => {
       const { start, end } = shiftHours(r.day_index)
       return sendBookingEvent({
@@ -57,12 +62,40 @@ export async function GET() {
     })
   )
 
-  const failed = results.filter(r => r.status === 'rejected').length
+  const accepted = results.filter(r => r.delivered).length
+
+  // Group the rejections by status so one glance says whether it's a signature
+  // problem (401), a payload problem (400) or the partner being down (5xx).
+  const rejectedByStatus: Record<string, number> = {}
+  let transportErrors = 0
+  let firstError: string | undefined
+  for (const r of results) {
+    if (r.delivered) continue
+    if (r.status) {
+      const key = String(r.status)
+      rejectedByStatus[key] = (rejectedByStatus[key] ?? 0) + 1
+    } else {
+      transportErrors++
+    }
+    if (!firstError && r.error) firstError = r.error
+  }
+
+  const failed = results.length - accepted
+  const signed = Boolean(process.env.INTEGRATION_WEBHOOK_SECRET)
+
   return NextResponse.json({
-    ok: true,
+    ok: failed === 0,
     total: rows.length,
-    sent: rows.length - failed,
+    accepted,
     failed,
-    note: 'Skickade alla bekräftade bokningar från och med idag till partnersystemet.',
+    rejectedByStatus,
+    transportErrors,
+    firstError,
+    target: describeTarget(url),
+    signed,
+    note: failed === 0
+      ? `Partnersystemet kvitterade alla ${accepted} bekräftade bokningar från och med idag.`
+      : `${failed} av ${rows.length} avvisades — se rejectedByStatus och firstError. `
+        + (signed ? '' : 'INTEGRATION_WEBHOOK_SECRET är inte satt, så anropen skickades osignerade. '),
   })
 }

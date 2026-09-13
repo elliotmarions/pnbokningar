@@ -118,6 +118,23 @@ function verify(rawBody, header, secret) {
 Räkna HMAC på bodyn **innan** JSON-parsning — omserialiserad JSON ger fel
 signatur.
 
+### Felsökning när inget kommer fram
+
+Kör `npm run test-webhook` — den skickar en enda signerad `booking.confirmed`
+(bookingId `999999`) och skriver ut partnerns svarskod och svarsbody. Samma
+body-konstruktion och signering som produktionskoden, så svaret betyder samma
+sak.
+
+Får du `401` matchar inte hemligheterna. Jämför fingeravtryck i stället för att
+skicka hemligheten fram och tillbaka — `/api/integration/diagnostics` (admin)
+visar vårt, och partnern räknar fram sitt med:
+
+```bash
+node -e "console.log(require('crypto').createHash('sha256').update(process.env.INTEGRATION_HMAC_SECRET).digest('hex').slice(0,12))"
+```
+
+Lika fingeravtryck = samma hemlighet. Olika = någon av er har en gammal.
+
 ### Leveransgarantier
 
 Leveransen är *best effort*: vi gör ett försök och loggar fel, men gör inga

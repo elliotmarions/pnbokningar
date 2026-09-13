@@ -28,6 +28,8 @@ av Fas 2 (säkerhetshärdning) i [sälj-grund-planen](DRIFT.md).
 ## Behörighetsmatris (API-rutter)
 
 **Admin-only (`requireAdmin` → 403 annars):**
+`integration/diagnostics` (konfigurationsstatus och SHA-256-fingeravtryck av
+hemligheter — aldrig hemligheterna själva) ·
 `users` GET/DELETE · `users` PATCH `setRole` · `shifts` PUT · `shifts/[id]` PATCH/GET ·
 `approvals` POST · `approvals/[id]` DELETE · `applications/[id]/promote|reject|reserve|withdraw` ·
 `shifts/[id]/book` · `long-term` GET/POST · `long-term/[id]` DELETE · `long-term/[id]/toggle-date` ·
