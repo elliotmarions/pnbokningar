@@ -4,6 +4,7 @@ import { applicationRepo, approvalRepo, getDb, logActivityAsync } from '@/lib/db
 import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdmin()
@@ -23,8 +24,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   `
 
   let appId: number
+  // A driver being booked in may have been sitting on the reserve list.
+  let beforeReserve = null as Awaited<ReturnType<typeof reserveSnapshot>>
   if (existing) {
     // Reset any rejected/withdrawn state so we can approve cleanly
+    beforeReserve = await reserveSnapshot(existing.id)
     await sql`UPDATE applications SET rejected = 0, withdrawn = 0, rejection_reason = NULL, withdrawal_reason = NULL WHERE id = ${existing.id}`
     // Remove any existing approval so we can re-create it
     await sql`DELETE FROM approvals WHERE application_id = ${existing.id}`
@@ -36,6 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Approve
   await approvalRepo.approve(appId, adminId)
+  await emitReserveDelta(appId, beforeReserve)
 
   // Fetch shift + user info for SMS
   const [info] = await sql<{

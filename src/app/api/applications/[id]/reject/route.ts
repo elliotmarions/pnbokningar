@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate } from '@/lib/weeks'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdmin()
@@ -22,7 +23,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     WHERE a.id = ${appId}
   `
 
+  const beforeReserve = await reserveSnapshot(appId)
   await applicationRepo.reject(appId, reason?.trim() || undefined)
+  await emitReserveDelta(appId, beforeReserve)
 
   if (info) {
     sendPushToUserAsync(info.user_id, {
@@ -49,6 +52,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
-  await applicationRepo.unreject(parseInt(id))
+  const appId = parseInt(id)
+  // Un-rejecting can revive a reserve that was rejected while on the list.
+  const beforeReserve = await reserveSnapshot(appId)
+  await applicationRepo.unreject(appId)
+  await emitReserveDelta(appId, beforeReserve)
   return NextResponse.json({ ok: true })
 }

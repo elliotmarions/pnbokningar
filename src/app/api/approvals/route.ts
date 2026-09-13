@@ -5,6 +5,7 @@ import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { int, fieldError } from '@/lib/validate'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 export async function POST(req: NextRequest) {
   const session = await requireAdmin()
@@ -32,7 +33,9 @@ export async function POST(req: NextRequest) {
 
   if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 })
 
+  const beforeReserve = await reserveSnapshot(applicationId)
   const approval = await approvalRepo.approve(applicationId, adminId)
+  await emitReserveDelta(applicationId, beforeReserve)
 
   // Push notification + partner webhook (fire-and-forget)
   {

@@ -4,6 +4,7 @@ import { authenticatePartner, sendBookingEventAsync } from '@/lib/integration'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate, shiftHours } from '@/lib/weeks'
 import { str } from '@/lib/validate'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 /**
  * Partner → us: book a driver off the reserve list, exactly as if an admin had
@@ -71,11 +72,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     )
   }
 
+  const beforeReserve = await reserveSnapshot(reserveId)
   // Same promotion an admin does in the app: reserve = 0 + an approval row.
   const info = await applicationRepo.promote(reserveId, null)
   // Remember where this booking came from, so a later partner cancellation can
   // put the driver back on the reserve list instead of dropping them.
   await sql`UPDATE applications SET booked_from_reserve = 1 WHERE id = ${reserveId}`
+  await emitReserveDelta(reserveId, beforeReserve)
 
   const { start, end } = shiftHours(info.shift_day_index)
 

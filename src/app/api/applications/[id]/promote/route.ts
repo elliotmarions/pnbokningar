@@ -4,6 +4,7 @@ import { applicationRepo, getDb, logActivityAsync } from '@/lib/db'
 import { shiftHours, formatSwedishDate, dayLabelFull } from '@/lib/weeks'
 import { sendPushToUserAsync } from '@/lib/push'
 import { sendBookingEventAsync } from '@/lib/integration'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 export async function POST(
   _req: NextRequest,
@@ -24,7 +25,9 @@ export async function POST(
   if (!app) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!app.reserve) return NextResponse.json({ error: 'Not a reserve' }, { status: 400 })
 
+  const beforeReserve = await reserveSnapshot(appId)
   const info = await applicationRepo.promote(appId, adminId)
+  await emitReserveDelta(appId, beforeReserve)
 
   // Push notification + partner webhook (fire-and-forget)
   if (info) {

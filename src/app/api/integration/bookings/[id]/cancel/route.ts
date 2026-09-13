@@ -3,6 +3,7 @@ import { approvalRepo, applicationRepo, getDb, logActivityAsync } from '@/lib/db
 import { authenticatePartner } from '@/lib/integration'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate } from '@/lib/weeks'
+import { emitReserveDelta, reserveSnapshot } from '@/lib/reserve-events'
 
 /**
  * Partner → us: cancel a confirmed booking. Protected by a partner API key
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
   }
 
+  const beforeReserve = await reserveSnapshot(appId)
   await approvalRepo.unapprove(appId)
 
   // A booking the partner made off our reserve list goes back to being a
@@ -64,6 +66,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // withdrawn_by left undefined — the cancellation came from the partner system, not an admin.
     await applicationRepo.markWithdrawn(appId, reason ?? 'Avbokad via integration', undefined)
   }
+
+  await emitReserveDelta(appId, beforeReserve)
 
   // Tell the driver their shift was cancelled (same as an admin cancel), and
   // say so if they're still queued — otherwise it reads as "you're out".

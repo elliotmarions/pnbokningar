@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { getDb, logActivityAsync } from '@/lib/db'
 import { sendPushToUserAsync } from '@/lib/push'
 import { dayLabelFull, formatSwedishDate } from '@/lib/weeks'
+import { emitReserveDelta } from '@/lib/reserve-events'
 
 // POST /api/applications/[id]/reserve
 // Moves an application to the reserve list. Works for both pending and
@@ -44,6 +45,8 @@ export async function POST(
       WHERE id = ${appId}
     `
   })
+
+  await emitReserveDelta(appId, null)
 
   // Tell the driver they're on the reserve list — worded so it's clearly NOT
   // an approved shift (avoids the "Pass godkänt"-style confusion).

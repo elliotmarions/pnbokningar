@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireUser } from '@/lib/auth'
 import { applicationRepo, shiftRepo } from '@/lib/db'
 import { int, bool, fieldError } from '@/lib/validate'
+import { emitReserveDelta } from '@/lib/reserve-events'
 
 export async function POST(req: NextRequest) {
   const session = await requireUser()
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const app = await applicationRepo.apply(shiftId, userId, reserve)
+    // Ny rad: fanns ingen reserv innan, så before är null.
+    await emitReserveDelta(app.id, null)
     return NextResponse.json(app)
   } catch (err: unknown) {
     const code = (err as Record<string, unknown>)?.code

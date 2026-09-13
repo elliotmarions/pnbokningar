@@ -178,6 +178,46 @@ X-Signature: sha256=<hex>
 `event` är `booking.confirmed` eller `booking.cancelled`. Svara `2xx` snabbt;
 tunga jobb köas på partnersidan.
 
+### Reservhändelser
+
+Samma URL och samma signatur som bokningshändelserna. Reservlistan speglas hos
+er, så varje förändring pushas i stället för att inväntas av nästa pollning.
+
+```json
+{
+  "event": "reserve.added",
+  "reserveId": 512,
+  "driverName": "Anna Andersson",
+  "date": "2026-09-15",
+  "startTime": "16:00",
+  "endTime": "22:00",
+  "appliedAt": "2026-09-12T13:31:00.000Z",
+  "sentAt": "2026-09-13T16:20:00.000Z"
+}
+```
+
+```json
+{ "event": "reserve.removed", "reserveId": 512, "sentAt": "..." }
+```
+
+`reserve.added` skickas när en ansökan blir en aktiv reserv — chauffören anmäler
+sig själv, en admin lägger till eller flyttar någon till listan, ett avvisande
+eller en avanmälan ångras, eller en bokning som kom från reservlistan avbokas.
+
+`reserve.removed` skickas när den slutar vara det, **oavsett orsak**: bokad
+(av er eller av oss), avvisad, avanmäld, eller raderad. Händelsen bär bara
+`reserveId` — orsaken är inte er att agera på.
+
+En reserv som bokas ger alltså både `reserve.removed` och `booking.confirmed`,
+och avbokas den bokningen sedan kommer `booking.cancelled` följt av ett nytt
+`reserve.added` med samma id.
+
+> **Notera formatet på `appliedAt`.** I webhooken är det ISO-8601 i UTC enligt
+> ert kontrakt (`2026-09-12T13:31:00.000Z`). I `GET /api/integration/reserves`
+> är samma fält svensk lokaltid utan tidszon (`2026-09-12 13:31:00`), eftersom
+> ni redan konsumerar den endpointen och vi inte ville bryta den i tysthet.
+> Säg till om ni vill ha ISO-UTC på båda ställena, så byter vi.
+
 ### Verifiera signaturen
 
 `X-Signature` är `sha256=` + HMAC-SHA256 över den **råa** request-bodyn med det
@@ -217,7 +257,8 @@ Lika fingeravtryck = samma hemlighet. Olika = någon av er har en gammal.
 ### Leveransgarantier
 
 Leveransen är *best effort*: vi gör ett försök och loggar fel, men gör inga
-omförsök. Kör därför avstämningen i avsnitt 1 regelbundet (t.ex. varje natt för
+omförsök. Det gäller reservhändelserna lika mycket som bokningshändelserna —
+behåll pollningen av `GET /api/integration/reserves` som skyddsnät. Kör därför avstämningen i avsnitt 1 regelbundet (t.ex. varje natt för
 kommande 30 dagar) så att en tappad webhook självläker.
 
 ## 6. Engångssynk vid uppstart
