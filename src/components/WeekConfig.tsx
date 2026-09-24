@@ -5,7 +5,7 @@ import { InterestPanel } from './InterestPanel'
 import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 import { DriverScheduleFilter, type DriverHighlight } from './DriverScheduleFilter'
-import { resolvePermanentStaff } from '@/lib/weeks'
+import { isoWeekFromOffset, resolvePermanentStaff } from '@/lib/weeks'
 
 interface Shift {
   id: number
@@ -96,11 +96,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
   }, [cache])
 
   const load = useCallback(async () => {
-    const base = new Date()
-    base.setDate(base.getDate() + weekOffset * 7)
-    const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-    const isoYear = tmp.getFullYear()
-    const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    const { isoYear, isoWeek } = isoWeekFromOffset(weekOffset)
     const cacheKey = `weeks-${isoYear}-${isoWeek}`
 
     const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[]; applicantsByShift?: Record<number, unknown[]> }) => {
@@ -173,11 +169,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
   // so the day cards' "X väntar" badges stay in sync without re-rendering the
   // whole week.
   const refreshCounts = useCallback(async () => {
-    const base = new Date()
-    base.setDate(base.getDate() + weekOffset * 7)
-    const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-    const isoYear = tmp.getFullYear()
-    const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+    const { isoYear, isoWeek } = isoWeekFromOffset(weekOffset)
     const gen = mutationGen.current
     try {
       const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
@@ -224,11 +216,7 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
   // Prefetch adjacent weeks for instant navigation
   useEffect(() => {
     const prefetch = (offset: number) => {
-      const base = new Date()
-      base.setDate(base.getDate() + offset * 7)
-      const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-      const isoYear = tmp.getFullYear()
-      const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
+      const { isoYear, isoWeek } = isoWeekFromOffset(offset)
       const key = `weeks-${isoYear}-${isoWeek}`
       if (cache.get(key)) return
       fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
@@ -598,9 +586,6 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
             <span className="week-label">Vecka {weekNumber} · {weekYear}</span>
             <button className="arrow" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="svg-ico" /></button>
           </div>
-          {weekOffset !== 0 && (
-            <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setWeekOffset(0)}>Idag</button>
-          )}
           <button className="btn btn-sm btn-ghost" onClick={() => setCloseWeekDialog(true)}>
             <X className="svg-ico svg-ico-sm" />
             Stäng vecka

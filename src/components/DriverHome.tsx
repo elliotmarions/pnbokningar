@@ -6,6 +6,7 @@ import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight, 
 import { Toast, useToast } from './Toast'
 import { PushNudge } from './PushNudge'
 import { CurrentWeekBadge } from './CurrentWeekBadge'
+import { isoWeekFromOffset } from '@/lib/weeks'
 
 interface ShiftDay {
   shift: { id: number; is_open: number; is_full?: number; slots: number; day_index: number; date: string } | null
@@ -112,16 +113,6 @@ export function DriverHome() {
       .catch(() => {})
   }, [authUser])
 
-  // Helper: derive ISO year + week from an offset (weeks from today)
-  const isoFromOffset = (offset: number) => {
-    const target = new Date()
-    target.setDate(target.getDate() + offset * 7)
-    const tmp = new Date(target)
-    tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-    const isoYear = tmp.getFullYear()
-    const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
-    return { isoYear, isoWeek }
-  }
 
   // Cache TTL — slightly above the polling interval (10s) so cache from a
   // recent poll is still trusted, but anything older falls through to skeleton
@@ -132,7 +123,7 @@ export function DriverHome() {
   const loadId = useRef(0)
   const loadWeek = useCallback(async (offset = 0) => {
     const id = ++loadId.current
-    const { isoYear, isoWeek } = isoFromOffset(offset)
+    const { isoYear, isoWeek } = isoWeekFromOffset(offset)
     const cacheKey = `driver-week-${isoYear}-${isoWeek}`
 
     // SWR: pull cached data from sessionStorage so the UI renders the new
@@ -208,7 +199,7 @@ export function DriverHome() {
   const liveTick = useCallback(async () => {
     if (typeof document !== 'undefined' && document.hidden) return
     if (inflightRef.current > 0) return
-    const { isoYear, isoWeek } = isoFromOffset(weekOffset)
+    const { isoYear, isoWeek } = isoWeekFromOffset(weekOffset)
     try {
       const [weekRes, appRes] = await Promise.all([
         fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
@@ -288,7 +279,7 @@ export function DriverHome() {
   // Prefetch adjacent weeks in the background so prev/next clicks feel instant.
   useEffect(() => {
     const prefetch = (offset: number) => {
-      const { isoYear, isoWeek } = isoFromOffset(offset)
+      const { isoYear, isoWeek } = isoWeekFromOffset(offset)
       const key = `driver-week-${isoYear}-${isoWeek}`
       if (typeof window === 'undefined') return
       // Skip if we have a still-fresh prefetch for this week.

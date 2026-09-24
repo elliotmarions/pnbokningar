@@ -36,6 +36,14 @@ export function weekInfoFromNumbers(weekYear: number, weekNumber: number): WeekI
   return weekInfoFor(targetMonday)
 }
 
+// ISO year + week `offset` weeks from `now` (0 = this week). Used by the week
+// navigators. Independent of time of day — a hand-rolled Math.round formula
+// here used to tip over into next week every afternoon.
+export function isoWeekFromOffset(offset: number, now: Date = new Date()): { isoYear: number; isoWeek: number } {
+  const ref = addDays(now, offset * 7)
+  return { isoYear: getISOWeekYear(ref), isoWeek: getISOWeek(ref) }
+}
+
 export function nextWeekInfo(): WeekInfo {
   return weekInfoFor(addDays(new Date(), 7))
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   weekInfoFromNumbers,
+  isoWeekFromOffset,
   shiftHours,
   permanentStaffDefault,
   resolvePermanentStaff,
@@ -71,6 +72,27 @@ describe('weekInfoFromNumbers', () => {
     expect(info.days[5].label).toBe('Lördag')
     expect(info.days[5].startTime).toBe('09:45')
     expect(info.days[0].startTime).toBe('16:00')
+  })
+})
+
+describe('isoWeekFromOffset', () => {
+  it('stays on the current week regardless of time of day', () => {
+    // Thursday 24 Sep 2026 is ISO week 39. The old hand-rolled formula
+    // returned week 40 from ~13:00 onwards.
+    for (const hour of [0, 8, 12, 13, 18, 23]) {
+      expect(isoWeekFromOffset(0, new Date(2026, 8, 24, hour, 30))).toEqual({ isoYear: 2026, isoWeek: 39 })
+    }
+    expect(isoWeekFromOffset(0, new Date(2026, 8, 27, 23, 59))).toEqual({ isoYear: 2026, isoWeek: 39 }) // Sunday night
+    expect(isoWeekFromOffset(0, new Date(2026, 8, 28, 0, 1))).toEqual({ isoYear: 2026, isoWeek: 40 })   // Monday
+  })
+  it('steps whole weeks with the offset', () => {
+    const now = new Date(2026, 8, 24, 15, 0)
+    expect(isoWeekFromOffset(1, now)).toEqual({ isoYear: 2026, isoWeek: 40 })
+    expect(isoWeekFromOffset(-1, now)).toEqual({ isoYear: 2026, isoWeek: 38 })
+  })
+  it('uses the ISO week-year across the new year', () => {
+    // Thu 31 Dec 2026 belongs to ISO week 53 of 2026; Fri 1 Jan 2027 too.
+    expect(isoWeekFromOffset(0, new Date(2027, 0, 1, 16, 0))).toEqual({ isoYear: 2026, isoWeek: 53 })
   })
 })
 

@@ -5,7 +5,7 @@ import { Toast, useToast } from './Toast'
 import { useAdminCache } from './AdminCacheProvider'
 import { DriverScheduleFilter, type DriverHighlight } from './DriverScheduleFilter'
 import { ViewToggle, type OverviewView } from './ViewToggle'
-import { resolvePermanentStaff } from '@/lib/weeks'
+import { isoWeekFromOffset, resolvePermanentStaff } from '@/lib/weeks'
 
 interface Shift {
   id: number
@@ -90,19 +90,10 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
       .catch(() => {})
   }, [cache])
 
-  // Helper: derive ISO year+week from an offset (in weeks from today)
-  const isoFromOffset = (offset: number) => {
-    const base = new Date()
-    base.setDate(base.getDate() + offset * 7)
-    const tmp = new Date(base); tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7))
-    const isoYear = tmp.getFullYear()
-    const isoWeek = Math.round(((tmp.getTime() - new Date(isoYear, 0, 4).getTime()) / 86400000 + (new Date(isoYear, 0, 4).getDay() + 6) % 7) / 7) + 1
-    return { isoYear, isoWeek }
-  }
 
   const load = useCallback(async (offset: number) => {
     const id = ++loadId.current
-    const { isoYear, isoWeek } = isoFromOffset(offset)
+    const { isoYear, isoWeek } = isoWeekFromOffset(offset)
     const cacheKey = `weeks-${isoYear}-${isoWeek}`
 
     const apply = (data: { weekYear: number; weekNumber: number; shifts: Shift[]; days: DayInfo[]; applicantsByShift?: Record<number, unknown[]>; unexportedApprovals?: number }) => {
@@ -153,7 +144,7 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
   useEffect(() => {
     const refresh = async () => {
       if (document.hidden) return
-      const { isoYear, isoWeek } = isoFromOffset(weekOffset)
+      const { isoYear, isoWeek } = isoWeekFromOffset(weekOffset)
       try {
         const res = await fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`)
         if (!res.ok) return
@@ -204,7 +195,7 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
   // Prefetch adjacent weeks immediately so prev/next clicks feel instant
   useEffect(() => {
     const prefetch = (offset: number) => {
-      const { isoYear, isoWeek } = isoFromOffset(offset)
+      const { isoYear, isoWeek } = isoWeekFromOffset(offset)
       const key = `weeks-${isoYear}-${isoWeek}`
       // Re-warm neighbours whose cache has gone stale so stepping back stays instant
       if (cache.get(key, WEEK_CACHE_MAX_AGE_MS)) return
@@ -292,9 +283,6 @@ export function AdminWeek({ view, onView }: { view: OverviewView; onView: (v: Ov
             <span className="week-label">Vecka {weekNumber} · {weekYear}</span>
             <button className="arrow" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="svg-ico" /></button>
           </div>
-          {weekOffset !== 0 && (
-            <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setWeekOffset(0)}>Idag</button>
-          )}
           <div className="week-stats">
             Tillsatta <strong>{totalApproved}</strong> · Sökande <strong>{totalPending}</strong>
           </div>
