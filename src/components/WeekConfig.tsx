@@ -598,6 +598,9 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
             <span className="week-label">Vecka {weekNumber} · {weekYear}</span>
             <button className="arrow" onClick={() => setWeekOffset(o => o + 1)}><ChevronRight className="svg-ico" /></button>
           </div>
+          {weekOffset !== 0 && (
+            <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }} onClick={() => setWeekOffset(0)}>Idag</button>
+          )}
           <button className="btn btn-sm btn-ghost" onClick={() => setCloseWeekDialog(true)}>
             <X className="svg-ico svg-ico-sm" />
             Stäng vecka
