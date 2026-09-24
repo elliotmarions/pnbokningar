@@ -567,6 +567,12 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
     })
   }
 
+  // Neighbouring days of the open shift, for the panel's ←/→ day stepping.
+  const weekShifts = [...shifts].sort((a, b) => a.day_index - b.day_index)
+  const openIdx = weekShifts.findIndex(s => s.id === openShiftId)
+  const prevShift = openIdx > 0 ? weekShifts[openIdx - 1] : null
+  const nextShift = openIdx >= 0 && openIdx < weekShifts.length - 1 ? weekShifts[openIdx + 1] : null
+
   return (
     <>
       <div className="cfg-top">
@@ -745,6 +751,8 @@ export function WeekConfig({ viewToggle }: { viewToggle?: React.ReactNode }) {
         onDeleteApplication={handleDeleteApplication}
         onPromoteReserve={handlePromoteReserve}
         onMoveToReserve={handleMoveToReserve}
+        onPrevDay={prevShift ? () => setOpenShiftId(prevShift.id) : undefined}
+        onNextDay={nextShift ? () => setOpenShiftId(nextShift.id) : undefined}
         initialApplicants={openShiftId !== null ? applicantsByShift[openShiftId] : undefined}
       />
 

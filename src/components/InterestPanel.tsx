@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { X, Clock, Phone, Check, Plus, Search } from './Icons'
+import { X, Clock, Phone, Check, Plus, Search, ChevronLeft, ChevronRight } from './Icons'
 
 interface Applicant {
   id: number
@@ -40,6 +40,9 @@ interface Props {
   onDeleteApplication?: (appId: number) => Promise<void>
   onPromoteReserve?: (appId: number) => Promise<void>
   onMoveToReserve?: (appId: number) => Promise<void>
+  // Step to the previous/next day in the same week. Omitted at the week's edges.
+  onPrevDay?: () => void
+  onNextDay?: () => void
   initialApplicants?: unknown[]
 }
 
@@ -65,7 +68,7 @@ function fmtAppliedFull(iso: string) {
   return `Anmäld ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} kl. ${fmtTime(iso)}`
 }
 
-export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReserveDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, initialApplicants }: Props) {
+export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUnapprove, onBookDriver, onReserveDriver, onReject, onUnreject, onUnwithdraw, onDeleteApplication, onPromoteReserve, onMoveToReserve, onPrevDay, onNextDay, initialApplicants }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([])
   const [activeTab, setActiveTab] = useState<'applications' | 'reserves' | 'others'>('applications')
   // Free-text filter for the visible list (matches name or phone).
@@ -103,6 +106,14 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
   useEffect(() => {
     if (!shift) return
     setListSearch('') // start each shift with an empty filter
+    // Drop half-finished inline forms — they belong to the previous day's rows.
+    setRejectingId(null)
+    setWithdrawingId(null)
+    setConfirmBookId(null)
+    setConfirmReserveId(null)
+    setConfirmPromoteId(null)
+    setShowBooking(false)
+    setDriverSearch('')
     // Sync applicants only when the panel opens for a (new) shift — NOT when the parent refetches
     // and pushes a new initialApplicants reference. Otherwise an optimistic update gets clobbered
     // mid-action which causes the visible "hopping" behavior.
@@ -203,10 +214,17 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
 
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return }
+      // ←/→ step between days, but not while typing in a search/reason field.
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'ArrowLeft' && onPrevDay) onPrevDay()
+      if (e.key === 'ArrowRight' && onNextDay) onNextDay()
+    }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  }, [open, onClose, onPrevDay, onNextDay])
 
   // Fetch all drivers when the panel opens — used both for manual booking and
   // for the "Övriga" tab (drivers with no involvement in this shift).
@@ -509,9 +527,17 @@ export function InterestPanel({ open, shift, dayLabel, onClose, onApprove, onUna
               {startTime}–{endTime}
             </div>
           </div>
-          <button className="close-btn" onClick={onClose} aria-label="Stäng">
-            <X className="svg-ico" />
-          </button>
+          <div className="side-panel-head-actions">
+            <button className="close-btn" onClick={onPrevDay} disabled={!onPrevDay} aria-label="Föregående dag" title="Föregående dag (←)">
+              <ChevronLeft className="svg-ico" />
+            </button>
+            <button className="close-btn" onClick={onNextDay} disabled={!onNextDay} aria-label="Nästa dag" title="Nästa dag (→)">
+              <ChevronRight className="svg-ico" />
+            </button>
+            <button className="close-btn" onClick={onClose} aria-label="Stäng" style={{ marginLeft: 6 }}>
+              <X className="svg-ico" />
+            </button>
+          </div>
         </div>
 
         <div className="side-panel-meta">
