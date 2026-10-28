@@ -1,14 +1,17 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 import { Providers } from './providers'
 import { IosSplashLinks } from '@/components/IosSplashLinks'
 
 // Self-hosted Inter (bundled + cached by the SW) — no render-blocking request
 // to Google Fonts on launch. `display: swap` avoids invisible text while loading.
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+// The font file lives in the repo (variable weight, latin subset, OFL — see
+// fonts/Inter-OFL.txt) rather than next/font/google, which downloads it at build
+// time: when Vercel's build can't reach Google Fonts, the whole build fails.
+const inter = localFont({
+  src: './fonts/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   display: 'swap',
   variable: '--font-inter',
 })
