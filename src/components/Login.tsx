@@ -3,9 +3,11 @@ import { useState } from 'react'
 import { Microsoft } from './Icons'
 import { createClient } from '@/lib/supabase/client'
 
-export function Login() {
+export function Login({ wrongDomain = false }: { wrongDomain?: boolean }) {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(
+    wrongDomain ? 'Du måste logga in med din PostNord-adress. Välj ditt PostNord-konto och försök igen.' : '',
+  )
 
   const handleAzure = async () => {
     setLoading(true)
@@ -16,6 +18,9 @@ export function Login() {
       options: {
         scopes: 'openid profile email',
         redirectTo: `${window.location.origin}/auth/callback?next=/driver`,
+        // After a rejected non-PostNord account, make Microsoft ask which
+        // account to use instead of silently reusing the same one.
+        ...(wrongDomain && { queryParams: { prompt: 'select_account' } }),
       },
     })
     if (error) {
