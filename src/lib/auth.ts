@@ -9,6 +9,7 @@
 import { createClient } from './supabase/server'
 import { userRepo } from './db'
 import { displayName } from './names'
+import { isAllowedEmail } from './email-domain'
 
 export interface AppSession {
   user: {
@@ -30,6 +31,9 @@ export async function getSession(): Promise<AppSession | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
+  // Non-PostNord accounts (personal Microsoft, guests) get no session and no
+  // users row. The OAuth callback signs them out; this covers older sessions.
+  if (!isAllowedEmail(user.email)) return null
 
   // Azure provides name in user_metadata.full_name (or .name depending on claims).
   // Strip the ", Company" suffix Azure appends (e.g. "Elliot Marions, PostNord").

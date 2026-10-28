@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isAllowedEmail } from '@/lib/email-domain'
 
 /**
  * Handles the redirect back from Supabase after Azure (or any other) OAuth
@@ -13,8 +14,13 @@ export async function GET(req: NextRequest) {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      // Azure also lets personal Microsoft accounts and guests through.
+      if (!isAllowedEmail(data.user?.email)) {
+        await supabase.auth.signOut()
+        return NextResponse.redirect(`${origin}/?error=domain`)
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
   }
