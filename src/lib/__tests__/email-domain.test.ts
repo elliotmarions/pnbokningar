@@ -29,3 +29,12 @@ describe('isAllowedEmail', () => {
     expect(isAllowedEmail('postnord.com', domains)).toBe(false)
   })
 })
+
+describe('isAllowedEmail with the default domains', () => {
+  it("accepts the tenant's onmicrosoft.com address", () => {
+    expect(isAllowedEmail('namn@postnord.onmicrosoft.com')).toBe(true)
+  })
+  it('rejects other tenants on onmicrosoft.com', () => {
+    expect(isAllowedEmail('namn@contoso.onmicrosoft.com')).toBe(false)
+  })
+})

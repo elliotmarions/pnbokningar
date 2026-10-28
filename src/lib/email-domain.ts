@@ -10,7 +10,12 @@
  * needs access.
  */
 
-const DEFAULT_DOMAINS = ['postnord.com', 'postnord.se', 'postnord.dk', 'postnord.no', 'postnord.fi']
+// postnord.onmicrosoft.com is the tenant's built-in domain: some accounts only have
+// that as their address, and Azure sends it as the e-mail claim.
+const DEFAULT_DOMAINS = [
+  'postnord.com', 'postnord.se', 'postnord.dk', 'postnord.no', 'postnord.fi',
+  'postnord.onmicrosoft.com',
+]
 
 export function allowedEmailDomains(): string[] {
   const fromEnv = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
