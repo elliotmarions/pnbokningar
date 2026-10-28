@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   weekInfoFromNumbers,
   isoWeekFromOffset,
+  applicationsFromDate,
   shiftHours,
   permanentStaffDefault,
   resolvePermanentStaff,
@@ -100,5 +101,16 @@ describe('formatSwedishDate', () => {
   it('formats as "<day> <abbrev month>"', () => {
     expect(formatSwedishDate('2026-06-17')).toBe('17 jun')
     expect(formatSwedishDate('2026-01-01')).toBe('1 jan')
+  })
+})
+
+describe('applicationsFromDate', () => {
+  const now = new Date(2026, 8, 24, 15, 0) // Thursday, ISO week 39
+  it('is the Monday of the viewed week for past weeks', () => {
+    expect(applicationsFromDate(-1, now)).toBe('2026-09-14')
+  })
+  it('never goes later than this week, so upcoming applications stay included', () => {
+    expect(applicationsFromDate(0, now)).toBe('2026-09-21')
+    expect(applicationsFromDate(2, now)).toBe('2026-09-21')
   })
 })

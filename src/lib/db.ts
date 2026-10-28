@@ -137,15 +137,27 @@ async function migrate() {
   await sql`
     ALTER TABLE shifts ADD COLUMN IF NOT EXISTS is_full INTEGER NOT NULL DEFAULT 0
   `
-  // Backfill: mark shifts as ever_opened if they are currently open OR have had applicants
-  await sql`
-    UPDATE shifts SET ever_opened = 1
-    WHERE ever_opened = 0
-      AND (
-        is_open = 1
-        OR id IN (SELECT DISTINCT shift_id FROM applications)
-      )
-  `
+  // One-time backfill: mark shifts as ever_opened if they are currently open OR
+  // have had applicants. Gated by a schema_migrations marker — ungated, it
+  // scanned the whole applications table on every cold start, and it also
+  // flagged never-opened shifts that only had long-term bookings, which could
+  // make the Wednesday open-week cron skip them.
+  try {
+    const [done] = await sql<{ version: number }[]>`SELECT version FROM schema_migrations WHERE version = 1007`
+    if (!done) {
+      await sql`
+        UPDATE shifts SET ever_opened = 1
+        WHERE ever_opened = 0
+          AND (
+            is_open = 1
+            OR id IN (SELECT DISTINCT shift_id FROM applications)
+          )
+      `
+      await sql`INSERT INTO schema_migrations (version) VALUES (1007) ON CONFLICT DO NOTHING`
+    }
+  } catch (err) {
+    console.error('[migrate] ever_opened backfill failed (non-fatal):', err)
+  }
   // Long-term bookings
   await sql`
     CREATE TABLE IF NOT EXISTS long_term_bookings (
@@ -941,7 +953,13 @@ export const applicationRepo = {
     await sql`UPDATE applications SET withdrawn = 0, withdrawn_by = NULL WHERE id = ${appId}`
   },
 
-  async forUser(userId: string) {
+  /**
+   * A driver's applications, newest shift first. `fromDate` ('YYYY-MM-DD')
+   * limits it to shifts on or after that date — the polled driver views only
+   * need the viewed week onwards, and without a bound the payload grows with
+   * every week of history. Omit it for the full history.
+   */
+  async forUser(userId: string, fromDate?: string) {
     type Row = DbApplication & {
       shift_date: string
       shift_day_index: number
@@ -962,6 +980,7 @@ export const applicationRepo = {
       JOIN shifts s ON s.id = a.shift_id
       LEFT JOIN approvals ap ON ap.application_id = a.id
       WHERE a.user_id = ${userId}
+        ${fromDate ? sql`AND s.date >= ${fromDate}` : sql``}
       ORDER BY s.date DESC
     `
   },
