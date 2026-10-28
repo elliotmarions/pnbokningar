@@ -44,6 +44,13 @@ export function isoWeekFromOffset(offset: number, now: Date = new Date()): { iso
   return { isoYear: getISOWeekYear(ref), isoWeek: getISOWeek(ref) }
 }
 
+// 'YYYY-MM-DD' of the Monday of the week `offset` weeks from `now`. Never later
+// than this week's Monday, so a driver's fetch scoped from it still covers every
+// upcoming application (approval toasts need those even when viewing a later week).
+export function applicationsFromDate(offset: number, now: Date = new Date()): string {
+  return format(startOfISOWeek(addDays(now, Math.min(offset, 0) * 7)), 'yyyy-MM-dd')
+}
+
 export function nextWeekInfo(): WeekInfo {
   return weekInfoFor(addDays(new Date(), 7))
 }

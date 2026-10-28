@@ -6,7 +6,7 @@ import { Clock, Check, Home, Settings, User, LogOut, ChevronLeft, ChevronRight, 
 import { Toast, useToast } from './Toast'
 import { PushNudge } from './PushNudge'
 import { CurrentWeekBadge } from './CurrentWeekBadge'
-import { isoWeekFromOffset } from '@/lib/weeks'
+import { isoWeekFromOffset, applicationsFromDate } from '@/lib/weeks'
 
 interface ShiftDay {
   shift: { id: number; is_open: number; is_full?: number; slots: number; day_index: number; date: string } | null
@@ -152,7 +152,7 @@ export function DriverHome() {
     // Parallel fetch of week + user's applications
     const [res, appRes] = await Promise.all([
       fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
-      fetch('/api/applications/mine'),
+      fetch(`/api/applications/mine?from=${applicationsFromDate(offset)}`),
     ])
     if (id !== loadId.current) return // stale — newer week clicked
     if (!res.ok) return
@@ -203,7 +203,7 @@ export function DriverHome() {
     try {
       const [weekRes, appRes] = await Promise.all([
         fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`),
-        fetch('/api/applications/mine'),
+        fetch(`/api/applications/mine?from=${applicationsFromDate(weekOffset)}`),
       ])
       // Re-check inflight after the await — a mutation may have started while
       // we were fetching; if so, drop this snapshot rather than overwrite it.
@@ -292,7 +292,7 @@ export function DriverHome() {
       }
       Promise.all([
         fetch(`/api/weeks?year=${isoYear}&week=${isoWeek}`).then(r => r.ok ? r.json() : null),
-        fetch('/api/applications/mine').then(r => r.ok ? r.json() : null),
+        fetch(`/api/applications/mine?from=${applicationsFromDate(offset)}`).then(r => r.ok ? r.json() : null),
       ]).then(([week, apps]) => {
         if (week) {
           try { sessionStorage.setItem(key, JSON.stringify({ week, apps, ts: Date.now() })) } catch {}

@@ -53,6 +53,8 @@ export function MySchedule() {
   const [role, setRole] = useState<'driver' | 'admin' | null>(null)
   const [isDesktop, setIsDesktop] = useState(false)
   const [apps, setApps] = useState<MineApp[] | null>(null)
+  // Whether `apps` holds the full history (fetched for "Tidigare") or only today onwards.
+  const [hasHistory, setHasHistory] = useState(false)
   const [showPast, setShowPast] = useState(false)
   const [calOpen, setCalOpen] = useState(false)
   const [calToken, setCalToken] = useState<string | null>(null)
@@ -100,19 +102,22 @@ export function MySchedule() {
     fetch('/api/users/me').then(r => r.ok ? r.json() : null).then(d => { if (d?.role) setRole(d.role) }).catch(() => {})
   }, [authUser])
 
-  const load = () => {
-    fetch('/api/applications/mine')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: MineApp[]) => setApps(data))
-      .catch(() => setApps([]))
-  }
-
-  useEffect(() => { load() }, [])
-  // Light polling so newly-approved shifts appear without a manual refresh.
+  // "Kommande" only needs today onwards; the full history is fetched once when
+  // "Tidigare" is opened. Keeps the polled payload from growing with every week.
   useEffect(() => {
-    const interval = setInterval(() => { if (!document.hidden) load() }, 15000)
-    return () => clearInterval(interval)
-  }, [])
+    let cancelled = false
+    const load = () => {
+      fetch(showPast ? '/api/applications/mine' : `/api/applications/mine?from=${todayStr()}`)
+        .then(r => r.ok ? r.json() : [])
+        .then((data: MineApp[]) => { if (!cancelled) { setApps(data); setHasHistory(showPast) } })
+        .catch(() => { if (!cancelled) { setApps([]); setHasHistory(showPast) } })
+    }
+    load()
+    // Light polling so newly-approved shifts appear without a manual refresh.
+    // Past shifts don't change, so "Tidigare" isn't polled.
+    const interval = showPast ? null : setInterval(() => { if (!document.hidden) load() }, 15000)
+    return () => { cancelled = true; if (interval) clearInterval(interval) }
+  }, [showPast])
 
   const { upcoming, past } = useMemo(() => {
     const today = todayStr()
@@ -193,7 +198,7 @@ export function MySchedule() {
         </button>
       </div>
 
-      {apps === null ? (
+      {apps === null || (showPast && !hasHistory) ? (
         <div className="empty-state">Läser in…</div>
       ) : list.length === 0 ? (
         <div className="empty-state">
